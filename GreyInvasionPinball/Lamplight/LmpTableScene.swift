@@ -5,6 +5,8 @@
 // Milestone 2: the upper table in grey box: the loop pair (with combos), the upper flipper low on the left, the
 // bookshelf bank and the fireplace hole behind it, the kettle scoop and its spinner, the mail slot (soft shots only),
 // three teacup bumpers. Placeholder points and banners until the rules milestone.
+// Milestone 3 round 1: the loft (a raised mini-playfield with its own flipper on the right button and the window
+// seat), the ramp up to it from the left flipper, and the chute that drops a drained loft ball into the left lane.
 // Built from MonTableScene.swift's code, trimmed. Monsoon's sounds stand in until the table's own (juice milestone).
 import SpriteKit
 import UIKit
@@ -49,6 +51,10 @@ final class LmpTableScene: SKScene {
     private var mailSlot: LmpScoop!
     private var spinner: LmpSpinner?
     private var lastSpinTickAt: TimeInterval = 0
+    private var loftFlipper: LmpFlipper!
+    private var windowSeat: LmpScoop!
+    /// M3 round 2: the kettle sends every other ball up the dumbwaiter (the rules milestone will decide when it's lit).
+    private var dumbwaiterLit = true
     private var lastLoopAt: TimeInterval = -100
     private var loopCombo = 0
     private var launchGateFlap: SKNode?
@@ -173,6 +179,55 @@ final class LmpTableScene: SKScene {
         addPlunger()
         addLaunchGate()
         addUpperTable()
+        addLoft()
+    }
+
+    /// Milestone 3: the loft, its ramp, the chute and the block under it.
+    private func addLoft() {
+        // The block under the loft (floor layer).
+        addWall(points: LmpTableLayout.loftBlock)
+        for post in LmpTableLayout.rampMouthPosts { addWall(points: post) }
+
+        // The loft's floor, drawn over the floor layer.
+        let floorPath = CGMutablePath()
+        floorPath.addLines(between: LmpTableLayout.loftFloor)
+        floorPath.closeSubpath()
+        let loftFloor = SKShapeNode(path: floorPath)
+        loftFloor.fillColor = SKColor(red: 0.30, green: 0.21, blue: 0.14, alpha: 1)
+        loftFloor.strokeColor = .clear
+        loftFloor.zPosition = 15
+        addChild(loftFloor)
+
+        // The ramp: a translucent strip between its rails (floor balls show through underneath).
+        let left = LmpTableLayout.rampRail(side: LmpTableLayout.rampHalfWidth)
+        let right = LmpTableLayout.rampRail(side: -LmpTableLayout.rampHalfWidth)
+        let stripPath = CGMutablePath()
+        stripPath.addLines(between: left + right.reversed())
+        stripPath.closeSubpath()
+        let strip = SKShapeNode(path: stripPath)
+        strip.fillColor = SKColor(red: 0.55, green: 0.80, blue: 0.85, alpha: 0.22)
+        strip.strokeColor = .clear
+        strip.zPosition = 16
+        addChild(strip)
+
+        for rail in [left, right] + LmpTableLayout.loftWalls {
+            addWall(points: rail, category: LmpPhysicsCategory.rampWall, z: 17)
+        }
+
+        loftFlipper = LmpFlipper(side: .right, pivot: LmpTableLayout.loftFlipperPivot,
+                                 length: LmpTableLayout.loftFlipperLength,
+                                 pivotRadius: LmpTableLayout.upperFlipperPivotRadius,
+                                 tipRadius: LmpTableLayout.upperFlipperTipRadius)
+        loftFlipper.zPosition = 20
+        loftFlipper.attach(to: self)
+        loftFlipper.physicsBody?.categoryBitMask = LmpPhysicsCategory.loftFlipper
+        loftFlipper.physicsBody?.collisionBitMask = LmpPhysicsCategory.rampBall
+
+        windowSeat = LmpScoop(at: LmpTableLayout.windowSeatCenter, ejectVelocity: LmpTableLayout.windowSeatEject,
+                              points: LmpTableLayout.windowSeatPoints, captureRadius: LmpTableLayout.windowSeatCapture)
+        windowSeat.zPosition = 18
+        addChild(windowSeat)
+        scoops.append(windowSeat)
     }
 
     /// Milestone 2: the loop pair, the upper flipper, the bookshelf bank and fireplace, the kettle and its spinner,
@@ -263,6 +318,7 @@ final class LmpTableScene: SKScene {
     private func addWall(points: [CGPoint],
                          friction: CGFloat = LmpTableLayout.wallFriction,
                          restitution: CGFloat = LmpTableLayout.wallRestitution,
+                         category: UInt32 = LmpPhysicsCategory.wall,
                          z: CGFloat = -19.5) {
         let path = CGMutablePath()
         path.addLines(between: points)
@@ -277,9 +333,14 @@ final class LmpTableScene: SKScene {
         let body = SKPhysicsBody(edgeChainFrom: path)
         body.friction = friction
         body.restitution = restitution
-        body.categoryBitMask = LmpPhysicsCategory.wall
-        body.collisionBitMask = LmpPhysicsCategory.ball
+        body.categoryBitMask = category
+        body.collisionBitMask = category == LmpPhysicsCategory.rampWall ? LmpPhysicsCategory.rampBall
+            : LmpPhysicsCategory.ball
         node.physicsBody = body
+        if category == LmpPhysicsCategory.rampWall {
+            node.strokeColor = SKColor(red: 0.62, green: 0.86, blue: 0.92, alpha: 1)   // grey box: loft and ramp rails
+            node.lineWidth = 2.5
+        }
 
         addChild(node)
     }
@@ -392,7 +453,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M2 v3")
+        let label = SKLabelNode(text: "T5 M3 v4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -438,7 +499,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M2 v3 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M3 v4 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -569,6 +630,7 @@ final class LmpTableScene: SKScene {
         leftFlipper.isPressed = left
         upperFlipper?.isPressed = left
         rightFlipper.isPressed = right
+        loftFlipper?.isPressed = right
     }
 
     private func releaseAllControls() {
@@ -649,10 +711,12 @@ final class LmpTableScene: SKScene {
         leftFlipper.step(dt: dt)
         upperFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
+        loftFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
         updateGates()
         updateBank(now)
         updateScoops(now)
+        updateRides(now)
         updateSpinner(dt, now: now)
 
         if let due = bannerClearAt, now >= due {
@@ -695,14 +759,24 @@ final class LmpTableScene: SKScene {
             }
             // The right outlane: crossing its line going down marks the ball (the cat-flap save comes with the rules).
             let p0 = ball.previousPosition, p = ball.position
-            if p0.y >= line.a.y, p.y < line.a.y, p.x > line.a.x, p.x < line.b.x { ball.inRightOutlane = true }
-            if ball.launched, p.y < LmpTableLayout.launchedClearY, p.x < LmpTableLayout.laneWallX { ball.launched = false }
-            let loop = LmpTableLayout.loopSwitch.crossing(from: p0, to: p)
-            if loop != .none { madeLoop(ball, rightToLeft: loop == .forward) }
-            if LmpTableLayout.kettleSpinnerSwitch.crossing(from: p0, to: p) != .none, let sp = spinner {
-                let v = body.velocity
-                sp.kick(ballSpeed: hypot(v.dx, v.dy))
-                body.velocity = CGVector(dx: v.dx * LmpSpinner.ballSpeedKept, dy: v.dy * LmpSpinner.ballSpeedKept)
+            if ball.ride != nil {
+                // carried by the scene: no switches
+            } else if ball.isUpper {
+                updateUpperBall(ball, from: p0, to: p)
+            } else {
+                if p0.y >= line.a.y, p.y < line.a.y, p.x > line.a.x, p.x < line.b.x { ball.inRightOutlane = true }
+                if ball.launched, p.y < LmpTableLayout.launchedClearY, p.x < LmpTableLayout.laneWallX { ball.launched = false }
+                let loop = LmpTableLayout.loopSwitch.crossing(from: p0, to: p)
+                if loop != .none { madeLoop(ball, rightToLeft: loop == .forward) }
+                if LmpTableLayout.kettleSpinnerSwitch.crossing(from: p0, to: p) != .none, let sp = spinner {
+                    let v = body.velocity
+                    sp.kick(ballSpeed: hypot(v.dx, v.dy))
+                    body.velocity = CGVector(dx: v.dx * LmpSpinner.ballSpeedKept, dy: v.dy * LmpSpinner.ballSpeedKept)
+                }
+                // Into the ramp's mouth: up onto the upper layer.
+                if ball.heldIn == nil, LmpTableLayout.rampEntrySwitch.crossing(from: p0, to: p) == .forward {
+                    ball.setUpper(true)
+                }
             }
             ball.previousPosition = p
             ball.updateLook()
@@ -715,12 +789,67 @@ final class LmpTableScene: SKScene {
         placeBuildTag()
     }
 
+    // MARK: - The loft (milestone 3)
+
+    /// Carries a ball along a straight line onto the loft (no collisions on the way), then lets it go.
+    private func startRide(_ ball: LmpBall, to end: CGPoint, seconds: TimeInterval, exit: CGVector) {
+        ball.setUpper(true)
+        ball.ride = (from: ball.position, to: end, start: gameTime, duration: seconds, exit: exit)
+        ball.physicsBody?.affectedByGravity = false
+        ball.physicsBody?.velocity = .zero
+    }
+
+    private func updateRides(_ now: TimeInterval) {
+        for ball in balls {
+            guard let ride = ball.ride, let body = ball.physicsBody else { continue }
+            let t = CGFloat(min(max((now - ride.start) / ride.duration, 0), 1))
+            let e = t * t * (3 - 2 * t)                       // ease in and out
+            ball.position = CGPoint(x: ride.from.x + (ride.to.x - ride.from.x) * e,
+                                    y: ride.from.y + (ride.to.y - ride.from.y) * e)
+            body.velocity = .zero
+            if t >= 1 {
+                ball.ride = nil
+                ball.previousPosition = ball.position
+                body.affectedByGravity = true
+                body.velocity = ride.exit
+            }
+        }
+    }
+
+    /// A ball on the ramp or the loft: made the ramp, rolled back out of its mouth, or drained off the loft down the
+    /// chute into the left lane. Safety net: an upper ball that ends up below the ramp's mouth goes back to the floor.
+    private func updateUpperBall(_ ball: LmpBall, from p0: CGPoint, to p: CGPoint) {
+        if LmpTableLayout.rampMadeSwitch.crossing(from: p0, to: p) == .forward {
+            game.add(LmpTableLayout.rampPoints)
+            showBanner("UP TO THE LOFT")
+            sfx(.ramp)
+            hitHaptic.impactOccurred(intensity: 0.7)
+        }
+        if LmpTableLayout.rampEntrySwitch.crossing(from: p0, to: p) == .backward
+            || LmpTableLayout.loftExitSwitch.crossing(from: p0, to: p) == .forward
+            || p.y < LmpTableLayout.rampMouth.y - 40 {
+            ball.setUpper(false)
+        }
+    }
+
     // MARK: - Upper table (milestone 2)
 
     /// Over the top of the arch. A plunged ball's first trip doesn't count; a loop within a few seconds of the last
     /// one is a combo.
     private func madeLoop(_ ball: LmpBall, rightToLeft: Bool) {
-        guard !ball.launched else { return }
+        if ball.launched {
+            // M3 round 2: a full plunge drops through the hatch into the loft.
+            let v = ball.physicsBody?.velocity ?? .zero
+            if rightToLeft, hypot(v.dx, v.dy) >= LmpTableLayout.plungeToLoftSpeed {
+                ball.launched = false
+                startRide(ball, to: LmpTableLayout.loftHatch, seconds: LmpTableLayout.loftHatchSeconds,
+                          exit: LmpTableLayout.loftHatchExitVelocity)
+                game.add(LmpTableLayout.fullPlungePoints)
+                showBanner("FULL PLUNGE · THE LOFT")
+                sfx(.skillShot)
+            }
+            return
+        }
         if gameTime - lastLoopAt <= LmpTableLayout.loopComboWindow {
             loopCombo += 1
             game.add(LmpTableLayout.loopPoints + LmpTableLayout.loopComboPoints * loopCombo)
@@ -763,7 +892,7 @@ final class LmpTableScene: SKScene {
     /// only takes a soft shot.
     private func updateScoops(_ now: TimeInterval) {
         for ball in balls {
-            guard let body = ball.physicsBody else { continue }
+            guard let body = ball.physicsBody, ball.ride == nil else { continue }
             if let scoop = ball.heldIn {
                 ball.position = scoop.position
                 body.velocity = .zero
@@ -771,6 +900,16 @@ final class LmpTableScene: SKScene {
                 if now >= ball.releaseAt {
                     ball.heldIn = nil
                     ball.scoopIgnoreUntil = now + LmpTableLayout.scoopRecapture
+                    if scoop === kettle, dumbwaiterLit {
+                        dumbwaiterLit = false
+                        startRide(ball, to: LmpTableLayout.dumbwaiterExit, seconds: LmpTableLayout.dumbwaiterSeconds,
+                                  exit: LmpTableLayout.dumbwaiterExitVelocity)
+                        game.add(LmpTableLayout.dumbwaiterPoints)
+                        showBanner("DUMBWAITER")
+                        sfx(.upKick)
+                        continue
+                    }
+                    if scoop === kettle { dumbwaiterLit = true }
                     body.affectedByGravity = true
                     body.velocity = scoop.ejectVelocity
                     sfx(.scoopOut)
@@ -779,10 +918,12 @@ final class LmpTableScene: SKScene {
                 continue
             }
             guard now >= ball.scoopIgnoreUntil else { continue }
+            let onLoft = ball.isUpper
             let v = body.velocity
             let from = CGPoint(x: ball.position.x - v.dx * lastStep, y: ball.position.y - v.dy * lastStep)
             guard let scoop = scoops.first(where: { candidate in
-                candidate.catches(from: from, to: ball.position) && !balls.contains(where: { $0.heldIn === candidate })
+                (candidate === windowSeat) == onLoft
+                    && candidate.catches(from: from, to: ball.position) && !balls.contains(where: { $0.heldIn === candidate })
             }) else { continue }
             if scoop === mailSlot, hypot(v.dx, v.dy) > LmpTableLayout.mailMaxSpeed { continue }
             ball.heldIn = scoop
@@ -792,7 +933,8 @@ final class LmpTableScene: SKScene {
             game.add(scoop.points)
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
             sfx(scoop === fireplace ? .jackpot : .scoopIn)
-            showBanner(scoop === fireplace ? "FIREPLACE" : scoop === kettle ? "KETTLE" : "MAIL POSTED")
+            showBanner(scoop === fireplace ? "FIREPLACE" : scoop === kettle ? "KETTLE"
+                       : scoop === windowSeat ? "WINDOW SEAT" : "MAIL POSTED")
             scoop.flash()
             hitHaptic.impactOccurred(intensity: 0.8)
         }

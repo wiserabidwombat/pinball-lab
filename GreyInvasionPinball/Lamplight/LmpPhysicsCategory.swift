@@ -30,6 +30,8 @@ enum LmpPhysicsCategory {
     static let launchGate: UInt32 = 1 << 13
     /// T5 M2: the one-way deflector across the right orbit's mouth (solid per ball, like the launch gate).
     static let orbitDeflector: UInt32 = 1 << 18
+    /// T5 M3: the loft's own flipper, which only a ball up on the loft (rampBall) touches.
+    static let loftFlipper: UInt32 = 1 << 19
     /// Table 04 milestone 4 (the habitrails): each wire level has its own rails and its own ball category, so a ball
     /// on one wire never touches another wire's rails or a ball riding it, where they cross. The mesa ramp's high
     /// wire uses rampWall / rampBall; the arroyo's low wire uses these.

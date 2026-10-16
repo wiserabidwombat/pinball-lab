@@ -10,7 +10,10 @@ import Foundation
 // closed: a deflector off the left wall feeds the left inlane).
 // Milestone 2: the upper table in grey box (tools/lmp_render_m2.py): a loop pair joined over the top, the upper flipper
 // low on the LEFT wall, the bookshelf bank across the middle guarding the fireplace hole, the kettle scoop with its
-// spinner up a lane on the left, the mail slot on the right, three teacup bumpers top right. The loft is milestone 3.
+// spinner up a lane on the left, the mail slot on the right, three teacup bumpers top right.
+// Milestone 3 round 1 (tools/lmp_render_m3.py): the loft, a raised mini-playfield at the top left with its own flipper
+// and the window seat, reached by a ramp from the left flipper; a ball that drains off it rolls down a chute into the
+// left lane. The bumpers move under the ramp's turn. The dumbwaiter and the plunge to the loft are round 2.
 
 /// All Table 05 geometry in world points. SpriteKit's origin is bottom-left.
 /// Same 600 x 1300 world, radius-9 ball and physics as Tables 02–04 (every physics value proven on device there).
@@ -300,11 +303,158 @@ enum LmpTableLayout {
     static let scoopRecapture: TimeInterval = 0.6
 
     /// Three teacup pop bumpers at the top right (the cat's shelf goes above them in milestone 4).
-    static let bumperRadius: CGFloat = 24
-    static let bumperCenters: [CGPoint] = [CGPoint(x: 330, y: 1075), CGPoint(x: 425, y: 1075), CGPoint(x: 378, y: 995)]
+    /// T5 M3: moved down into the space inside the ramp's turn (the ramp now runs where they were), r 24 → 22.
+    static let bumperRadius: CGFloat = 22
+    static let bumperCenters: [CGPoint] = [CGPoint(x: 285, y: 930), CGPoint(x: 350, y: 930), CGPoint(x: 318, y: 1000)]
     static let bumperKickSpeed: CGFloat = 1150
     static let bumperArtBox = CGRect(x: -34, y: -40, width: 82, height: 86)
     static let bumperPoints = 100
+
+    // MARK: The loft (milestone 3). A raised mini-playfield: a ball up here is on the upper layer (category rampBall),
+    // which touches only rampWall walls and the loft flipper; floor balls pass under the ramp. Underneath, the loft is
+    // a solid block on the floor, so no floor ball rolls out of sight beneath it.
+
+    /// The arch offset inward by `inset`, from (leftWallX + inset, archStartY) round the top until x passes maxX.
+    static func archOffset(inset: CGFloat, maxX: CGFloat) -> [CGPoint] {
+        let p0 = CGPoint(x: leftWallX, y: archStartY), c = CGPoint(x: leftWallX, y: topY)
+        let p1 = CGPoint(x: worldSize.width / 2, y: topY)
+        var points: [CGPoint] = []
+        for i in 0...64 {
+            let t = CGFloat(i) / 64, u = 1 - t
+            let p = CGPoint(x: u * u * p0.x + 2 * u * t * c.x + t * t * p1.x,
+                            y: u * u * p0.y + 2 * u * t * c.y + t * t * p1.y)
+            let d = CGVector(dx: 2 * u * (c.x - p0.x) + 2 * t * (p1.x - c.x),
+                             dy: 2 * u * (c.y - p0.y) + 2 * t * (p1.y - c.y))
+            let l = max(hypot(d.dx, d.dy), 0.001)
+            let q = CGPoint(x: p.x + d.dy / l * inset, y: p.y - d.dx / l * inset)
+            if q.x > maxX { break }
+            points.append(q)
+        }
+        return points
+    }
+
+    static let loftRightX: CGFloat = 255
+    static let loftBottomY: CGFloat = 975
+    /// The loft's left side and top: 52 in from the arch (10 inside the left lane's inner wall), across to x 255.
+    static var loftOutline: [CGPoint] { archOffset(inset: 52, maxX: loftRightX) }
+    static var loftTopRight: CGPoint { CGPoint(x: loftRightX, y: loftOutline.last?.y ?? 1215) }
+    /// Where the ramp comes in through the loft's right wall.
+    static let loftDoorBottom: CGFloat = 1104
+    static let loftDoorTop: CGFloat = 1136
+
+    /// Upper-layer walls: the left side and top, the right wall above and below the ramp's door, the drain slope
+    /// and the chute under the loft that carries a drained ball down into the left lane.
+    static let loftSlope = [CGPoint(x: 72, y: 1030), CGPoint(x: 162, y: 962)]
+    static var loftWalls: [[CGPoint]] {
+        [[loftSlope[0]] + loftOutline.filter { $0.y > loftSlope[0].y } + [loftTopRight],
+         [loftTopRight, CGPoint(x: loftRightX, y: loftDoorTop)],
+         [CGPoint(x: loftRightX, y: loftDoorBottom), CGPoint(x: loftRightX, y: loftBottomY)],
+         loftSlope,
+         [CGPoint(x: loftRightX, y: loftBottomY), CGPoint(x: 40, y: 880)],
+         loftFlipperGuide]
+    }
+    /// The loft's floor, for drawing.
+    static var loftFloor: [CGPoint] {
+        [loftSlope[1], loftSlope[0]] + loftOutline.filter { $0.y > loftSlope[0].y }
+            + [loftTopRight, CGPoint(x: loftRightX, y: loftBottomY),
+                                                      CGPoint(x: 200, y: loftBottomY - 25)]
+    }
+    /// The block under the loft on the floor layer (its outline is a floor wall).
+    static var loftBlock: [CGPoint] {
+        [CGPoint(x: leftOrbitInnerX, y: archStartY), CGPoint(x: leftOrbitInnerX, y: loftBottomY),
+         CGPoint(x: loftRightX, y: loftBottomY), loftTopRight] + Array(loftOutline.reversed())
+            + [CGPoint(x: leftOrbitInnerX, y: archStartY)]
+    }
+
+    /// The loft flipper: right-hand, at the loft's bottom right, on the RIGHT button. A ball falls onto it from the
+    /// ramp's door above; the drain is the gap left of its tip (24.9 pt), down to the chute.
+    static let loftFlipperPivot = CGPoint(x: 240, y: 985)
+    static let loftFlipperLength: CGFloat = 56
+    /// T5 M3 v2 (Aaron: stuck in the loft): a ball dropping down the right wall from the ramp's door sat in the 5 pt
+    /// crevice between the wall and the pivot. This guide runs from the wall to the top of the pivot (as the upper
+    /// flipper's does), so the ball rolls on down the flipper.
+    /// T5 M3 v3 (still stuck): v2 ended the guide at the pivot's top-RIGHT, the right point for a left-hand flipper.
+    /// This flipper is right-hand (it points down-left), so its top edge leaves the pivot at the top-LEFT; the ball
+    /// sat on the pivot's crown between it and the guide. The guide now ends there, covering the crown.
+    static var loftFlipperGuide: [CGPoint] {
+        let r = upperFlipperPivotRadius + 1
+        let top = CGPoint(x: loftFlipperPivot.x - r * sin(flipperRestAngle),
+                          y: loftFlipperPivot.y + r * cos(flipperRestAngle))
+        return [CGPoint(x: loftRightX, y: top.y + 30), top]
+    }
+
+    /// The window seat: a hole at the loft's top left, shot from the loft flipper. It kicks the ball out to the right,
+    /// so it drops back onto the flipper's pivot end.
+    static let windowSeatCenter = CGPoint(x: 115, y: 1110)
+    static let windowSeatCapture: CGFloat = 16
+    static let windowSeatEject = CGVector(dx: 300, dy: -80)
+    static let windowSeatPoints = 5_000
+
+    /// A drained loft ball rolling left down the chute crosses this line inside the left lane and drops to the floor.
+    static let loftExitSwitch = LmpSwitch(a: CGPoint(x: 46, y: 850), b: CGPoint(x: 46, y: 960),
+                                          forward: CGVector(dx: -1, dy: 0))
+
+    /// M3 round 2: the dumbwaiter. Every other kettle shot, the kettle sends the ball up a shaft into the loft
+    /// (until the rules milestone decides when it's lit). It comes out at the loft's lower left moving right, and
+    /// falls onto the loft flipper's pivot end.
+    static let dumbwaiterExit = CGPoint(x: 150, y: 1080)
+    static let dumbwaiterSeconds: TimeInterval = 0.6
+    static let dumbwaiterExitVelocity = CGVector(dx: 250, dy: 0)
+    static let dumbwaiterPoints = 1_000
+
+    /// M3 round 2: a full plunge (a plunged ball still this fast as it comes over the top, about 85% pull or more)
+    /// drops through a hatch into the loft instead of running down the left lane.
+    static let plungeToLoftSpeed: CGFloat = 1200
+    static let loftHatch = CGPoint(x: 215, y: 1185)
+    static let loftHatchSeconds: TimeInterval = 0.2
+    static let loftHatchExitVelocity = CGVector(dx: -120, dy: -60)
+    static let fullPlungePoints = 2_500
+
+    // MARK: The loft ramp (milestone 3): from the left flipper, mouth at (400, 830), straight up, a left turn of
+    // radius 70, then west through the loft's door. Shot line clear of the mail slot by 20 pt (tools/lmp_render_m3.py).
+    static let rampMouth = CGPoint(x: 400, y: 830)
+    static let rampMouthHalfWidth: CGFloat = 30
+    static let rampHalfWidth: CGFloat = 16
+    static let rampFlareTopY: CGFloat = 900
+    static let rampTurnY: CGFloat = 1050
+    static let rampTurnRadius: CGFloat = 70
+    static var rampCenterline: [CGPoint] {
+        let c = CGPoint(x: rampMouth.x - rampTurnRadius, y: rampTurnY)
+        var points = [rampMouth, CGPoint(x: rampMouth.x, y: rampTurnY)]
+        for i in 1...12 {
+            let a = CGFloat(i) / 12 * .pi / 2
+            points.append(CGPoint(x: c.x + rampTurnRadius * cos(a), y: c.y + rampTurnRadius * sin(a)))
+        }
+        points.append(CGPoint(x: loftRightX, y: rampTurnY + rampTurnRadius))
+        return points
+    }
+    /// One rail: the centreline offset by `side` (+ = left of travel), with the mouth's flare.
+    static func rampRail(side: CGFloat) -> [CGPoint] {
+        let cl = rampCenterline
+        var out: [CGPoint] = [CGPoint(x: rampMouth.x - (side > 0 ? 1 : -1) * rampMouthHalfWidth, y: rampMouth.y),
+                              CGPoint(x: rampMouth.x - side, y: rampFlareTopY)]
+        for i in 1..<cl.count {
+            let a = cl[i - 1], b = cl[min(i + 1, cl.count - 1)]
+            let d = CGVector(dx: b.x - a.x, dy: b.y - a.y)
+            let l = max(hypot(d.dx, d.dy), 0.001)
+            out.append(CGPoint(x: cl[i].x - d.dy / l * side, y: cl[i].y + d.dx / l * side))
+        }
+        return out
+    }
+    /// Floor posts at the mouth's edges, so a missed shot bounces off the entrance.
+    static var rampMouthPosts: [[CGPoint]] {
+        [-rampMouthHalfWidth, rampMouthHalfWidth].map { dx in
+            [CGPoint(x: rampMouth.x + dx, y: rampMouth.y), CGPoint(x: rampMouth.x + dx, y: rampMouth.y - 24)]
+        }
+    }
+    static var rampEntrySwitch: LmpSwitch {
+        LmpSwitch(a: CGPoint(x: rampMouth.x - rampMouthHalfWidth, y: rampMouth.y + 12),
+                  b: CGPoint(x: rampMouth.x + rampMouthHalfWidth, y: rampMouth.y + 12), forward: CGVector(dx: 0, dy: 1))
+    }
+    /// Through the loft's door: the ramp is made.
+    static let rampMadeSwitch = LmpSwitch(a: CGPoint(x: 262, y: 1100), b: CGPoint(x: 262, y: 1140),
+                                          forward: CGVector(dx: -1, dy: 0))
+    static let rampPoints = 1_000
 
     // MARK: Rules placeholders
     static let slingPoints = 10

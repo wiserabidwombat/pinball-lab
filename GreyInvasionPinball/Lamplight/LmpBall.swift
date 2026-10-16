@@ -39,6 +39,23 @@ final class LmpBall: SKNode {
     var scoopIgnoreUntil: TimeInterval = 0
     /// Just plunged: its first trip over the top isn't a loop. Cleared once it comes back down the table.
     var launched = false
+    /// T5 M3 round 2: carried by the scene along a straight line (the dumbwaiter, the hatch from a full plunge):
+    /// no collisions while it rides; it leaves with `exit` velocity.
+    var ride: (from: CGPoint, to: CGPoint, start: TimeInterval, duration: TimeInterval, exit: CGVector)? {
+        didSet { if (ride == nil) != (oldValue == nil) { updateCollisionMask() } }
+    }
+    /// T5 M3: up on the loft or its ramp (the upper layer): it touches only rampWall walls and the loft flipper,
+    /// draws above the loft and a little bigger.
+    private(set) var isUpper = false
+
+    func setUpper(_ up: Bool) {
+        guard up != isUpper else { return }
+        isUpper = up
+        zPosition = up ? 30 : 10
+        visual.setScale(up ? 1.1 : 1)
+        physicsBody?.categoryBitMask = up ? LmpPhysicsCategory.rampBall : LmpPhysicsCategory.ball
+        updateCollisionMask()
+    }
 
     init(at point: CGPoint) {
         let r = LmpTableLayout.ballRadius
@@ -106,6 +123,14 @@ final class LmpBall: SKNode {
 
     private func updateCollisionMask() {
         guard let body = physicsBody else { return }
+        if ride != nil {
+            body.collisionBitMask = 0
+            return
+        }
+        if isUpper {
+            body.collisionBitMask = LmpPhysicsCategory.rampWall | LmpPhysicsCategory.loftFlipper
+            return
+        }
         var mask = LmpPhysicsCategory.wall | LmpPhysicsCategory.flipper | LmpPhysicsCategory.slingshot
             | LmpPhysicsCategory.bumper | LmpPhysicsCategory.target | LmpPhysicsCategory.ball
             | LmpPhysicsCategory.toy

@@ -14,6 +14,7 @@ import Foundation
 // Milestone 3 round 1 (tools/lmp_render_m3.py): the loft, a raised mini-playfield at the top left with its own flipper
 // and the window seat, reached by a ramp from the left flipper; a ball that drains off it rolls down a chute into the
 // left lane. The bumpers move under the ramp's turn. The dumbwaiter and the plunge to the loft are round 2.
+// Milestone 4: the shop cat on her shelf at the top right (LmpCat).
 
 /// All Table 05 geometry in world points. SpriteKit's origin is bottom-left.
 /// Same 600 x 1300 world, radius-9 ball and physics as Tables 02–04 (every physics value proven on device there).
@@ -455,6 +456,24 @@ enum LmpTableLayout {
     static let rampMadeSwitch = LmpSwitch(a: CGPoint(x: 262, y: 1100), b: CGPoint(x: 262, y: 1140),
                                           forward: CGVector(dx: -1, dy: 0))
     static let rampPoints = 1_000
+
+    // MARK: The cat (milestone 4). Her shelf runs along the top right, above the ramp's turn and below the gap at
+    // the top of the arch; she walks it, naps, and swats balls that come within reach back down the table.
+    static let catRadius: CGFloat = 15
+    static let catShelfY: CGFloat = 1175
+    static let catMinX: CGFloat = 300
+    static let catMaxX: CGFloat = 440
+    static let catHomeX: CGFloat = 370
+    static let catWalkSpeed: CGFloat = 45
+    static let catNapSeconds: ClosedRange<Double> = 4...8
+    static let catSwatCooldown: TimeInterval = 1.5
+    /// Centre to centre: her radius + a ball + about a paw.
+    static let catReach: CGFloat = 46
+    static let catSwatSpeedX: CGFloat = 260
+    static let catSwatSpeedY: CGFloat = -680
+    static let catPetPoints = 250
+    static let catWakePoints = 500
+    static let catSwatPoints = 100
 
     // MARK: Rules placeholders
     static let slingPoints = 10

@@ -7,6 +7,8 @@
 // three teacup bumpers. Placeholder points and banners until the rules milestone.
 // Milestone 3 round 1: the loft (a raised mini-playfield with its own flipper on the right button and the window
 // seat), the ramp up to it from the left flipper, and the chute that drops a drained loft ball into the left lane.
+// Round 2: the dumbwaiter from the kettle and the full plunge through the hatch.
+// Milestone 4: the cat on her shelf at the top right: walks, naps, swats balls back down, purrs when hit.
 // Built from MonTableScene.swift's code, trimmed. Monsoon's sounds stand in until the table's own (juice milestone).
 import SpriteKit
 import UIKit
@@ -52,6 +54,7 @@ final class LmpTableScene: SKScene {
     private var spinner: LmpSpinner?
     private var lastSpinTickAt: TimeInterval = 0
     private var loftFlipper: LmpFlipper!
+    private var cat: LmpCat!
     private var windowSeat: LmpScoop!
     /// M3 round 2: the kettle sends every other ball up the dumbwaiter (the rules milestone will decide when it's lit).
     private var dumbwaiterLit = true
@@ -180,6 +183,37 @@ final class LmpTableScene: SKScene {
         addLaunchGate()
         addUpperTable()
         addLoft()
+        addCat()
+    }
+
+    /// Milestone 4: the cat and her shelf (the shelf is only drawn; she is the solid part).
+    private func addCat() {
+        let r = LmpTableLayout.catRadius
+        let shelf = SKShapeNode(rect: CGRect(x: LmpTableLayout.catMinX - r * 1.8, y: LmpTableLayout.catShelfY - r - 6,
+                                             width: LmpTableLayout.catMaxX - LmpTableLayout.catMinX + r * 3.6,
+                                             height: 5), cornerRadius: 2)
+        shelf.fillColor = SKColor(red: 0.55, green: 0.38, blue: 0.22, alpha: 1)
+        shelf.strokeColor = .clear
+        shelf.zPosition = 11
+        addChild(shelf)
+        let c = LmpCat(at: LmpTableLayout.catHomeX)
+        addChild(c)
+        cat = c
+    }
+
+    /// Moves the cat, and lets her swat any floor ball that comes within reach while she's awake.
+    private func updateCat(_ dt: CGFloat, now: TimeInterval) {
+        cat.update(dt: dt, now: now)
+        for ball in balls where !ball.isUpper && ball.ride == nil && ball.heldIn == nil {
+            guard let body = ball.physicsBody, cat.trySwat(ballAt: ball.position, now: now) else { continue }
+            let dir: CGFloat = ball.position.x >= cat.position.x ? 1 : -1
+            body.velocity = CGVector(dx: dir * LmpTableLayout.catSwatSpeedX, dy: LmpTableLayout.catSwatSpeedY)
+            game.add(LmpTableLayout.catSwatPoints)
+            showBanner("SWAT!")
+            sfx(.kickback)
+            hitHaptic.impactOccurred(intensity: 0.6)
+            break
+        }
     }
 
     /// Milestone 3: the loft, its ramp, the chute and the block under it.
@@ -453,7 +487,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M3 v4")
+        let label = SKLabelNode(text: "T5 M4 v1")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -499,7 +533,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M3 v4 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M4 v1 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -558,6 +592,7 @@ final class LmpTableScene: SKScene {
         bankResetAt = nil
         loopCombo = 0
         lastLoopAt = -100
+        cat.reset()
         game.reset()
         placeBallOnPlunger()
         refreshCamera()
@@ -717,6 +752,7 @@ final class LmpTableScene: SKScene {
         updateBank(now)
         updateScoops(now)
         updateRides(now)
+        updateCat(dt, now: now)
         updateSpinner(dt, now: now)
 
         if let due = bannerClearAt, now >= due {
@@ -980,6 +1016,21 @@ final class LmpTableScene: SKScene {
                 Effects.burst(in: self, at: ballNode.position, color: Self.wallColor, count: 8,
                               speed: 160, lifetime: 0.25, size: 0.22)
                 sfx(.sling)
+            }
+        case LmpPhysicsCategory.toy:
+            if node === cat {
+                switch cat.ballHit(now: gameTime) {
+                case .woke:
+                    game.add(LmpTableLayout.catWakePoints)
+                    showBanner("MRRP?!")
+                    sfx(.captiveKnock)
+                case .petted:
+                    game.add(LmpTableLayout.catPetPoints)
+                    showBanner("PURR")
+                    sfx(.captiveKnock)
+                case .none:
+                    break
+                }
             }
         case LmpPhysicsCategory.target:
             if let t = node as? LmpDropTarget, t.registerHit() {

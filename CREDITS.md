@@ -32,3 +32,14 @@ Pinball Lab by Aaron Tilley, built with Claude, in Swift, SwiftUI and SpriteKit.
 | Cinzel font (lettering printed in the table art; the font file isn't bundled) | — | The Cinzel Project Authors, Google Fonts (github.com/google/fonts, ofl/cinzel) | SIL Open Font License 1.1 |
 | Sound effects: bells, gongs, chants, the rumble, Cthulhu's roar and squelches; the Awakening drone loop | CthSounds/cth_sfx_*.wav, cth_loop_awakening.wav | Synthesized for this table (tools/cth_make_sfx.py, cth_make_loops.py) | Original, no license needed |
 | Sound effects: flippers, bumpers, slings, targets, holes, gates, plunger (mixed into some of the above) | CthSounds/cth_sfx_*.wav | Kenney (kenney.nl): Impact Sounds; converted, trimmed and levelled by tools/cth_make_sfx.py | CC0 1.0 (public domain) |
+
+## Table 04 · Monsoon
+
+| Asset | File | Source | License |
+|---|---|---|---|
+| Desert storm watercolor (the playfield painting and the card picture) | Assets.xcassets/MonArt/mon_lower, mon_upper (+ _sketch), mon_lab_thumb (tools/mon_floor.py, mon_lab_thumb.py) | Generated with ChatGPT (OpenAI) from Aaron Tilley's description | AI-generated for this table; OpenAI's terms of use assign the output to the user |
+| Table art and parts (cabinet, rails, guides, slings, storm-cloud bumpers, saguaro targets, flippers, spinner) | Assets.xcassets/MonArt/mon_* | Modelled and rendered in Blender for this table, with a watercolor and pencil pass (tools/mon_render_lower.py, mon_render_table.py, mon_watercolor.py, mon_upper_art.py, mon_render_parts.py, mon_parts_sketch.py, mon_render_flippers.py, mon_render_flipper_upper.py, mon_render_spinner.py) | Original, no license needed |
+| Cinzel font (lettering printed on the apron; the font file isn't bundled) | — | The Cinzel Project Authors, Google Fonts (github.com/google/fonts, ofl/cinzel) | SIL Open Font License 1.1 |
+| Sound effects: thunder, raindrops, rain, brush washes, chimes, sand, the helix whir (mixed into most) | MonSounds/mon_sfx_*.wav | Synthesized for this table (tools/mon_make_sfx.py) | Original, no license needed |
+| Storm bed loops: desert wind and cicadas, distant thunder, rain, birds after the storm | MonSounds/mon_loop_*.wav | Synthesized for this table (tools/mon_make_loops.py) | Original, no license needed |
+| Sound effects: flippers, slings, gates, spinner, holes, kickback, plunger, standups, captive ball, diverter | MonSounds/mon_sfx_*.wav | Kenney (kenney.nl): Impact Sounds; converted, trimmed and levelled by tools/mon_make_sfx.py | CC0 1.0 (public domain) |

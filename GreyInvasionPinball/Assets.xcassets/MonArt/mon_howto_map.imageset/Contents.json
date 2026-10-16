@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "mon_howto_map.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

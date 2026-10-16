@@ -1,0 +1,394 @@
+"""Table 04 (Monsoon) milestone 9 round 1: the UPPER table's fixed parts rendered in Blender (Cycles), from Table 03's
+whole-table script (cth_render_table.py; Monsoon's top is Table 03's, so it still reads cth_layout) with Monsoon's
+materials (mon_render_lower.py: weathered desert wood, dusky violet-grey walls, clear faintly amber plastics) and floor
+(the watercolor playfield over the whole table, mon_floor.py). No Lagoon hole (the helix is there now). The camera
+frames UPPER_RECT only; the lower table keeps its milestone 2 render (same geometry and light, so they join).
+mode "color" (default) or "mask" (metal white, the rest black; for the watercolor pass).
+Usage: python3 mon_render_table.py -- playfield_full.png apron.png out.png [scale] [samples] [color|mask]"""
+import bpy, bmesh, math, sys, os
+from mathutils import Vector
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cth_layout as L
+
+argv = sys.argv[sys.argv.index('--') + 1:]
+FLOOR, APRON, OUT = (os.path.abspath(a) for a in argv[:3])
+SCALE = float(argv[3]) if len(argv) > 3 else 1.0          # 1.0 = full PX_PER_PT
+SAMPLES = int(argv[4]) if len(argv) > 4 else 64
+MODE = argv[5] if len(argv) > 5 else 'color'
+X0, Y0, RW, RH = L.FULL_RECT
+UX0, UY0, UW, UH = L.UPPER_RECT
+K = L.OBLIQUE
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+sc = bpy.context.scene
+sc.render.engine = 'CYCLES'
+sc.cycles.device = 'CPU'
+sc.cycles.samples = SAMPLES
+sc.cycles.use_denoising = True
+sc.render.resolution_x = int(UW * L.PX_PER_PT * SCALE)
+sc.render.resolution_y = int(UH * L.PX_PER_PT * SCALE)
+sc.render.film_transparent = False
+sc.view_settings.view_transform = 'Standard'
+sc.view_settings.look = 'None'
+
+
+# ------------------------------------------------------------------ materials
+def principled(name, color, metal=0.0, rough=0.4, coat=0.0, alpha=1.0, trans=0.0, image=None, spec=0.5, coat_rough=0.03):
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    b.inputs['Base Color'].default_value = (*color, 1)
+    b.inputs['Metallic'].default_value = metal
+    b.inputs['Roughness'].default_value = rough
+    b.inputs['Coat Weight'].default_value = coat
+    b.inputs['Coat Roughness'].default_value = coat_rough
+    b.inputs['Alpha'].default_value = alpha
+    b.inputs['Transmission Weight'].default_value = trans
+    b.inputs['Specular IOR Level'].default_value = spec
+    if image:
+        tex = nt.nodes.new('ShaderNodeTexImage')
+        tex.image = bpy.data.images.load(image)
+        tex.interpolation = 'Cubic'
+        nt.links.new(tex.outputs['Color'], b.inputs['Base Color'])
+    return m
+
+
+def wood(name, dark, light):
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    wave = nt.nodes.new('ShaderNodeTexWave')
+    wave.wave_type = 'BANDS'; wave.bands_direction = 'Y'
+    wave.inputs['Scale'].default_value = 0.22
+    wave.inputs['Distortion'].default_value = 9
+    wave.inputs['Detail'].default_value = 3
+    ramp = nt.nodes.new('ShaderNodeValToRGB')
+    ramp.color_ramp.elements[0].color = (*dark, 1)
+    ramp.color_ramp.elements[1].color = (*light, 1)
+    nt.links.new(wave.outputs['Fac'], ramp.inputs['Fac'])
+    nt.links.new(ramp.outputs['Color'], b.inputs['Base Color'])
+    b.inputs['Roughness'].default_value = 0.6
+    b.inputs['Coat Weight'].default_value = 0.12
+    b.inputs['Coat Roughness'].default_value = 0.35
+    return m
+
+
+M_FLOOR = principled('floor', (1, 1, 1), rough=0.5, coat=0.12, coat_rough=0.45, spec=0.22, image=FLOOR)
+M_APRON = principled('apron', (1, 1, 1), rough=0.5, coat=0.1, coat_rough=0.45, spec=0.25, image=APRON)
+M_CHROME = principled('chrome', (0.92, 0.93, 0.95), metal=1.0, rough=0.12)
+M_STEEL = principled('steel', (0.7, 0.72, 0.75), metal=1.0, rough=0.28)
+M_BRASS = principled('brass', (0.86, 0.64, 0.30), metal=1.0, rough=0.22)
+M_RUBBER = principled('rubber', (0.93, 0.92, 0.88), rough=0.55, spec=0.3)      # white rubbers
+M_RUBBER_DARK = principled('rubberdark', (0.03, 0.03, 0.035), rough=0.5, spec=0.3)
+M_WOOD = wood('wood', (0.09, 0.055, 0.035), (0.22, 0.15, 0.09))         # weathered desert wood
+M_PLASTIC = principled('plastic', (0.96, 0.84, 0.62), rough=0.1, coat=0.5, coat_rough=0.1, alpha=0.32, trans=0.6)   # clear, faintly amber
+M_PLASTIC_RIM = principled('plasticrim', (0.85, 0.66, 0.28), metal=0.8, rough=0.25)
+M_BLACK = principled('black', (0.07, 0.06, 0.09), rough=0.6)            # dusky violet-grey walls
+
+
+# ------------------------------------------------------------------ geometry helpers
+def link(obj):
+    sc.collection.objects.link(obj)
+    return obj
+
+
+def planar_uv(me):
+    uv = me.uv_layers.new(name='UV')
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            v = me.vertices[me.loops[li].vertex_index].co
+            uv.data[li].uv = ((v.x - X0) / RW, (v.y - Y0) / RH)
+
+
+def prism(name, pts, z0, z1, mat, uv=False):
+    """A flat polygon (world xy) extruded from z0 to z1."""
+    bm = bmesh.new()
+    bottom = [bm.verts.new((x, y, z0)) for x, y in pts]
+    face = bm.faces.new(bottom)
+    if face.normal.z < 0: face.normal_flip()
+    ext = bmesh.ops.extrude_face_region(bm, geom=[face])
+    for v in [e for e in ext['geom'] if isinstance(e, bmesh.types.BMVert)]:
+        v.co.z = z1
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    if uv: planar_uv(me)
+    me.materials.append(mat)
+    return link(bpy.data.objects.new(name, me))
+
+
+def tube(name, pts, z, r, mat, closed=False, res=8):
+    cu = bpy.data.curves.new(name, 'CURVE'); cu.dimensions = '3D'
+    cu.bevel_depth = r; cu.bevel_resolution = 3; cu.use_fill_caps = True
+    sp = cu.splines.new('POLY'); sp.points.add(len(pts) - 1)
+    for i, (x, y) in enumerate(pts):
+        sp.points[i].co = (x, y, z, 1)
+    sp.use_cyclic_u = closed
+    cu.materials.append(mat)
+    return link(bpy.data.objects.new(name, cu))
+
+
+def cylinder(name, x, y, r, z0, z1, mat, verts=32):
+    bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=z1 - z0, location=(x, y, (z0 + z1) / 2), vertices=verts)
+    o = bpy.context.object; o.name = name; o.data.materials.append(mat)
+    bev = o.modifiers.new('b', 'BEVEL'); bev.width = min(r * 0.25, 1.2); bev.segments = 3
+    return o
+
+
+def torus(name, x, y, z, major, minor, mat):
+    bpy.ops.mesh.primitive_torus_add(location=(x, y, z), major_radius=major, minor_radius=minor,
+                                     major_segments=40, minor_segments=12)
+    o = bpy.context.object; o.name = name; o.data.materials.append(mat)
+    return o
+
+
+def wall_strip(name, pts, thick, z1, mat):
+    """A thin upright wall along a polyline (one box per segment)."""
+    objs = []
+    for i, (a, b) in enumerate(zip(pts, pts[1:])):
+        dx, dy = b[0] - a[0], b[1] - a[1]; ln = math.hypot(dx, dy)
+        if ln < 0.01: continue
+        nx, ny = -dy / ln * thick / 2, dx / ln * thick / 2
+        quad = [(a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny), (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny)]
+        objs.append(prism(f'{name}{i}', quad, 0, z1, mat))
+    return objs
+
+
+def post(name, x, y, ring_r, h=20):
+    """Chrome post with a brass cap and a white rubber ring whose outer edge is ring_r."""
+    cylinder(name, x, y, 3.2, 0, h, M_CHROME)
+    cylinder(name + 'cap', x, y, 4.2, h, h + 2.2, M_BRASS)
+    torus(name + 'ring', x, y, 7, ring_r - 2.0, 2.0, M_RUBBER)
+
+
+def rubber_guide(name, a, b, post_r=4.0, band_r=1.9):
+    """Two chrome posts with brass caps and a white rubber band stretched round them (a dead rubber guide)."""
+    for k, (x, y) in enumerate((a, b)):
+        cylinder(name + 'Post' + str(k), x, y, 2.6, 0, 18, M_CHROME)
+        cylinder(name + 'Cap' + str(k), x, y, 3.6, 18, 20, M_BRASS)
+    ang = math.atan2(b[1] - a[1], b[0] - a[0])
+    loop = []
+    for (cx, cy), start in ((b, ang - math.pi / 2), (a, ang + math.pi / 2)):
+        for i in range(13):
+            t = start + math.pi * i / 12
+            loop.append((cx + post_r * math.cos(t), cy + post_r * math.sin(t)))
+    tube(name + 'Band', loop, 7, band_r, M_RUBBER, closed=True)
+
+
+def offset_loop(pts, d):
+    """Offsets a closed counter-clockwise polygon outward by d (miter joins)."""
+    n = len(pts); out = []
+    for i in range(n):
+        p0, p1, p2 = pts[i - 1], pts[i], pts[(i + 1) % n]
+        def nrm(a, b):
+            dx, dy = b[0] - a[0], b[1] - a[1]; ln = math.hypot(dx, dy)
+            return (dy / ln, -dx / ln)
+        n1, n2 = nrm(p0, p1), nrm(p1, p2)
+        bx, by = n1[0] + n2[0], n1[1] + n2[1]; bl = math.hypot(bx, by)
+        bx, by = bx / bl, by / bl
+        cosh = bx * n1[0] + by * n1[1]
+        out.append((p1[0] + bx * d / cosh, p1[1] + by * d / cosh))
+    return out
+
+
+def ccw(pts):
+    area = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(pts, pts[1:] + pts[:1]))
+    return pts if area > 0 else list(reversed(pts))
+
+
+# ------------------------------------------------------------------ the table
+# floor
+prism('floor', [(X0, Y0), (X0 + RW, Y0), (X0 + RW, Y0 + RH), (X0, Y0 + RH)], -2, 0, M_FLOOR, uv=True)
+
+# apron plates (3 pt high), below the slopes; the right one also covers under the plunger lane
+left_apron = [(12, L.APRON_TOP_Y + 3), (L.LEFT_X, L.APRON_TOP_Y), (L.DRAIN_X, L.DRAIN_Y), (L.DRAIN_X, Y0), (12, Y0)]
+right_apron = [(L.LANE_X, L.APRON_TOP_Y), (L.MIRROR - L.DRAIN_X, L.DRAIN_Y), (L.MIRROR - L.DRAIN_X, Y0),
+               (588, Y0), (588, L.LANE_FLOOR_Y), (L.LANE_X, L.LANE_FLOOR_Y)]
+prism('apronL', ccw(left_apron), 0, 3, M_APRON, uv=True)
+prism('apronR', ccw(right_apron), 0, 3, M_APRON, uv=True)
+# chrome lip along each slope edge
+tube('lipL', [(L.LEFT_X, L.APRON_TOP_Y), (L.DRAIN_X, L.DRAIN_Y), (L.DRAIN_X, L.DRAIN_LIP_Y)], 4.5, 2.4, M_CHROME)
+tube('lipR', L.right_apron(), 4.5, 2.4, M_CHROME)
+
+# cabinet: wooden side boards and the front board, with a chrome rail on top of each inner edge
+CAB_H = 34
+prism('cabL', [(X0, Y0), (12, Y0), (12, Y0 + RH + 40), (X0, Y0 + RH + 40)], 0, CAB_H, M_WOOD)
+prism('cabR', [(588, Y0), (X0 + RW, Y0), (X0 + RW, Y0 + RH + 40), (588, Y0 + RH + 40)], 0, CAB_H, M_WOOD)
+prism('cabFront', [(X0, Y0 - 40), (X0 + RW, Y0 - 40), (X0 + RW, Y0 - 12), (X0, Y0 - 12)], 0, CAB_H, M_WOOD)
+tube('railL', [(10, Y0 - 12), (10, Y0 + RH + 40)], CAB_H + 1.5, 3.2, M_CHROME)
+tube('railR', [(590, Y0 - 12), (590, Y0 + RH + 40)], CAB_H + 1.5, 3.2, M_CHROME)
+
+# playfield side walls: the strip between floor and cabinet (x 12..20 and 580..588), painted black with a chrome top
+prism('sideL', [(12, L.APRON_TOP_Y), (L.LEFT_X, L.APRON_TOP_Y), (L.LEFT_X, L.ARCH_Y), (12, L.ARCH_Y)], 0, 18, M_BLACK)
+prism('sideR', [(L.RIGHT_X, L.LANE_FLOOR_Y), (588, L.LANE_FLOOR_Y), (588, L.ARCH_Y), (L.RIGHT_X, L.ARCH_Y)], 0, 18, M_BLACK)
+tube('sideLtop', [(16, L.APRON_TOP_Y), (16, L.ARCH_Y)], 18.5, 2.0, M_STEEL)
+tube('sideRtop', [(584, L.LANE_FLOOR_Y), (584, L.ARCH_Y)], 18.5, 2.0, M_STEEL)
+
+# shooter-lane wall (x 548) from the lane floor up: a black wall with a steel top rail
+wall_strip('lanewall', [(L.LANE_X + 2, L.LANE_FLOOR_Y), (L.LANE_X + 2, L.LANE_WALL_TOP)], 4, 16, M_BLACK)
+tube('lanewallTop', [(L.LANE_X + 2, L.LANE_FLOOR_Y), (L.LANE_X + 2, L.LANE_WALL_TOP)], 16.5, 2.0, M_STEEL)
+# shooter-lane floor stop behind the plunger
+prism('laneStop', [(L.LANE_X + 2, L.LANE_FLOOR_Y - 6), (L.RIGHT_X, L.LANE_FLOOR_Y - 6),
+                   (L.RIGHT_X, L.LANE_FLOOR_Y), (L.LANE_X + 2, L.LANE_FLOOR_Y)], 0, 10, M_STEEL)
+
+# wire lane guides (inlane/outlane separators and the outlane walls): steel wire on short posts
+for side, guide in (('L', L.left_lane_guide()), ('R', L.right_lane_guide())):
+    tube('guide' + side, guide, 9, 2.2, M_STEEL)
+    tube('guideLow' + side, guide, 3, 1.6, M_STEEL)
+ol, orr = L.outlane_walls()
+tube('outlaneL', ol, 9, 2.2, M_STEEL); tube('outlaneLlow', ol, 3, 1.6, M_STEEL)
+tube('outlaneR', orr, 9, 2.2, M_STEEL); tube('outlaneRlow', orr, 3, 1.6, M_STEEL)
+for side, (x, y) in [('L', (L.LANE_GUIDE_X, L.LANE_GUIDE_TOP)), ('R', L.mirrored((L.LANE_GUIDE_X, L.LANE_GUIDE_TOP)))]:
+    post('guideTop' + side, x, y, 6.5, h=18)
+for side, (x, y) in [('L', (L.LANE_GUIDE_X, L.OUTLANE_WALL_BOTTOM)), ('R', L.mirrored((L.LANE_GUIDE_X, L.OUTLANE_WALL_BOTTOM)))]:
+    cylinder('outlanePost' + side, x, y, 3.0, 0, 12, M_CHROME)
+
+# slingshots: posts with rubber rings at the top and tip, a plain post at the corner, the rubber
+# band round all three, and a translucent sea-green plastic on top held by the posts
+for side, s in (('L', L.SLING_L), ('R', L.sling_right())):
+    top, corner, tip = s['top'], s['corner'], s['tip']
+    post('slingTop' + side, *top, L.SLING_TOP_POST_R)
+    post('slingTip' + side, *tip, L.SLING_TIP_POST_R)
+    post('slingCorner' + side, *corner, 5.5)
+    tri = ccw([top, corner, tip])
+    band = offset_loop(tri, 3.5)
+    tube('band' + side, band, 7, 2.4, M_RUBBER, closed=True)
+    plastic = offset_loop(tri, 5)
+    prism('plastic' + side, plastic, 21, 23, M_PLASTIC)
+    tube('plasticRim' + side, offset_loop(tri, 4.2), 23.2, 1.0, M_PLASTIC_RIM, closed=True)
+    for (px, py) in (top, tip, corner):
+        cylinder('screw' + side + str(px), px, py, 2.6, 23, 24.6, M_BRASS)
+
+
+# ================================================================== the upper table (milestone 8)
+# the arch: black fill between the arched outer wall and the cabinet, with a steel top rail, and the
+# cabinet's head board above it
+arch = L.quad((L.LEFT_X, L.ARCH_Y), (L.LEFT_X, L.TOP_Y), (L.W / 2, L.TOP_Y), 24) + \
+       L.quad((L.W / 2, L.TOP_Y), (L.RIGHT_X, L.TOP_Y), (L.RIGHT_X, L.ARCH_Y), 24)
+arch = [(L.LEFT_X, L.ARCH_Y)] + arch
+fill = [(12, L.ARCH_Y)] + arch + [(588, L.ARCH_Y), (588, 1300), (12, 1300)]
+prism('archFill', ccw(fill), 0, 18, M_BLACK)
+inset = []
+for (ax, ay) in arch:                     # the rail runs 4 pt outside the playfield edge
+    dx, dy = ax - L.W / 2, ay - (L.ARCH_Y - 40)
+    d = math.hypot(dx, dy); inset.append((ax + dx / d * 4, ay + dy / d * 4))
+tube('archTop', inset, 18.5, 2.0, M_STEEL)
+prism('cabTop', [(X0, 1300), (X0 + RW, 1300), (X0 + RW, Y0 + RH + 40), (X0, Y0 + RH + 40)], 0, CAB_H, M_WOOD)
+tube('railTop', [(10, 1302), (590, 1302)], CAB_H + 1.5, 3.2, M_CHROME)
+
+# side-wall bulges (they nudge wall-huggers into the inlanes): black fill with a steel top
+bl = [(L.LEFT_X, L.BULGE_B)] + L.quad((L.LEFT_X, L.BULGE_B), (L.LEFT_X + L.BULGE_INSET, (L.BULGE_B + L.BULGE_T) / 2), (L.LEFT_X, L.BULGE_T))
+prism('bulgeL', ccw(bl), 0, 18, M_BLACK)
+tube('bulgeLtop', [(x - 2.5, y) for x, y in bl], 18.5, 2.0, M_STEEL)
+br = [(L.LANE_X + 2, L.BULGE_B)] + L.quad((L.LANE_X, L.BULGE_B), (L.LANE_X - L.BULGE_INSET, (L.BULGE_B + L.BULGE_T) / 2), (L.LANE_X, L.BULGE_T)) + [(L.LANE_X + 2, L.BULGE_T)]
+prism('bulgeR', ccw(br), 0, 16, M_BLACK)
+tube('bulgeRtop', [(x + 2.5, y) for x, y in br[1:-1]], 16.5, 2.0, M_STEEL)
+# the gate's hinge post at the top of the shooter-lane wall
+post('gatePost', L.LANE_X, L.LANE_WALL_TOP, 5, h=18)
+
+# the orbit's inner wall: a smooth steel-capped rail, posts at the funnel tip and its far end
+inner = L.orbit_inner()
+wall_strip('orbitWall', inner, 4, 16, M_BLACK)
+tube('orbitWallTop', inner, 16.5, 2.2, M_STEEL)
+post('funnelTip', *L.FUNNEL_TIP, 6, h=18)
+cylinder('orbitEnd', *inner[-1], 3.0, 0, 18, M_CHROME)
+
+# spinner brackets either side of the orbit lane
+for x in (L.LEFT_X + 2, L.ORBIT_X - 2):
+    cylinder('spinBracket' + str(x), x, L.SPINNER_Y, 2.6, 0, 22, M_CHROME)
+    cylinder('spinCap' + str(x), x, L.SPINNER_Y, 3.4, 22, 24, M_BRASS)
+
+# Candle-lane guides: short black blades with a rubber-ringed post at each end
+for x in L.LANE_POSTS:
+    wall_strip('laneBlade' + str(x), [(x, L.LANE_BOTTOM), (x, L.LANE_TOP)], 3, 12, M_BLACK)
+    tube('laneBladeTop' + str(x), [(x, L.LANE_BOTTOM), (x, L.LANE_TOP)], 12.5, 1.6, M_STEEL)
+    post('lanePostB' + str(x), x, L.LANE_BOTTOM, 5, h=16)
+    post('lanePostT' + str(x), x, L.LANE_TOP, 5, h=16)
+
+# Sigil bank: the back wall, and (M8 v4) the cap as a rubber-lined guide: a post where it meets the back wall,
+# a post at its low end, a white rubber band between them, and a small sea-green plastic over the top of the bank
+wall_strip('bankBack', L.BANK_BACK, 4, 16, M_BLACK)
+tube('bankBackTop', L.BANK_BACK, 16.5, 2.0, M_STEEL)
+rubber_guide('bankCap', L.BANK_CAP[0], L.BANK_CAP[1])
+bank_plastic = [(447, 609), (481, 623), (481, 646), (451, 633)]
+prism('bankPlastic', ccw(bank_plastic), 21, 23, M_PLASTIC)
+tube('bankPlasticRim', offset_loop(ccw(bank_plastic), -0.8), 23.2, 1.0, M_PLASTIC_RIM, closed=True)
+for (px, py) in L.BANK_CAP:
+    cylinder('bankScrew' + str(px), px, py, 2.6, 23, 24.6, M_BRASS)
+
+# the upper flipper's corner guide (M8 v4): a rubber-lined guide, posts at the wall and above the pivot
+rubber_guide('upperGuide', (L.UPPER_GUIDE[0][0] - 3.5, L.UPPER_GUIDE[0][1] - 2), L.UPPER_GUIDE[1])
+
+# the top-right lane (M8 v2): its curved inner wall, black with a steel cap, a post at each end
+wall_strip('topLane', L.TOP_LANE_WALL, 4, 16, M_BLACK)
+tube('topLaneTop', L.TOP_LANE_WALL, 16.5, 2.2, M_STEEL)
+post('topLaneGate', *L.TOP_LANE_WALL[0], 4.5, h=18)
+post('topLaneEnd', *L.TOP_LANE_WALL[-1], 4.5, h=18)
+
+# the two holes: a dark recess with a chrome rim
+for nm, (hx, hy) in (('arroyo', L.LIBRARY),):
+    cylinder(nm + 'Hole', hx, hy, L.SCOOP_R - 1, -1.8, 0.15, M_BLACK, verts=48)
+    torus(nm + 'Rim', hx, hy, 0.6, L.SCOOP_R + 0.5, 1.5, M_CHROME)
+
+# ------------------------------------------------------------------ mask mode: metal white, the rest black
+if MODE == 'mask':
+    def flat(name, v):
+        m = bpy.data.materials.new(name); m.use_nodes = True
+        nodes = m.node_tree.nodes; nodes.clear()
+        o_ = nodes.new('ShaderNodeOutputMaterial'); e_ = nodes.new('ShaderNodeEmission')
+        e_.inputs['Color'].default_value = (v, v, v, 1); e_.inputs['Strength'].default_value = 1
+        m.node_tree.links.new(e_.outputs[0], o_.inputs[0]); return m
+    WHITE, BLACK = flat('mwhite', 1.0), flat('mblack', 0.0)
+    metals = {M_CHROME.name, M_STEEL.name, M_BRASS.name}
+    for o in sc.objects:
+        if o.type not in ('MESH', 'CURVE'): continue
+        mats = o.data.materials
+        for i in range(len(mats)):
+            mats[i] = WHITE if mats[i] and mats[i].name in metals else BLACK
+
+# ------------------------------------------------------------------ oblique shear: y += z * K
+bpy.ops.object.select_all(action='DESELECT')
+for o in list(sc.objects):
+    if o.type in ('CURVE', 'MESH'):
+        o.select_set(True)
+bpy.context.view_layer.objects.active = next(o for o in sc.objects if o.type == 'MESH')
+bpy.ops.object.convert(target='MESH')
+for o in sc.objects:
+    if o.type != 'MESH': continue
+    mw = o.matrix_world.copy()
+    o.data.transform(mw); o.matrix_world.identity()
+    for v in o.data.vertices:
+        v.co.y += v.co.z * K
+for o in sc.objects:
+    if o.type == 'MESH':
+        for p in o.data.polygons: p.use_smooth = True
+
+# ------------------------------------------------------------------ light, world, camera
+sun = bpy.data.lights.new('key', 'SUN'); sun.energy = 3.4; sun.angle = math.radians(9)
+so = link(bpy.data.objects.new('key', sun))
+# light from the top left of the table (up-table and left), falling down-right
+so.rotation_euler = (math.radians(-38), math.radians(-28), 0)
+fill = bpy.data.lights.new('fill', 'SUN'); fill.energy = 0.6; fill.angle = math.radians(30)
+fo = link(bpy.data.objects.new('fill', fill)); fo.rotation_euler = (math.radians(30), math.radians(25), 0)
+# soft boxes above the table for chrome to reflect (invisible to the camera)
+for i, (x, y, w, h, e) in enumerate([(-200, 900, 500, 900, 2.6), (800, 300, 300, 600, 1.1), (284, -400, 900, 200, 1.2), (-200, 1700, 500, 900, 2.0), (800, 1200, 300, 900, 0.9)]):
+    bpy.ops.mesh.primitive_plane_add(size=1, location=(x, y, 700))
+    p = bpy.context.object; p.scale = (w, h, 1)
+    em = bpy.data.materials.new(f'box{i}'); em.use_nodes = True
+    nodes = em.node_tree.nodes; nodes.clear()
+    o_ = nodes.new('ShaderNodeOutputMaterial'); e_ = nodes.new('ShaderNodeEmission')
+    e_.inputs['Strength'].default_value = e; em.node_tree.links.new(e_.outputs[0], o_.inputs[0])
+    p.data.materials.append(em); p.visible_camera = False; p.visible_shadow = False
+w = bpy.data.worlds.new('w'); sc.world = w; w.use_nodes = True
+w.node_tree.nodes['Background'].inputs['Color'].default_value = (0.05, 0.07, 0.08, 1)
+w.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.6
+
+cam = bpy.data.cameras.new('cam'); cam.type = 'ORTHO'; cam.ortho_scale = max(UW, UH)
+cam.clip_end = 5000
+co = link(bpy.data.objects.new('cam', cam))
+co.location = (UX0 + UW / 2, UY0 + UH / 2, 1500); co.rotation_euler = (0, 0, 0)
+sc.camera = co
+
+if MODE == 'mask':
+    sc.cycles.samples = 4; sc.cycles.use_denoising = False
+    sc.world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0
+sc.render.filepath = OUT
+bpy.ops.render.render(write_still=True)
+print('rendered', OUT, sc.render.resolution_x, sc.render.resolution_y)

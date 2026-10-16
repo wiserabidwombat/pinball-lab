@@ -6,7 +6,7 @@ import Foundation
 /// tables evolve as we get better at making them. The home screen lists the tables; tapping one plays it,
 /// and each table's own menu has a "Tables" button back here.
 enum LabTable: String, CaseIterable, Identifiable {
-    case orbit, greyInvasion, cthulhu
+    case orbit, greyInvasion, cthulhu, monsoon
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .orbit: return 1
         case .greyInvasion: return 2
         case .cthulhu: return 3
+        case .monsoon: return 4
         }
     }
 
@@ -23,6 +24,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .orbit: return "Orbit Pinball"
         case .greyInvasion: return "Grey Invasion"
         case .cthulhu: return "Cthulhu Rising"
+        case .monsoon: return "Monsoon"
         }
     }
 
@@ -31,6 +33,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .orbit: return "Oct 2026 · the first table"
         case .greyInvasion: return "Oct 2026 · table two"
         case .cthulhu: return "Oct 2026 · table three"
+        case .monsoon: return "Oct 2026 · table four"
         }
     }
 
@@ -42,6 +45,8 @@ enum LabTable: String, CaseIterable, Identifiable {
             return "Grey aliens raid a farm town: two ramps, multiball, three waves and a Mothership, a camera that follows the ball."
         case .cthulhu:
             return "Research forbidden tomes, perform the ritual, then fight Cthulhu as he rises from the Lagoon. Every part modelled and rendered like a real table."
+        case .monsoon:
+            return "A desert sketched in pencil. Every goal brings the summer storm closer, and the rain washes watercolor into the table until the desert blooms."
         }
     }
 
@@ -51,6 +56,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .orbit: return ["Flippers", "Bumpers", "Wormhole", "Skill shot"]
         case .greyInvasion: return ["Ramps", "Multiball", "Waves", "Flying camera", "Robot-tested"]
         case .cthulhu: return ["Spinner", "Magnet", "Moving toy", "Up-kicker", "Real-table art"]
+        case .monsoon: return ["Color as progress", "Habitrails", "Captive ball", "Dust devil", "Watercolor"]
         }
     }
 
@@ -59,6 +65,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .orbit: return Color(red: 0.55, green: 0.45, blue: 1.0)
         case .greyInvasion: return Color(red: 0.35, green: 0.95, blue: 0.55)
         case .cthulhu: return Color(red: 0.30, green: 0.85, blue: 0.75)
+        case .monsoon: return Color(red: 0.96, green: 0.78, blue: 0.45)
         }
     }
 
@@ -68,6 +75,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .orbit: return "orbit_lab_thumb"     // the whole table (tools/orbit_lab_thumb.py), was the nebula
         case .greyInvasion: return "howto_map"
         case .cthulhu: return "cth_lab_thumb"       // the rendered table with Cthulhu risen (art round 5b)
+        case .monsoon: return "mon_lab_thumb"       // the finished table, half pencil, half watercolor (tools/mon_lab_thumb_table.py)
         }
     }
 
@@ -86,6 +94,8 @@ struct PinballLabRoot: View {
                 OrbitTableView(onExit: { playing = nil })
             case .some(.cthulhu):
                 CthTableView(onExit: { playing = nil })
+            case .some(.monsoon):
+                MonTableView(onExit: { playing = nil })
             case .none:
                 LabHomeView { table in playing = table }
             }

@@ -64,6 +64,18 @@ extension LabTable {
                 LabStat(label: "Code", value: "About 6,100 lines in 23 files"),
                 LabStat(label: "Testing", value: "Shot Lab and Sling Lab robots, plus a game simulator"),
             ]
+        case .monsoon:
+            // Polish round 2 (T4 M11 v3): the finished table's numbers.
+            return [
+                LabStat(label: "Table size", value: "600 × 1300 points, the same as Tables 02 and 03"),
+                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down"),
+                LabStat(label: "Frame rate", value: "120 fps on ProMotion iPhones, even in the storm"),
+                LabStat(label: "Goal", value: "Paint the desert, call the Monsoon, reach the Superbloom"),
+                LabStat(label: "Art", value: "A watercolor that starts as a pencil sketch, with parts rendered in 3D"),
+                LabStat(label: "Sounds", value: "36 effects and a four-layer storm that follows the game"),
+                LabStat(label: "Code", value: "About 6,500 lines in 21 files"),
+                LabStat(label: "Testing", value: "Shot Lab robot and a game simulator"),
+            ]
         }
     }
 
@@ -97,6 +109,14 @@ extension LabTable {
                 LabNote(title: "Its own sounds", detail: "Bells, gongs, a chant and Cthulhu's roar made in code for this table, and a drone under the finale."),
                 LabNote(title: "Robot-tested from the start", detail: "Every shot is measured on the grey box, before the art is drawn."),
             ]
+        case .monsoon:
+            return [
+                LabNote(title: "Color as progress", detail: "The table starts as a pencil sketch. Every goal lays a wash of watercolor that spreads from the shot you made, and no two games paint it the same way."),
+                LabNote(title: "Wire habitrails", detail: "Wires that cross over each other at different heights, a gate that picks the route, and a corkscrew helix."),
+                LabNote(title: "Two new toys", detail: "A captive ball you knock up its own channel, and a spinning dust devil that bends the ball's path."),
+                LabNote(title: "A storm that builds", detail: "Wind and cicadas give way to thunder as you paint; Monsoon brings rain and lightning over the sky, and birds come out for the Superbloom."),
+                LabNote(title: "Parts that color in", detail: "The storm-cloud bumpers and saguaro targets start in pencil and take on color with their part of the painting."),
+            ]
         }
     }
 
@@ -122,6 +142,14 @@ extension LabTable {
                 LabNote(title: "Test the slingshots too", detail: "A robot threw 640 balls at four slingshot designs. The original was already the best, so it stayed."),
                 LabNote(title: "Judge it at phone size", detail: "A dropped target looked fine in a close-up but read as still standing on the phone, so it became an empty slot."),
                 LabNote(title: "Make it look like pinball", detail: "Playtests turned plain lines into one-way gates, rubber guides and a real ramp the ball can't fall through."),
+            ]
+        case .monsoon:
+            return [
+                LabNote(title: "Started from a painting", detail: "The whole table grows out of one watercolor of a desert storm."),
+                LabNote(title: "Check effects on the phone", detail: "The sketch-to-color shader failed silently from the first build and just showed the color art. One console line gave it away; now every new shader gets checked on the device first."),
+                LabNote(title: "Paint should follow the rules", detail: "At first the picture filled in long before the storm came. Each wash is now measured on the painting itself, so the color always matches your progress."),
+                LabNote(title: "A toy can steer the game", detail: "The Shot Lab found the dust devil was bending shots into the arroyo. Halving its pull brought the ramp back."),
+                LabNote(title: "Contrast on paper", detail: "Chrome wires and lamps disappeared on the light painting, so they got dark ink outlines and sockets."),
             ]
         }
     }
@@ -316,6 +344,16 @@ struct LabCreditsView: View {
                     credit("Cinzel font (in the table art)", "The Cinzel Project Authors", "SIL Open Font License 1.1")
                     credit("Bells, gongs, chants, Cthulhu's roar", "Synthesized for this table", "Original")
                     credit("Impact Sounds (flippers, bumpers, targets, holes)", "Kenney · kenney.nl",
+                           "CC0 1.0 (public domain), edited and levelled for the table")
+                }
+                Section("Table 04 · Monsoon") {
+                    credit("Desert storm watercolor (the playfield painting and the card)",
+                           "Made with ChatGPT from Aaron Tilley's description", "Original")
+                    credit("Table art and parts", "Modelled and rendered in Blender for this table, with a watercolor and pencil pass",
+                           "Original")
+                    credit("Cinzel font (in the apron art)", "The Cinzel Project Authors", "SIL Open Font License 1.1")
+                    credit("Thunder, rain, brush washes, desert chimes, sand, the helix whir", "Synthesized for this table", "Original")
+                    credit("Impact Sounds (flippers, slings, targets, holes, gates)", "Kenney · kenney.nl",
                            "CC0 1.0 (public domain), edited and levelled for the table")
                 }
                 Section {

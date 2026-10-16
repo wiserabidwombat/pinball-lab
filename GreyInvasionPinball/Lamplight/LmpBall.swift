@@ -1,6 +1,6 @@
-// Pinball Lab Table 05 (The Lamplight): one ball in play. Monsoon's MonBall trimmed to the floor for milestone 1
-// (no ramps, wires or holes yet; the loft and its ramp add them back in milestones 2–3). Per-ball state lives here,
-// so multiball works from the start.
+// Pinball Lab Table 05 (The Lamplight): one ball in play. Monsoon's MonBall trimmed to the floor for milestone 1 (no
+// ramps or wires yet; the loft and its ramp add them back in milestone 3). M2 adds holes and the right orbit's one-way
+// deflector. Per-ball state lives here, so multiball works from the start.
 import SpriteKit
 import CoreGraphics
 import Foundation
@@ -24,6 +24,21 @@ final class LmpBall: SKNode {
     var inRightOutlane = false
     /// Whether the one-way launch gate is solid for this ball (while it's above the gate moving down).
     private(set) var launchGateSolid = false
+    /// T5 M2: whether the one-way deflector across the right orbit's mouth is solid for this ball (same rule).
+    private(set) var orbitDeflectorSolid = false
+    /// T5 M2: the hole holding this ball, if any, and when it lets go. A ball in a hole sits sunk in it: no lift,
+    /// no shadow (T3 M4 v2).
+    var heldIn: LmpScoop? {
+        didSet {
+            guard (heldIn == nil) != (oldValue == nil) else { return }
+            shadow.isHidden = heldIn != nil
+            updateLook()
+        }
+    }
+    var releaseAt: TimeInterval = 0
+    var scoopIgnoreUntil: TimeInterval = 0
+    /// Just plunged: its first trip over the top isn't a loop. Cleared once it comes back down the table.
+    var launched = false
 
     init(at point: CGPoint) {
         let r = LmpTableLayout.ballRadius
@@ -65,7 +80,8 @@ final class LmpBall: SKNode {
     func updateLook() {
         let a = -zRotation
         visual.zRotation = a
-        visual.position = CGPoint(x: -Self.lift * sin(a), y: Self.lift * cos(a))
+        let lift = heldIn == nil ? Self.lift : 0
+        visual.position = CGPoint(x: -lift * sin(a), y: lift * cos(a))
         shadow.zRotation = a
         shadow.position = CGPoint(x: shadowOffset.dx * cos(a) - shadowOffset.dy * sin(a),
                                   y: shadowOffset.dx * sin(a) + shadowOffset.dy * cos(a))
@@ -82,12 +98,19 @@ final class LmpBall: SKNode {
         updateCollisionMask()
     }
 
+    func setOrbitDeflectorSolid(_ solid: Bool) {
+        guard solid != orbitDeflectorSolid else { return }
+        orbitDeflectorSolid = solid
+        updateCollisionMask()
+    }
+
     private func updateCollisionMask() {
         guard let body = physicsBody else { return }
         var mask = LmpPhysicsCategory.wall | LmpPhysicsCategory.flipper | LmpPhysicsCategory.slingshot
             | LmpPhysicsCategory.bumper | LmpPhysicsCategory.target | LmpPhysicsCategory.ball
             | LmpPhysicsCategory.toy
         if launchGateSolid { mask |= LmpPhysicsCategory.launchGate }
+        if orbitDeflectorSolid { mask |= LmpPhysicsCategory.orbitDeflector }
         body.collisionBitMask = mask
     }
 }

@@ -7,7 +7,10 @@ import Foundation
 // (the app bundle is flat).
 // Milestone 1: the card and a NEW lower table in grey box (Aaron chose "center post + one outlane"): the flippers sit
 // 11 pt farther apart with a rubber post between their tips, and only the right side has an outlane (the left side is
-// closed: a deflector off the left wall feeds the left inlane). The upper table comes in milestones 2–3.
+// closed: a deflector off the left wall feeds the left inlane).
+// Milestone 2: the upper table in grey box (tools/lmp_render_m2.py): a loop pair joined over the top, the upper flipper
+// low on the LEFT wall, the bookshelf bank across the middle guarding the fireplace hole, the kettle scoop with its
+// spinner up a lane on the left, the mail slot on the right, three teacup bumpers top right. The loft is milestone 3.
 
 /// All Table 05 geometry in world points. SpriteKit's origin is bottom-left.
 /// Same 600 x 1300 world, radius-9 ball and physics as Tables 02–04 (every physics value proven on device there).
@@ -158,6 +161,151 @@ enum LmpTableLayout {
     /// Crossed going down: the ball is draining down the right outlane (for the cat-flap save in the rules milestone).
     static let rightOutlaneLine = (a: CGPoint(x: 514, y: 240), b: CGPoint(x: laneWallX, y: 240))
 
+    // MARK: Upper table (milestone 2, grey box). Shot lines checked in tools/lmp_render_m2.py.
+
+    /// The loop pair: an orbit lane up each side, 42 wide, joined over the top by the arch. A ball shot up one side
+    /// comes round the top and down the other. The left lane's mouth is at y 780 (shot by the right flipper); the
+    /// right lane's at y 762 (shot by the left flipper).
+    static let leftOrbitInnerX: CGFloat = 62
+    static let leftOrbitMouthY: CGFloat = 780
+    static let rightOrbitInnerX: CGFloat = 506
+    static let rightOrbitMouthY: CGFloat = 762      // T5 M2 v2: was 720
+    static let orbitTopInnerY: CGFloat = 1228
+    /// T5 M2 v3 (Aaron: the ball stuck at the top left): the inner wall's curve wasn't parallel to the arch and
+    /// pinched the lane to 18 pt, exactly a ball. It now follows the arch at the lane's full 42 pt, ending at x ~180.
+    static var leftOrbitWall: [CGPoint] {
+        let p0 = CGPoint(x: leftWallX, y: archStartY), c = CGPoint(x: leftWallX, y: topY)
+        let p1 = CGPoint(x: worldSize.width / 2, y: topY)
+        let inset = leftOrbitInnerX - leftWallX
+        var points = [CGPoint(x: leftOrbitInnerX, y: leftOrbitMouthY)]
+        for i in 0...32 {
+            let t = CGFloat(i) / 32, u = 1 - t
+            let p = CGPoint(x: u * u * p0.x + 2 * u * t * c.x + t * t * p1.x,
+                            y: u * u * p0.y + 2 * u * t * c.y + t * t * p1.y)
+            let d = CGVector(dx: 2 * u * (c.x - p0.x) + 2 * t * (p1.x - c.x),
+                             dy: 2 * u * (c.y - p0.y) + 2 * t * (p1.y - c.y))
+            let l = max(hypot(d.dx, d.dy), 0.001)
+            let q = CGPoint(x: p.x + d.dy / l * inset, y: p.y - d.dx / l * inset)
+            if q.x > 190 { break }
+            points.append(q)
+        }
+        return points
+    }
+    static var rightOrbitWall: [CGPoint] {
+        [CGPoint(x: rightOrbitInnerX, y: rightOrbitMouthY), CGPoint(x: rightOrbitInnerX, y: archStartY)]
+            + quadCurve(from: CGPoint(x: rightOrbitInnerX, y: archStartY),
+                        control: CGPoint(x: rightOrbitInnerX, y: orbitTopInnerY),
+                        to: CGPoint(x: 380, y: orbitTopInnerY))
+    }
+    /// A ball coming back down the right lane (a loop from the left, or a weak plunge off the launch gate) meets
+    /// this deflector across the lane's mouth and rolls off it into the table instead of falling into the right
+    /// outlane. It's one-way, like the launch gate: solid only for a ball above it moving down, so shots going up
+    /// the lane pass straight through it.
+    /// T5 M2 v2 (Aaron: the ball got trapped on the right): its low end met the bottom of the lane's inner wall, a
+    /// V the ball sat in. Now it runs on past the wall into the table, 22 pt clear of the wall's end (a ball is 18).
+    static let rightDeflectorLow = CGPoint(x: 480, y: 700)
+    static let rightDeflectorHigh = CGPoint(x: 543, y: 770)
+    /// Solid for a ball above it that isn't climbing faster than this (a ball resting on it has dy ≈ 0).
+    static let deflectorClimbSpeed: CGFloat = 20
+    /// Crossed over the top of the arch: a loop. Forward = right to left.
+    static let loopSwitch = LmpSwitch(a: CGPoint(x: 284, y: orbitTopInnerY - 4), b: CGPoint(x: 284, y: topY + 4),
+                                      forward: CGVector(dx: -1, dy: 0))
+    static let loopPoints = 500
+    static let loopComboPoints = 1_000
+    static let loopComboWindow: TimeInterval = 5
+    /// A plunged ball is marked until it first comes back down below this height (so its trip over the top isn't a loop).
+    static let launchedClearY: CGFloat = 700
+
+    /// The upper flipper, low on the left wall. A ball coming down the left lane drops onto it; it shoots the bank,
+    /// the mail slot and the right orbit (a loop combo). On the left button.
+    static let upperFlipperPivot = CGPoint(x: 36, y: 600)
+    static let upperFlipperLength: CGFloat = 64
+    static let upperFlipperPivotRadius: CGFloat = 10
+    static let upperFlipperTipRadius: CGFloat = 5
+    /// From the left wall to the top of the pivot, so a ball can't rest wedged between them.
+    static let upperFlipperGuide = [CGPoint(x: leftWallX, y: 640), CGPoint(x: 31, y: 609)]
+
+    /// The bookshelf bank: four book drop targets across the mouth of the fireplace alcove. All four down opens the
+    /// fireplace hole behind them; the bank comes back up once the ball has left the alcove.
+    static let alcoveLeftX: CGFloat = 224
+    static let alcoveRightX: CGFloat = 344
+    static let alcoveBottomY: CGFloat = 735
+    static let alcoveTopY: CGFloat = 850
+    static var alcoveWall: [CGPoint] {
+        [CGPoint(x: alcoveLeftX, y: alcoveBottomY), CGPoint(x: alcoveLeftX, y: alcoveTopY),
+         CGPoint(x: alcoveRightX, y: alcoveTopY), CGPoint(x: alcoveRightX, y: alcoveBottomY)]
+    }
+    static let dropTargetSize = CGSize(width: 26, height: 12)
+    static let targetArtBox = CGRect(x: -15, y: -8, width: 30, height: 24)
+    static let bookTargetCenters: [CGPoint] = [240.2, 269.4, 298.6, 327.8].map { CGPoint(x: $0, y: 745) }
+    static let bookTargetPoints = 100
+    static let bankCompletePoints = 1_000
+    static let bankResetDelay: TimeInterval = 0.8
+    static let fireplaceCenter = CGPoint(x: 284, y: 800)
+    static let fireplaceEject = CGVector(dx: -130, dy: -520)
+    static let fireplacePoints = 2_500
+
+    /// The kettle: a hole at the top of a short lane on the left, angled along the shot from the right flipper, with
+    /// the teapot spinner across the lane. It kicks the ball back down the lane.
+    static let kettleShotFrom = CGPoint(x: 330, y: 250)
+    static let kettleCenter = CGPoint(x: 141.7, y: 894.2)
+    static let kettleLaneHalfWidth: CGFloat = 27
+    static let kettleLaneLength: CGFloat = 120
+    /// Unit vector up the lane.
+    static var kettleAxis: CGVector {
+        let end = CGPoint(x: 140, y: 900)
+        let dx = end.x - kettleShotFrom.x, dy = end.y - kettleShotFrom.y
+        let l = hypot(dx, dy)
+        return CGVector(dx: dx / l, dy: dy / l)
+    }
+    private static func kettlePoint(along t: CGFloat, side: CGFloat) -> CGPoint {
+        let u = kettleAxis, end = CGPoint(x: 140, y: 900)
+        return CGPoint(x: end.x + u.dx * t - u.dy * side, y: end.y + u.dy * t + u.dx * side)
+    }
+    /// Left wall, the round cap over the hole, right wall.
+    static var kettleLaneWall: [CGPoint] {
+        let h = kettleLaneHalfWidth
+        var pts = [kettlePoint(along: -kettleLaneLength, side: h)]
+        for i in 0...12 {
+            let a = CGFloat(i) * .pi / 12
+            pts.append(kettlePoint(along: h * sin(a), side: h * cos(a)))
+        }
+        pts.append(kettlePoint(along: -kettleLaneLength, side: -h))
+        return pts
+    }
+    static var kettleSpinnerLine: (a: CGPoint, b: CGPoint) {
+        (kettlePoint(along: -kettleLaneLength + 30, side: kettleLaneHalfWidth),
+         kettlePoint(along: -kettleLaneLength + 30, side: -kettleLaneHalfWidth))
+    }
+    static var kettleSpinnerSwitch: LmpSwitch {
+        LmpSwitch(a: kettleSpinnerLine.a, b: kettleSpinnerLine.b, forward: kettleAxis)
+    }
+    static var kettleEject: CGVector { CGVector(dx: -kettleAxis.dx * 480, dy: -kettleAxis.dy * 480) }
+    static let kettlePoints = 1_500
+    static let spinnerArtBox = CGRect(x: -22, y: -10, width: 44, height: 32)
+    static let spinnerFrames = (columns: 6, rows: 4)
+    static let spinnerPoints = 20
+
+    /// The mail slot: a narrow saucer on the right that only takes a soft shot (a ball slower than mailMaxSpeed).
+    static let mailSlotCenter = CGPoint(x: 380, y: 640)
+    static let mailCaptureRadius: CGFloat = 12
+    static let mailMaxSpeed: CGFloat = 650
+    static let mailEject = CGVector(dx: -60, dy: -320)
+    static let mailPoints = 2_000
+
+    /// Holes (Table 03's scoop numbers).
+    static let scoopRadius: CGFloat = 15
+    static let scoopCaptureRadius: CGFloat = 18
+    static let scoopHold: TimeInterval = 1.0
+    static let scoopRecapture: TimeInterval = 0.6
+
+    /// Three teacup pop bumpers at the top right (the cat's shelf goes above them in milestone 4).
+    static let bumperRadius: CGFloat = 24
+    static let bumperCenters: [CGPoint] = [CGPoint(x: 330, y: 1075), CGPoint(x: 425, y: 1075), CGPoint(x: 378, y: 995)]
+    static let bumperKickSpeed: CGFloat = 1150
+    static let bumperArtBox = CGRect(x: -34, y: -40, width: 82, height: 86)
+    static let bumperPoints = 100
+
     // MARK: Rules placeholders
     static let slingPoints = 10
     static let centerPostPoints = 50
@@ -201,5 +349,27 @@ enum LmpTableLayout {
             return CGPoint(x: u * u * p0.x + 2 * u * t * c.x + t * t * p1.x,
                            y: u * u * p0.y + 2 * u * t * c.y + t * t * p1.y)
         }
+    }
+}
+
+/// A line the ball can cross (a switch), from Table 03's ramp switch: which way it was crossed, if at all.
+struct LmpSwitch {
+    enum Crossing { case none, forward, backward }
+
+    let a: CGPoint
+    let b: CGPoint
+    let forward: CGVector
+
+    func crossing(from p0: CGPoint, to p1: CGPoint) -> Crossing {
+        let ab = CGVector(dx: b.x - a.x, dy: b.y - a.y)
+        let side0 = ab.dx * (p0.y - a.y) - ab.dy * (p0.x - a.x)
+        let side1 = ab.dx * (p1.y - a.y) - ab.dy * (p1.x - a.x)
+        guard (side0 > 0) != (side1 > 0) else { return .none }
+        let t = side0 / (side0 - side1)
+        let q = CGPoint(x: p0.x + (p1.x - p0.x) * t, y: p0.y + (p1.y - p0.y) * t)
+        let u = ((q.x - a.x) * ab.dx + (q.y - a.y) * ab.dy) / max(ab.dx * ab.dx + ab.dy * ab.dy, 0.001)
+        guard u >= -0.25, u <= 1.25 else { return .none }
+        let along = (p1.x - p0.x) * forward.dx + (p1.y - p0.y) * forward.dy
+        return along >= 0 ? .forward : .backward
     }
 }

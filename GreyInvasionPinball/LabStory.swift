@@ -76,6 +76,18 @@ extension LabTable {
                 LabStat(label: "Code", value: "About 6,500 lines in 21 files"),
                 LabStat(label: "Testing", value: "Shot Lab robot and a game simulator"),
             ]
+        case .lamplight:
+            // T5 M1: the plan's numbers, filled in as the table is built.
+            return [
+                LabStat(label: "Table size", value: "600 × 1300 points, plus a loft upstairs"),
+                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down"),
+                LabStat(label: "Frame rate", value: "Aiming for 120 fps on ProMotion iPhones"),
+                LabStat(label: "Goal", value: "Nothing to beat: fill the shelves and furnish the shop"),
+                LabStat(label: "Art", value: "Being made"),
+                LabStat(label: "Sounds", value: "Being made"),
+                LabStat(label: "Code", value: "Being written"),
+                LabStat(label: "Testing", value: "Shot Lab robot and a game simulator, as before"),
+            ]
         }
     }
 
@@ -117,6 +129,12 @@ extension LabTable {
                 LabNote(title: "A storm that builds", detail: "Wind and cicadas give way to thunder as you paint; Monsoon brings rain and lightning over the sky, and birds come out for the Superbloom."),
                 LabNote(title: "Parts that color in", detail: "The storm-cloud bumpers and saguaro targets start in pencil and take on color with their part of the painting."),
             ]
+        case .lamplight:
+            return [
+                LabNote(title: "A new lower table", detail: "A rubber center post between the flippers and only one outlane, where every earlier table had two."),
+                LabNote(title: "Cozy pinball", detail: "No villain and no game over to fear: every game adds books to the shelves and furniture to the shop, and it all stays."),
+                LabNote(title: "Collections", detail: "Books from common to ultra rare, furniture, teas and regulars, each one kept in a collection book."),
+            ]
         }
     }
 
@@ -150,6 +168,10 @@ extension LabTable {
                 LabNote(title: "Paint should follow the rules", detail: "At first the picture filled in long before the storm came. Each wash is now measured on the painting itself, so the color always matches your progress."),
                 LabNote(title: "A toy can steer the game", detail: "The Shot Lab found the dust devil was bending shots into the arroyo. Halving its pull brought the ramp back."),
                 LabNote(title: "Contrast on paper", detail: "Chrome wires and lamps disappeared on the light painting, so they got dark ink outlines and sockets."),
+            ]
+        case .lamplight:
+            return [
+                LabNote(title: "Change the layout", detail: "Tables 02 to 04 shared a lower table and kept the drop targets and upper flipper in the same places; this one starts from a new lower table."),
             ]
         }
     }

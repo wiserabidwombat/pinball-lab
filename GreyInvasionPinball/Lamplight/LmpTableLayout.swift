@@ -306,7 +306,9 @@ enum LmpTableLayout {
     /// The mail slot: a narrow saucer on the right that only takes a soft shot (a ball slower than mailMaxSpeed).
     static let mailSlotCenter = CGPoint(x: 380, y: 640)
     static let mailCaptureRadius: CGFloat = 12
-    static let mailMaxSpeed: CGFloat = 650
+    /// T5 M8 v1: 900 (was 650). With the upper flipper gone, a 650 gate left the slot almost out of reach, and the
+    /// favor requests need it.
+    static let mailMaxSpeed: CGFloat = 900
     static let mailEject = CGVector(dx: -60, dy: -320)
     static let mailPoints = 2_000
 
@@ -531,6 +533,16 @@ enum LmpTableLayout {
     /// deepest (eveningDimMax) at the end.
     static let eveningSeconds: TimeInterval = 300
     static let eveningDimMax: CGFloat = 0.22
+
+    // MARK: Requests (milestone 8)
+    static let requestPoints = 5_000
+    /// The first regular comes in this long after the evening starts; the next, this long after one is helped.
+    static let firstRequestDelay: TimeInterval = 4
+    static let nextRequestDelay: TimeInterval = 6
+    /// How long a regular's card (who, what they'd like, the shots) shows as they come in.
+    static let visitorCardSeconds: TimeInterval = 4
+    /// A lamp ring round the mail slot, lit when a request wants it.
+    static let mailLampRadius: CGFloat = 17
 
     // MARK: Rules placeholders
     static let slingPoints = 10

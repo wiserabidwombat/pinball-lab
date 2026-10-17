@@ -23,6 +23,11 @@ final class LmpGameState {
     var lucky = false
     /// M6 round 3: where the cat is tonight (shown on the pause card with what she does there).
     var catPerch: LmpPerch = .shelf
+    /// M8: the request in progress, shown on the LED strip's bottom row when there's no banner.
+    var status: String?
+    var requestsTonight = 0
+    /// M8: the regular who just came in (their card shows for a few seconds).
+    var visitor: LmpRequest?
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
     var bestEvening = UserDefaults.standard.integer(forKey: lmpBestEveningKey)
 
@@ -50,5 +55,8 @@ final class LmpGameState {
         findsTonight = 0
         newTonight = 0
         lucky = false
+        status = nil
+        requestsTonight = 0
+        visitor = nil
     }
 }

@@ -128,6 +128,12 @@ struct LmpTableView: View {
             .padding(.horizontal, 12)
             .padding(.top, 4)
 
+            if let visitor = game.visitor {
+                visitorCard(visitor)
+                    .padding(.top, 6)
+                    .allowsHitTesting(false)
+            }
+
             if let find = game.findToast {
                 findCard(find)
                     .padding(.top, 6)
@@ -177,6 +183,13 @@ struct LmpTableView: View {
                     Text(banner)
                         .font(.orbitron(14, .bold))
                         .foregroundStyle(Self.gold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                } else if let status = game.status {
+                    // M8: the request in progress
+                    Text(status)
+                        .font(.orbitron(12, .bold))
+                        .foregroundStyle(Self.gold.opacity(0.7))
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                 } else {
@@ -348,6 +361,30 @@ struct LmpTableView: View {
         .padding(.horizontal, 40)
     }
 
+    /// M8: a regular comes in: who, what they'd like, and the shots that make it.
+    private func visitorCard(_ r: LmpRequest) -> some View {
+        VStack(spacing: 3) {
+            Text("\(r.regular.name.uppercased()) COMES IN")
+                .font(.orbitron(11, .bold))
+                .foregroundStyle(.white.opacity(0.8))
+            Text("“\(r.line)”")
+                .font(.system(size: 16, weight: .semibold, design: .serif))
+                .italic()
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.7)
+            Text(r.kind.steps.map(\.label).joined(separator: ", then ").capitalizedFirst)
+                .font(.orbitron(11, .bold))
+                .foregroundStyle(Self.gold)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Self.gold.opacity(0.7), lineWidth: 1.5))
+        .padding(.horizontal, 40)
+    }
+
     private var gameOverOverlay: some View {
         overlayCard {
             Text("Closing Time")
@@ -359,6 +396,11 @@ struct LmpTableView: View {
                 .font(.orbitron(15))
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.7))
+            // M8: the regulars helped tonight.
+            Text(game.requestsTonight == 0 ? "No requests finished tonight"
+                 : "Helped \(game.requestsTonight) regular\(game.requestsTonight == 1 ? "" : "s") tonight")
+                .font(.orbitron(14, .bold))
+                .foregroundStyle(Self.gold)
             // M6: what tonight found, and the whole collection so far.
             Text(game.findsTonight == 0 ? "No books found tonight"
                  : "Found \(game.findsTonight) book\(game.findsTonight == 1 ? "" : "s") tonight · \(game.newTonight) new")

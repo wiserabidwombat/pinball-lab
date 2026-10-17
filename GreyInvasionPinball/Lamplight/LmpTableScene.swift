@@ -16,6 +16,8 @@
 // Milestone 7 round 1: lamps. Arrows light the shots that are worth something right now (the open fireplace, the
 // kettle when the dumbwaiter is lit, the other loop during a combo, the ramp on a lucky evening, the window seat when
 // the cat's there); the lucky star; six shop lamps that come on through the evening as the table warms and dims.
+// Milestone 8 round 1: requests. A regular comes in (LmpRegulars) and asks for a book, a cup of tea, a favor or a chat;
+// the arrows fast-blink on the shots it needs, in order. Finishing pays points, a tip and friendship (saved).
 // Built from MonTableScene.swift's code, trimmed. Monsoon's sounds stand in until the table's own (juice milestone).
 import SpriteKit
 import UIKit
@@ -66,6 +68,11 @@ final class LmpTableScene: SKScene {
     /// When tonight's first ball was served (for the evening's lamps and dimming).
     private var eveningStart: TimeInterval = 0
     private var eveningDim: SKSpriteNode?
+    /// M8: the request in progress, and when the next regular comes in.
+    private var request: LmpRequest?
+    private var lastRegular: LmpRegular?
+    private var nextRequestAt: TimeInterval?
+    private var visitorClearAt: TimeInterval?
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
     private var shotLab: ShotLab?
@@ -232,6 +239,11 @@ final class LmpTableScene: SKScene {
             addChild(lamp)
             lamps.add(lamp, named: name)
         }
+        let mail = LmpLamp(.round(radius: LmpTableLayout.mailLampRadius), color: warm,
+                           at: LmpTableLayout.mailSlotCenter)
+        mail.zPosition = -2                                        // a ring of light round the slot
+        addChild(mail)
+        lamps.add(mail, named: "mail")
         let lucky = LmpLamp(.star(outer: 11, inner: 5), color: SKColor(red: 0.55, green: 0.85, blue: 0.55, alpha: 1),
                             at: LmpTableLayout.luckyLamp)
         addChild(lucky)
@@ -264,6 +276,11 @@ final class LmpTableScene: SKScene {
         lamps.set("ramp", game.lucky ? .blink : .off)
         lamps.set("windowSeat", cat.perch == .windowSeat ? .blink : (balls.contains { $0.isUpper } ? .on : .off))
         lamps.set("lucky", game.lucky ? .on : .off)
+        lamps.set("mail", .off)
+        // M8: the request's next shot fast-blinks.
+        if let step = request?.step {
+            for name in Self.requestLamps(for: step) { lamps.set(name, .fastBlink) }
+        }
         // The evening: one more shop lamp every sixth of an evening, and the warm dim deepening toward closing.
         let evening = max(0, now - eveningStart) / LmpTableLayout.eveningSeconds
         let lit = min(LmpTableLayout.shopLamps.count, 1 + Int(evening * Double(LmpTableLayout.shopLamps.count)))
@@ -588,7 +605,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M7 v1")
+        let label = SKLabelNode(text: "T5 M8 v1")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -634,7 +651,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M7 v1 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M8 v1 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -706,6 +723,8 @@ final class LmpTableScene: SKScene {
         catRoamAt = gameTime + Double.random(in: LmpTableLayout.catRoamSeconds)
         lamps.stopShow()
         eveningStart = gameTime
+        request = nil
+        nextRequestAt = gameTime + LmpTableLayout.firstRequestDelay
         placeBallOnPlunger()
         refreshCamera()
     }
@@ -880,6 +899,11 @@ final class LmpTableScene: SKScene {
             bannerClearAt = nil
             game.banner = nil
         }
+        updateRequests(now)
+        if let due = visitorClearAt, now >= due {
+            visitorClearAt = nil
+            game.visitor = nil
+        }
         if let due = findToastClearAt, now >= due {
             findToastClearAt = nil
             game.findToast = nil
@@ -964,6 +988,53 @@ final class LmpTableScene: SKScene {
         sfx(find.book.rarity >= .rare ? .jackpot : .lane)
     }
 
+    // MARK: - Requests (milestone 8)
+
+    /// The arrows that show a request step.
+    private static func requestLamps(for step: LmpRequestStep) -> [String] {
+        switch step {
+        case .bookshelf: return ["fireplace"]
+        case .loop: return ["leftLoop", "rightLoop"]
+        case .ramp, .loft: return ["ramp"]
+        case .kettle: return ["kettle"]
+        case .mail: return ["mail"]
+        }
+    }
+
+    /// A regular comes in when it's time (one at a time).
+    private func updateRequests(_ now: TimeInterval) {
+        guard request == nil, !game.isGameOver, let due = nextRequestAt, now >= due else { return }
+        nextRequestAt = nil
+        let r = LmpRegulars.next(after: lastRegular)
+        request = r
+        lastRegular = r.regular
+        showBanner("\(r.regular.name.uppercased()) COMES IN")
+        game.status = r.status
+        game.visitor = r                                   // their card under the score
+        visitorClearAt = now + LmpTableLayout.visitorCardSeconds
+        sfx(.lane)
+    }
+
+    /// A shot was made: if it's the request's next step, move on; the last step finishes it.
+    private func requestEvent(_ step: LmpRequestStep) {
+        guard !isLabRunning, var r = request, r.step == step else { return }
+        r.stepIndex += 1
+        if r.isDone {
+            request = nil
+            game.status = nil
+            game.requestsTonight += 1
+            game.add(LmpTableLayout.requestPoints)
+            let level = LmpShop.shared.finishRequest(for: r.regular)
+            showBanner("THANK YOU! · \(r.regular.name.uppercased()) · FRIENDSHIP \(level)")
+            sfx(.lanesComplete)
+            nextRequestAt = gameTime + LmpTableLayout.nextRequestDelay
+        } else {
+            request = r
+            game.status = r.status
+            sfx(.lane)
+        }
+    }
+
     /// A loop combo or a full plunge: better odds on rare books for the rest of the evening.
     private func makeLucky() {
         guard !game.lucky, !isLabRunning else { return }
@@ -1004,6 +1075,8 @@ final class LmpTableScene: SKScene {
         if LmpTableLayout.rampMadeSwitch.crossing(from: p0, to: p) == .forward {
             game.add(LmpTableLayout.rampPoints)
             shotEvent("ramp")
+            requestEvent(.ramp)
+            requestEvent(.loft)
             showBanner("UP TO THE LOFT")
             sfx(.ramp)
             hitHaptic.impactOccurred(intensity: 0.7)
@@ -1034,6 +1107,7 @@ final class LmpTableScene: SKScene {
                           exit: LmpTableLayout.loftHatchExitVelocity)
                 game.add(LmpTableLayout.fullPlungePoints)
                 showBanner("FULL PLUNGE · THE LOFT")
+                requestEvent(.loft)
                 sfx(.skillShot)
                 makeLucky()
             }
@@ -1051,6 +1125,7 @@ final class LmpTableScene: SKScene {
         }
         lastLoopAt = gameTime
         shotEvent(rightToLeft ? "rightLoop" : "leftLoop")   // named for the lane the ball went up
+        requestEvent(.loop)
         sfx(.orbit)
         hitHaptic.impactOccurred(intensity: 0.5)
     }
@@ -1066,6 +1141,7 @@ final class LmpTableScene: SKScene {
                 showBanner("FIREPLACE OPEN")
                 sfx(.lanesComplete)
                 awardFind(from: .shelf)
+                requestEvent(.bookshelf)
             }
         }
         if let due = bankResetAt, now >= due, !balls.contains(where: { isInAlcove($0.position) }) {
@@ -1098,6 +1174,7 @@ final class LmpTableScene: SKScene {
                                   exit: LmpTableLayout.dumbwaiterExitVelocity)
                         game.add(LmpTableLayout.dumbwaiterPoints)
                         showBanner("DUMBWAITER")
+                        requestEvent(.loft)
                         sfx(.upKick)
                         continue
                     }
@@ -1135,6 +1212,7 @@ final class LmpTableScene: SKScene {
             scoop.flash()
             hitHaptic.impactOccurred(intensity: 0.8)
             if scoop === fireplace { awardFind(from: .shelf) } else if scoop === windowSeat { awardFind(from: .loft) }
+            if scoop === kettle { requestEvent(.kettle) } else if scoop === mailSlot { requestEvent(.mail) }
             if scoop === windowSeat, cat.perch == .windowSeat {
                 awardFind(from: .loft)                 // her perch: an extra book
                 showBanner("THE CAT FOUND ONE TOO")

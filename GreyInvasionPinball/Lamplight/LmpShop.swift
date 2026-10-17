@@ -66,6 +66,8 @@ nonisolated struct LmpShopSave: Codable {
     var findsSinceUltra = 0
     /// M6 round 3 (version 2): furniture owned, by id (the cat's perches so far).
     var furniture: [String] = []
+    /// M8: friendship with each regular (requests finished for them), by regular id.
+    var friendship: [String: Int] = [:]
 
     init() {}
 
@@ -80,6 +82,7 @@ nonisolated struct LmpShopSave: Codable {
         findsSinceRare = try c.decodeIfPresent(Int.self, forKey: .findsSinceRare) ?? 0
         findsSinceUltra = try c.decodeIfPresent(Int.self, forKey: .findsSinceUltra) ?? 0
         furniture = try c.decodeIfPresent([String].self, forKey: .furniture) ?? []
+        friendship = try c.decodeIfPresent([String: Int].self, forKey: .friendship) ?? [:]
         version = 2
     }
 }
@@ -292,6 +295,18 @@ final class LmpShop {
         save.furniture.append(perch.rawValue)
         write()
         return true
+    }
+
+    // MARK: Regulars (M8)
+
+    /// A finished request: a tip from them and a step of friendship. Returns their new friendship.
+    @discardableResult
+    func finishRequest(for regular: LmpRegular) -> Int {
+        save.tips += 1
+        let level = (save.friendship[regular.id] ?? 0) + 1
+        save.friendship[regular.id] = level
+        write()
+        return level
     }
 
     #if DEBUG

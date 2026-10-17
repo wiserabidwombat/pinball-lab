@@ -241,14 +241,17 @@ final class ShotLab {
                 finishTrial("none", now: now)
                 break
             }
-            if ball.position.y < Self.drainY {
+            // T5 M5 v2: the timeout is checked first. It used to come last in this chain, after "still above
+            // leftFlippersY", so a ball that never came back down (Table 05's loft flipper, up at y 985) never
+            // timed out and the lab stalled on its first loft trial.
+            if now - at > Self.timeout {
+                finishTrial("none", now: now, seconds: now - at)
+            } else if ball.position.y < Self.drainY {
                 finishTrial("drain", now: now, seconds: now - at)
             } else if ball.position.y > Self.leftFlippersY {
                 leftFlippers = true
             } else if leftFlippers, ball.position.y < Self.returnY, ball.velocity.dy < 0 {
                 finishTrial("none", now: now, seconds: now - at)       // came back without hitting a shot
-            } else if now - at > Self.timeout {
-                finishTrial("none", now: now, seconds: now - at)
             }
         }
         return index < plan.count

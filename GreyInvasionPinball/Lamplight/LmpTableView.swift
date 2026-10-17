@@ -248,10 +248,28 @@ struct LmpTableView: View {
             volumeRow
             overlayButton("Restart", action: startGame)
             overlayButton("Menu", action: goToMenu)
+            #if DEBUG
+            // Milestone 5: the Shot Lab robot (~40 min in the Simulator; results go to ShotLab/ on the Mac)
+            debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
+                .padding(.top, 4)
+            #endif
         }
     }
 
 
+
+    #if DEBUG
+    private func debugButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.25), in: Capsule())
+        }
+        .foregroundStyle(.orange)
+    }
+    #endif
 
     private var gameOverOverlay: some View {
         overlayCard {

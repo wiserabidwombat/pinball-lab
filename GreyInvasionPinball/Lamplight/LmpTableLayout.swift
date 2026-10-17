@@ -227,7 +227,15 @@ enum LmpTableLayout {
     static let upperFlipperPivotRadius: CGFloat = 10
     static let upperFlipperTipRadius: CGFloat = 5
     /// From the left wall to the top of the pivot, so a ball can't rest wedged between them.
-    static let upperFlipperGuide = [CGPoint(x: leftWallX, y: 640), CGPoint(x: 31, y: 609)]
+    /// T5 M5 v3 (Shot Lab: every upper-flipper ball stayed 19 pt from the pivot): it ended at (31, 609), the pivot's
+    /// top-LEFT. This flipper is left-handed (points right), so its top face leaves the pivot at the top-RIGHT; the
+    /// crown between was bare and the ball sat on it. Now it ends there (as the loft flipper's guide does, mirrored).
+    static var upperFlipperGuide: [CGPoint] {
+        let r = upperFlipperPivotRadius + 1
+        let top = CGPoint(x: upperFlipperPivot.x + r * sin(flipperRestAngle),
+                          y: upperFlipperPivot.y + r * cos(flipperRestAngle))
+        return [CGPoint(x: leftWallX, y: top.y + 30), top]
+    }
 
     /// The bookshelf bank: four book drop targets across the mouth of the fireplace alcove. All four down opens the
     /// fireplace hole behind them; the bank comes back up once the ball has left the alcove.
@@ -235,8 +243,12 @@ enum LmpTableLayout {
     static let alcoveRightX: CGFloat = 344
     static let alcoveBottomY: CGFloat = 735
     static let alcoveTopY: CGFloat = 850
+    /// T5 M5 v4: a peaked roof (22 pt high) instead of a flat top, so a ball that drops onto the alcove from the
+    /// bumpers rolls off one side or the other instead of resting there.
+    static let alcoveRoofPeak: CGFloat = 22
     static var alcoveWall: [CGPoint] {
         [CGPoint(x: alcoveLeftX, y: alcoveBottomY), CGPoint(x: alcoveLeftX, y: alcoveTopY),
+         CGPoint(x: (alcoveLeftX + alcoveRightX) / 2, y: alcoveTopY + alcoveRoofPeak),
          CGPoint(x: alcoveRightX, y: alcoveTopY), CGPoint(x: alcoveRightX, y: alcoveBottomY)]
     }
     static let dropTargetSize = CGSize(width: 26, height: 12)
@@ -267,9 +279,17 @@ enum LmpTableLayout {
         return CGPoint(x: end.x + u.dx * t - u.dy * side, y: end.y + u.dy * t + u.dx * side)
     }
     /// Left wall, the round cap over the hole, right wall.
+    /// T5 M5 v4 (Shot Lab run 2: the lane only took shots within ~2° of its axis, too narrow to hit on a 60 Hz
+    /// phone): a flare at the mouth's left side, out to (120, 745), catches shots a little too far left. (No flare on
+    /// the right: it would leave the slot beside the alcove as a dead-end pocket a ball could sit in. Shots a little
+    /// too far right go up that slot into the bumpers.)
+    /// T5 M5 v5 (run 3: 60 Hz kettle shots, ~4° left of the lane, bounced off v4's 49° flare out to the right):
+    /// the flare now runs almost straight down from the lane's mouth (20° out from the lane's line), so those shots
+    /// glance off it into the lane.
+    static let kettleLeftFlareEnd = CGPoint(x: 143, y: 725)
     static var kettleLaneWall: [CGPoint] {
         let h = kettleLaneHalfWidth
-        var pts = [kettlePoint(along: -kettleLaneLength, side: h)]
+        var pts = [kettleLeftFlareEnd, kettlePoint(along: -kettleLaneLength, side: h)]
         for i in 0...12 {
             let a = CGFloat(i) * .pi / 12
             pts.append(kettlePoint(along: h * sin(a), side: h * cos(a)))
@@ -413,27 +433,42 @@ enum LmpTableLayout {
 
     // MARK: The loft ramp (milestone 3): from the left flipper, mouth at (400, 830), straight up, a left turn of
     // radius 70, then west through the loft's door. Shot line clear of the mail slot by 20 pt (tools/lmp_render_m3.py).
-    static let rampMouth = CGPoint(x: 400, y: 830)
-    static let rampMouthHalfWidth: CGFloat = 30
+    /// T5 M5 v4 (Shot Lab run 2: shots within ~3° of the line made it; the rest hit the mouth's posts, one bouncing
+    /// off the left post into the right orbit): the mouth opens from the bookshelf alcove's right wall (x 344, so no
+    /// dead slot beside it), flaring down to the 32 pt channel.
+    /// T5 M5 v5 (run 3: 60% at 120 Hz, still 0 at 60 Hz, where the frames give headings of ~71–72° that hit the
+    /// right post): the ramp's first straight now leans along the shot (75°, the line from the left flipper) instead
+    /// of going straight up, the mouth's centre moves to x 412 and its right edge to x 470 (was 446).
+    static let rampMouth = CGPoint(x: 412, y: 830)
+    static let rampMouthLeftX: CGFloat = alcoveRightX
+    static let rampMouthRightX: CGFloat = 470
     static let rampHalfWidth: CGFloat = 16
-    static let rampFlareTopY: CGFloat = 900
-    static let rampTurnY: CGFloat = 1050
+    static let rampHeading: CGFloat = 75 * .pi / 180
+    static let rampFlareLength: CGFloat = 82
+    static let rampStraightLength: CGFloat = 209
     static let rampTurnRadius: CGFloat = 70
+    /// Up the straight at rampHeading, a left turn of radius 70 round to heading west at y 1120, then west to the
+    /// loft's door.
     static var rampCenterline: [CGPoint] {
-        let c = CGPoint(x: rampMouth.x - rampTurnRadius, y: rampTurnY)
-        var points = [rampMouth, CGPoint(x: rampMouth.x, y: rampTurnY)]
-        for i in 1...12 {
-            let a = CGFloat(i) / 12 * .pi / 2
+        let u = CGVector(dx: cos(rampHeading), dy: sin(rampHeading))
+        let end = CGPoint(x: rampMouth.x + u.dx * rampStraightLength, y: rampMouth.y + u.dy * rampStraightLength)
+        let c = CGPoint(x: end.x - u.dy * rampTurnRadius, y: end.y + u.dx * rampTurnRadius)
+        var points = [rampMouth, end]
+        let a0 = rampHeading - .pi / 2
+        for i in 1...14 {
+            let a = a0 + CGFloat(i) / 14 * (.pi / 2 - a0)
             points.append(CGPoint(x: c.x + rampTurnRadius * cos(a), y: c.y + rampTurnRadius * sin(a)))
         }
-        points.append(CGPoint(x: loftRightX, y: rampTurnY + rampTurnRadius))
+        points.append(CGPoint(x: loftRightX, y: points.last?.y ?? 1120))
         return points
     }
     /// One rail: the centreline offset by `side` (+ = left of travel), with the mouth's flare.
     static func rampRail(side: CGFloat) -> [CGPoint] {
         let cl = rampCenterline
-        var out: [CGPoint] = [CGPoint(x: rampMouth.x - (side > 0 ? 1 : -1) * rampMouthHalfWidth, y: rampMouth.y),
-                              CGPoint(x: rampMouth.x - side, y: rampFlareTopY)]
+        let u = CGVector(dx: cos(rampHeading), dy: sin(rampHeading))
+        var out: [CGPoint] = [CGPoint(x: side > 0 ? rampMouthLeftX : rampMouthRightX, y: rampMouth.y),
+                              CGPoint(x: rampMouth.x + u.dx * rampFlareLength - u.dy * side,
+                                      y: rampMouth.y + u.dy * rampFlareLength + u.dx * side)]
         for i in 1..<cl.count {
             let a = cl[i - 1], b = cl[min(i + 1, cl.count - 1)]
             let d = CGVector(dx: b.x - a.x, dy: b.y - a.y)
@@ -442,15 +477,14 @@ enum LmpTableLayout {
         }
         return out
     }
-    /// Floor posts at the mouth's edges, so a missed shot bounces off the entrance.
+    /// A floor post at the mouth's right edge, so a missed shot bounces off the entrance (the alcove's wall is the
+    /// left edge).
     static var rampMouthPosts: [[CGPoint]] {
-        [-rampMouthHalfWidth, rampMouthHalfWidth].map { dx in
-            [CGPoint(x: rampMouth.x + dx, y: rampMouth.y), CGPoint(x: rampMouth.x + dx, y: rampMouth.y - 24)]
-        }
+        [[CGPoint(x: rampMouthRightX, y: rampMouth.y), CGPoint(x: rampMouthRightX, y: rampMouth.y - 24)]]
     }
     static var rampEntrySwitch: LmpSwitch {
-        LmpSwitch(a: CGPoint(x: rampMouth.x - rampMouthHalfWidth, y: rampMouth.y + 12),
-                  b: CGPoint(x: rampMouth.x + rampMouthHalfWidth, y: rampMouth.y + 12), forward: CGVector(dx: 0, dy: 1))
+        LmpSwitch(a: CGPoint(x: rampMouthLeftX, y: rampMouth.y + 12),
+                  b: CGPoint(x: rampMouthRightX, y: rampMouth.y + 12), forward: CGVector(dx: 0, dy: 1))
     }
     /// Through the loft's door: the ramp is made.
     static let rampMadeSwitch = LmpSwitch(a: CGPoint(x: 262, y: 1100), b: CGPoint(x: 262, y: 1140),

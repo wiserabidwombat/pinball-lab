@@ -9,6 +9,7 @@
 // seat), the ramp up to it from the left flipper, and the chute that drops a drained loft ball into the left lane.
 // Round 2: the dumbwaiter from the kettle and the full plunge through the hatch.
 // Milestone 4: the cat on her shelf at the top right: walks, naps, swats balls back down, purrs when hit.
+// Milestone 5: the Shot Lab robot (debug builds) from the left, right, upper and loft flippers.
 // Built from MonTableScene.swift's code, trimmed. Monsoon's sounds stand in until the table's own (juice milestone).
 import SpriteKit
 import UIKit
@@ -55,6 +56,11 @@ final class LmpTableScene: SKScene {
     private var lastSpinTickAt: TimeInterval = 0
     private var loftFlipper: LmpFlipper!
     private var cat: LmpCat!
+    #if DEBUG
+    /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
+    private var shotLab: ShotLab?
+    private var shotLabTime: TimeInterval = 0
+    #endif
     private var windowSeat: LmpScoop!
     /// M3 round 2: the kettle sends every other ball up the dumbwaiter (the rules milestone will decide when it's lit).
     private var dumbwaiterLit = true
@@ -90,6 +96,9 @@ final class LmpTableScene: SKScene {
             guard isAttractMode != oldValue else { return }
             physicsWorld.speed = isAttractMode ? 0 : 1
             if isAttractMode { releaseAllControls() }
+            #if DEBUG
+            if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
+            #endif
             refreshCamera()
         }
     }
@@ -145,7 +154,18 @@ final class LmpTableScene: SKScene {
     }
 
     private var effectiveCameraMode: CameraMode {
-        isAttractMode ? .topDown : settings.cameraMode
+        #if DEBUG
+        if shotLab != nil { return .topDown }
+        #endif
+        return isAttractMode ? .topDown : settings.cameraMode
+    }
+
+    private var isLabRunning: Bool {
+        #if DEBUG
+        return shotLab != nil
+        #else
+        return false
+        #endif
     }
 
     func refreshCamera() {
@@ -210,6 +230,7 @@ final class LmpTableScene: SKScene {
             body.velocity = CGVector(dx: dir * LmpTableLayout.catSwatSpeedX, dy: LmpTableLayout.catSwatSpeedY)
             game.add(LmpTableLayout.catSwatPoints)
             showBanner("SWAT!")
+            shotEvent("catSwat")
             sfx(.kickback)
             hitHaptic.impactOccurred(intensity: 0.6)
             break
@@ -244,8 +265,15 @@ final class LmpTableScene: SKScene {
         strip.zPosition = 16
         addChild(strip)
 
-        for rail in [left, right] + LmpTableLayout.loftWalls {
-            addWall(points: rail, category: LmpPhysicsCategory.rampWall, z: 17)
+        // T5 M5 v6 (Shot Lab run 4: 60 Hz ramp shots got onto the ramp but ran out of speed in the turn, ~590 pt/s
+        // at y 1000): the ramp's rails are low-friction rails like the outer wall, so the ball loses less speed
+        // pressing the outside rail round the turn.
+        for rail in [left, right] {
+            addWall(points: rail, friction: LmpTableLayout.railFriction, restitution: LmpTableLayout.railRestitution,
+                    category: LmpPhysicsCategory.rampWall, z: 17)
+        }
+        for wall in LmpTableLayout.loftWalls {
+            addWall(points: wall, category: LmpPhysicsCategory.rampWall, z: 17)
         }
 
         loftFlipper = LmpFlipper(side: .right, pivot: LmpTableLayout.loftFlipperPivot,
@@ -267,8 +295,12 @@ final class LmpTableScene: SKScene {
     /// Milestone 2: the loop pair, the upper flipper, the bookshelf bank and fireplace, the kettle and its spinner,
     /// the mail slot and the bumpers.
     private func addUpperTable() {
-        addWall(points: LmpTableLayout.leftOrbitWall)
-        addWall(points: LmpTableLayout.rightOrbitWall)
+        // T5 M5 v4: the orbit lanes' inner walls are rails too (low friction, like the outer wall), so a loop
+        // loses less speed rubbing them (Shot Lab: 60 Hz left loops reached y 1000 just short of the speed to go over).
+        addWall(points: LmpTableLayout.leftOrbitWall,
+                friction: LmpTableLayout.railFriction, restitution: LmpTableLayout.railRestitution)
+        addWall(points: LmpTableLayout.rightOrbitWall,
+                friction: LmpTableLayout.railFriction, restitution: LmpTableLayout.railRestitution)
         addWall(points: LmpTableLayout.alcoveWall)
         addWall(points: LmpTableLayout.kettleLaneWall)
         addWall(points: LmpTableLayout.upperFlipperGuide)
@@ -487,7 +519,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M4 v1")
+        let label = SKLabelNode(text: "T5 M5 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -533,7 +565,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M4 v1 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M5 v6 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -580,6 +612,10 @@ final class LmpTableScene: SKScene {
     private var isBallOnPlunger: Bool { plungerBall != nil }
 
     func newGame() {
+        #if DEBUG
+        if shotLab != nil { physicsWorld.speed = 1 }
+        shotLab = nil                              // a new game stops the Shot Lab
+        #endif
         fpsLow = 0
         isAttractMode = false
         padAArmed = false                          // the A press that started the game isn't a plunger pull
@@ -604,13 +640,14 @@ final class LmpTableScene: SKScene {
     }
 
     private func sfx(_ s: MonSound) {
+        if isLabRunning { return }                 // the robot plays silently
         sound.play(s, volume: Float(settings.soundVolume))
     }
 
     // MARK: - Input
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view, !isAttractMode else { return }
+        guard let view, !isAttractMode, !isLabRunning else { return }
         for touch in touches {
             let p = touch.location(in: view)   // screen points: the camera moves the table
             if isBallOnPlunger,
@@ -738,6 +775,12 @@ final class LmpTableScene: SKScene {
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
+        #if DEBUG
+        if shotLab != nil {                        // Shot Lab: the robot's frame instead of a game frame
+            updateShotLab(CGFloat(step))
+            return
+        }
+        #endif
         if isAttractMode { return }
 
         let dt = CGFloat(step)
@@ -807,6 +850,7 @@ final class LmpTableScene: SKScene {
                 if LmpTableLayout.kettleSpinnerSwitch.crossing(from: p0, to: p) != .none, let sp = spinner {
                     let v = body.velocity
                     sp.kick(ballSpeed: hypot(v.dx, v.dy))
+                    shotEvent("spinner")
                     body.velocity = CGVector(dx: v.dx * LmpSpinner.ballSpeedKept, dy: v.dy * LmpSpinner.ballSpeedKept)
                 }
                 // Into the ramp's mouth: up onto the upper layer.
@@ -857,6 +901,7 @@ final class LmpTableScene: SKScene {
     private func updateUpperBall(_ ball: LmpBall, from p0: CGPoint, to p: CGPoint) {
         if LmpTableLayout.rampMadeSwitch.crossing(from: p0, to: p) == .forward {
             game.add(LmpTableLayout.rampPoints)
+            shotEvent("ramp")
             showBanner("UP TO THE LOFT")
             sfx(.ramp)
             hitHaptic.impactOccurred(intensity: 0.7)
@@ -896,6 +941,7 @@ final class LmpTableScene: SKScene {
             showBanner(rightToLeft ? "LEFT LOOP" : "RIGHT LOOP")
         }
         lastLoopAt = gameTime
+        shotEvent(rightToLeft ? "rightLoop" : "leftLoop")   // named for the lane the ball went up
         sfx(.orbit)
         hitHaptic.impactOccurred(intensity: 0.5)
     }
@@ -967,6 +1013,8 @@ final class LmpTableScene: SKScene {
             body.affectedByGravity = false
             body.velocity = .zero
             game.add(scoop.points)
+            shotEvent(scoop === fireplace ? "fireplace" : scoop === kettle ? "kettle"
+                      : scoop === windowSeat ? "windowSeat" : "mail")
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
             sfx(scoop === fireplace ? .jackpot : .scoopIn)
             showBanner(scoop === fireplace ? "FIREPLACE" : scoop === kettle ? "KETTLE"
@@ -1012,6 +1060,7 @@ final class LmpTableScene: SKScene {
             // The kicking face is a child of the slingshot node.
             if let sling = node.parent as? LmpSlingshot, sling.hit(ball: ballBody, at: gameTime) {
                 game.add(LmpTableLayout.slingPoints)
+                shotEvent("sling")
                 hitHaptic.impactOccurred(intensity: 0.6)
                 Effects.burst(in: self, at: ballNode.position, color: Self.wallColor, count: 8,
                               speed: 160, lifetime: 0.25, size: 0.22)
@@ -1022,10 +1071,12 @@ final class LmpTableScene: SKScene {
                 switch cat.ballHit(now: gameTime) {
                 case .woke:
                     game.add(LmpTableLayout.catWakePoints)
+                    shotEvent("cat")
                     showBanner("MRRP?!")
                     sfx(.captiveKnock)
                 case .petted:
                     game.add(LmpTableLayout.catPetPoints)
+                    shotEvent("cat")
                     showBanner("PURR")
                     sfx(.captiveKnock)
                 case .none:
@@ -1036,6 +1087,7 @@ final class LmpTableScene: SKScene {
             if let t = node as? LmpDropTarget, t.registerHit() {
                 pendingDrops.append(t)
                 game.add(LmpTableLayout.bookTargetPoints)
+                shotEvent("bookTarget")
                 hitHaptic.impactOccurred(intensity: 0.6)
                 sfx(.standup)
             }
@@ -1043,12 +1095,14 @@ final class LmpTableScene: SKScene {
             if let bumper = node as? LmpBumper {
                 if bumper.hit(ball: ballBody, ballPosition: ballNode.position, at: gameTime) {
                     game.add(LmpTableLayout.bumperPoints)
+                    shotEvent("bumper")
                     hitHaptic.impactOccurred(intensity: 0.7)
                     sfx(.bumper)
                 }
             } else if node === centerPost, gameTime - centerPostHitAt > 0.15 {
                 centerPostHitAt = gameTime
                 game.add(LmpTableLayout.centerPostPoints)
+                shotEvent("post")
                 hitHaptic.impactOccurred(intensity: 0.5)
                 sfx(.standup)
                 centerPost?.run(.sequence([.scale(to: 1.25, duration: 0.04), .scale(to: 1, duration: 0.12)]))
@@ -1058,6 +1112,134 @@ final class LmpTableScene: SKScene {
         }
     }
 }
+
+// MARK: - Shot Lab (milestone 5, debug builds)
+
+extension LmpTableScene {
+    /// A shot event for the Shot Lab; does nothing in normal play.
+    fileprivate func shotEvent(_ name: String) {
+        #if DEBUG
+        shotLab?.event(name, at: shotLabTime)
+        #endif
+    }
+
+    #if DEBUG
+    /// Starts the robot: it takes over the flippers and sweeps flip timings from a cradled ball on the left, right,
+    /// upper and loft flippers, at 120 Hz and 60 Hz physics steps (768 trials, ~40 min in the Simulator). Results go to
+    /// ShotLab/ on the Mac. Menu or a new game stops it.
+    func debugStartShotLab() {
+        isAttractMode = false
+        shotLabTime = 0
+        shotLab = ShotLab(host: self)
+        refreshCamera()
+    }
+
+    /// The robot's frame: only what the physics and shot detection need (no serving, drains or banners).
+    fileprivate func updateShotLab(_ realDt: CGFloat) {
+        guard let lab = shotLab else { return }
+        let speed = CGFloat(lab.physicsSpeed)
+        physicsWorld.speed = speed
+        let dt = realDt * speed
+        shotLabTime += TimeInterval(dt)
+        let now = shotLabTime
+        lastStep = dt
+        leftFlipper.step(dt: dt)
+        upperFlipper.step(dt: dt)
+        rightFlipper.step(dt: dt)
+        loftFlipper.step(dt: dt)
+        slingshots.forEach { $0.settle() }
+        updateGates()
+        updateBank(now)
+        updateScoops(now)
+        updateRides(now)
+        updateCat(dt, now: now)
+        updateSpinner(dt, now: now)
+        if lab.update(now: now) {
+            game.banner = lab.progressText
+        } else {
+            let saved = lab.save(now: now)
+            shotLab = nil
+            physicsWorld.speed = 1
+            shotLabResetTable()
+            game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+        }
+    }
+    #endif
+}
+
+#if DEBUG
+extension LmpTableScene: ShotLabHost {
+    var shotLabTableName: String { "The Lamplight" }
+
+    /// The shots a player aims for end a trial; bumpers, slings, the post, the spinner and the cat's swats are
+    /// noted only.
+    var shotLabMajorEvents: Set<String> {
+        ["leftLoop", "rightLoop", "ramp", "kettle", "mail", "fireplace", "bookTarget", "windowSeat", "cat"]
+    }
+
+    /// Cradles as on Tables 02–04: 40 pt out and 14 above the raised main flippers; on the shorter upper (64) and
+    /// loft (56) flippers, half their length out and 17 above. The upper flipper is left-handed (points right), the
+    /// loft flipper right-handed (points left).
+    var shotLabFlippers: [ShotLab.FlipperSpec] {
+        let up = LmpTableLayout.flipperTravel - LmpTableLayout.flipperRestAngle      // 30° above horizontal
+        func cradle(_ pivot: CGPoint, along: CGFloat, above: CGFloat, pointsLeft: Bool) -> CGPoint {
+            let s: CGFloat = pointsLeft ? -1 : 1                 // the raised flipper's direction, mirrored
+            let d = CGVector(dx: s * cos(up), dy: sin(up))       // along the flipper
+            let n = CGVector(dx: -s * sin(up), dy: cos(up))      // up off its top face
+            return CGPoint(x: pivot.x + along * d.dx + above * n.dx, y: pivot.y + along * d.dy + above * n.dy)
+        }
+        let l = LmpTableLayout.leftFlipperPivot, r = LmpTableLayout.rightFlipperPivot
+        let u = LmpTableLayout.upperFlipperPivot, lf = LmpTableLayout.loftFlipperPivot
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: cradle(l, along: 40, above: 14, pointsLeft: false)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: cradle(r, along: 40, above: 14, pointsLeft: true)),
+                ShotLab.FlipperSpec(name: "upper", pivot: u,
+                                    cradle: cradle(u, along: LmpTableLayout.upperFlipperLength / 2, above: 17,
+                                                   pointsLeft: false)),
+                ShotLab.FlipperSpec(name: "loft", pivot: lf,
+                                    cradle: cradle(lf, along: LmpTableLayout.loftFlipperLength / 2, above: 17,
+                                                   pointsLeft: true))]
+    }
+
+    /// Each flipper on its own (in play the upper one shares the left button and the loft one the right).
+    func shotLabSetFlipper(_ index: Int, pressed: Bool) {
+        switch index {
+        case 0: leftFlipper.isPressed = pressed
+        case 1: rightFlipper.isPressed = pressed
+        case 2: upperFlipper.isPressed = pressed
+        default: loftFlipper.isPressed = pressed
+        }
+    }
+
+    /// The loft flipper's cradle is up on the loft: that ball starts on the upper layer.
+    func shotLabPlaceBall(at point: CGPoint) {
+        let ball = LmpBall(at: point)
+        addChild(ball)
+        balls.append(ball)
+        if point.y > LmpTableLayout.loftBottomY, point.x < LmpTableLayout.loftRightX { ball.setUpper(true) }
+    }
+
+    func shotLabResetTable() {
+        removeAllBalls()
+        nextBallAt = nil
+        bookTargets.forEach { $0.raise() }
+        pendingDrops.removeAll()
+        bankResetAt = nil
+        cat.reset()
+    }
+
+    /// T5 M5 v3: where every flip's ball first crosses these heights going up (x, heading, speed), to map the
+    /// misses: the slings' tops, the mail slot, the orbit / ramp / kettle mouths, and the top of the bumpers.
+    var shotLabProbes: [ShotLab.Probe] {
+        [ShotLab.Probe(name: "y450", y: 450), ShotLab.Probe(name: "y625", y: 625),
+         ShotLab.Probe(name: "y800", y: 800), ShotLab.Probe(name: "y1000", y: 1000)]
+    }
+
+    var shotLabBall: (position: CGPoint, velocity: CGVector)? {
+        guard let ball = balls.first else { return nil }
+        return (ball.position, ball.physicsBody?.velocity ?? .zero)
+    }
+}
+#endif
 
 extension LmpTableScene: SKPhysicsContactDelegate {
     nonisolated func didBegin(_ contact: SKPhysicsContact) {

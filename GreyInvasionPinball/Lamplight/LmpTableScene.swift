@@ -10,6 +10,8 @@
 // Round 2: the dumbwaiter from the kettle and the full plunge through the hatch.
 // Milestone 4: the cat on her shelf at the top right: walks, naps, swats balls back down, purrs when hit.
 // Milestone 5: the Shot Lab robot (debug builds) from the left, right, upper and loft flippers.
+// Milestone 6 round 1: finds. Knocking down the whole bookshelf, the fireplace, the window seat and waking the cat each
+// find a book (LmpShop: rarity, pity, saved at once); a loop combo or a full plunge makes it a lucky evening.
 // Built from MonTableScene.swift's code, trimmed. Monsoon's sounds stand in until the table's own (juice milestone).
 import SpriteKit
 import UIKit
@@ -89,6 +91,7 @@ final class LmpTableScene: SKScene {
     private var gameTime: TimeInterval = 0
     private var nextBallAt: TimeInterval?
     private var bannerClearAt: TimeInterval?
+    private var findToastClearAt: TimeInterval?
 
     /// The menu: physics stopped, whole-table camera, touches ignored.
     var isAttractMode = false {
@@ -519,7 +522,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M5 v6")
+        let label = SKLabelNode(text: "T5 M6 v2")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -565,7 +568,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M5 v6 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M6 v2 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -802,6 +805,10 @@ final class LmpTableScene: SKScene {
             bannerClearAt = nil
             game.banner = nil
         }
+        if let due = findToastClearAt, now >= due {
+            findToastClearAt = nil
+            game.findToast = nil
+        }
 
         // Drain: remove every ball off the bottom; a ball is lost only when none are left.
         let drained = balls.filter { $0.position.y < -LmpTableLayout.ballRadius * 3 }
@@ -811,7 +818,7 @@ final class LmpTableScene: SKScene {
                 cameraRig.shake(strength: 4, duration: 0.3)
                 sfx(.drain)
                 game.ballDrained()
-                if !game.isGameOver { nextBallAt = now + 1.0 }
+                if !game.isGameOver { nextBallAt = now + 1.0 } else { LmpShop.shared.endEvening(score: game.score) }
             }
         }
 
@@ -869,6 +876,26 @@ final class LmpTableScene: SKScene {
         placeBuildTag()
     }
 
+    // MARK: - Finds (milestone 6)
+
+    /// Finds a book (saved at once) and shows it under the score. The robot never finds anything.
+    private func awardFind(from source: LmpFindSource) {
+        if isLabRunning { return }
+        let find = LmpShop.shared.find(from: source, lucky: game.lucky)
+        game.findsTonight += 1
+        if find.isNew { game.newTonight += 1 }
+        game.findToast = find
+        findToastClearAt = gameTime + LmpTableLayout.findToastSeconds
+        sfx(find.book.rarity >= .rare ? .jackpot : .lane)
+    }
+
+    /// A loop combo or a full plunge: better odds on rare books for the rest of the evening.
+    private func makeLucky() {
+        guard !game.lucky, !isLabRunning else { return }
+        game.lucky = true
+        showBanner("LUCKY EVENING")
+    }
+
     // MARK: - The loft (milestone 3)
 
     /// Carries a ball along a straight line onto the loft (no collisions on the way), then lets it go.
@@ -906,9 +933,14 @@ final class LmpTableScene: SKScene {
             sfx(.ramp)
             hitHaptic.impactOccurred(intensity: 0.7)
         }
+        // Safety nets (T5 M6 v2): below the ramp's mouth, right of the ramp, or above the ramp's turn right of the
+        // loft are all places no ramp or loft ball can be; put such a ball back on the floor.
+        let outside = p.y < LmpTableLayout.rampMouth.y - 40
+            || p.x > LmpTableLayout.rampMouthRightX + 30
+            || (p.x > LmpTableLayout.loftRightX + 5 && p.y > LmpTableLayout.loftDoorTop + 25)
         if LmpTableLayout.rampEntrySwitch.crossing(from: p0, to: p) == .backward
             || LmpTableLayout.loftExitSwitch.crossing(from: p0, to: p) == .forward
-            || p.y < LmpTableLayout.rampMouth.y - 40 {
+            || outside {
             ball.setUpper(false)
         }
     }
@@ -928,6 +960,7 @@ final class LmpTableScene: SKScene {
                 game.add(LmpTableLayout.fullPlungePoints)
                 showBanner("FULL PLUNGE · THE LOFT")
                 sfx(.skillShot)
+                makeLucky()
             }
             return
         }
@@ -935,6 +968,7 @@ final class LmpTableScene: SKScene {
             loopCombo += 1
             game.add(LmpTableLayout.loopPoints + LmpTableLayout.loopComboPoints * loopCombo)
             showBanner("LOOP COMBO × \(loopCombo + 1)")
+            makeLucky()
         } else {
             loopCombo = 0
             game.add(LmpTableLayout.loopPoints)
@@ -956,6 +990,7 @@ final class LmpTableScene: SKScene {
                 game.add(LmpTableLayout.bankCompletePoints)
                 showBanner("FIREPLACE OPEN")
                 sfx(.lanesComplete)
+                awardFind(from: .shelf)
             }
         }
         if let due = bankResetAt, now >= due, !balls.contains(where: { isInAlcove($0.position) }) {
@@ -1021,6 +1056,7 @@ final class LmpTableScene: SKScene {
                        : scoop === windowSeat ? "WINDOW SEAT" : "MAIL POSTED")
             scoop.flash()
             hitHaptic.impactOccurred(intensity: 0.8)
+            if scoop === fireplace { awardFind(from: .shelf) } else if scoop === windowSeat { awardFind(from: .loft) }
         }
     }
 
@@ -1073,6 +1109,7 @@ final class LmpTableScene: SKScene {
                     game.add(LmpTableLayout.catWakePoints)
                     shotEvent("cat")
                     showBanner("MRRP?!")
+                    awardFind(from: .cat)
                     sfx(.captiveKnock)
                 case .petted:
                     game.add(LmpTableLayout.catPetPoints)

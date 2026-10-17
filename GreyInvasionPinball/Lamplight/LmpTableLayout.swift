@@ -483,8 +483,11 @@ enum LmpTableLayout {
         [[CGPoint(x: rampMouthRightX, y: rampMouth.y), CGPoint(x: rampMouthRightX, y: rampMouth.y - 24)]]
     }
     static var rampEntrySwitch: LmpSwitch {
+        // T5 M6 v2 (Aaron: a ball went up the ramp and off the table): with the usual 25% slack this 126-wide line
+        // also caught balls 31 pt past the right post, in the right loop's path, and put them on the ramp layer
+        // outside the ramp, where no floor wall stops them. No slack: only balls between the edges go up.
         LmpSwitch(a: CGPoint(x: rampMouthLeftX, y: rampMouth.y + 12),
-                  b: CGPoint(x: rampMouthRightX, y: rampMouth.y + 12), forward: CGVector(dx: 0, dy: 1))
+                  b: CGPoint(x: rampMouthRightX, y: rampMouth.y + 12), forward: CGVector(dx: 0, dy: 1), slack: 0)
     }
     /// Through the loft's door: the ramp is made.
     static let rampMadeSwitch = LmpSwitch(a: CGPoint(x: 262, y: 1100), b: CGPoint(x: 262, y: 1140),
@@ -508,6 +511,9 @@ enum LmpTableLayout {
     static let catPetPoints = 250
     static let catWakePoints = 500
     static let catSwatPoints = 100
+
+    /// M6: how long a find shows under the score.
+    static let findToastSeconds: TimeInterval = 3.0
 
     // MARK: Rules placeholders
     static let slingPoints = 10
@@ -562,6 +568,8 @@ struct LmpSwitch {
     let a: CGPoint
     let b: CGPoint
     let forward: CGVector
+    /// How far past each end (as a fraction of its length) a crossing still counts. T5 M6 v2: the ramp's entry uses 0.
+    var slack: CGFloat = 0.25
 
     func crossing(from p0: CGPoint, to p1: CGPoint) -> Crossing {
         let ab = CGVector(dx: b.x - a.x, dy: b.y - a.y)
@@ -571,7 +579,7 @@ struct LmpSwitch {
         let t = side0 / (side0 - side1)
         let q = CGPoint(x: p0.x + (p1.x - p0.x) * t, y: p0.y + (p1.y - p0.y) * t)
         let u = ((q.x - a.x) * ab.dx + (q.y - a.y) * ab.dy) / max(ab.dx * ab.dx + ab.dy * ab.dy, 0.001)
-        guard u >= -0.25, u <= 1.25 else { return .none }
+        guard u >= -slack, u <= 1 + slack else { return .none }
         let along = (p1.x - p0.x) * forward.dx + (p1.y - p0.y) * forward.dy
         return along >= 0 ? .forward : .backward
     }

@@ -1,5 +1,5 @@
 // Pinball Lab Table 05 (The Lamplight): the evening's score and balls, shared with the SwiftUI HUD (milestone 1).
-// The persistent shop (collections, tips, friends) gets its own save file in milestone 6.
+// The persistent shop (collections, tips, friends) lives in LmpShop (milestone 6); this is just tonight.
 import Foundation
 import Observation
 
@@ -15,6 +15,12 @@ final class LmpGameState {
     var ballOnPlunger = false
     /// Short HUD message; the scene clears it.
     var banner: String?
+    /// M6: the last find, shown as a card under the score for a moment (the scene clears it).
+    var findToast: LmpFind?
+    var findsTonight = 0
+    var newTonight = 0
+    /// M6: a loop combo or a full plunge makes it a lucky evening: better odds on rare books until closing.
+    var lucky = false
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
     var bestEvening = UserDefaults.standard.integer(forKey: lmpBestEveningKey)
 
@@ -38,5 +44,9 @@ final class LmpGameState {
         ballsLeft = Self.ballsPerGame
         ballOnPlunger = false
         banner = nil
+        findToast = nil
+        findsTonight = 0
+        newTonight = 0
+        lucky = false
     }
 }

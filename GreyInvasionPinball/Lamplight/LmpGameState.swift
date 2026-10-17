@@ -26,6 +26,8 @@ final class LmpGameState {
     /// M8: the request in progress, shown on the LED strip's bottom row when there's no banner.
     var status: String?
     var requestsTonight = 0
+    /// M8 round 2: Evening Rushes tonight (shown on the closing card).
+    var rushesTonight = 0
     /// M8: the regular who just came in (their card shows for a few seconds).
     var visitor: LmpRequest?
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
@@ -57,6 +59,7 @@ final class LmpGameState {
         lucky = false
         status = nil
         requestsTonight = 0
+        rushesTonight = 0
         visitor = nil
     }
 }

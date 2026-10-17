@@ -398,7 +398,8 @@ struct LmpTableView: View {
                 .foregroundStyle(.white.opacity(0.7))
             // M8: the regulars helped tonight.
             Text(game.requestsTonight == 0 ? "No requests finished tonight"
-                 : "Helped \(game.requestsTonight) regular\(game.requestsTonight == 1 ? "" : "s") tonight")
+                 : "Helped \(game.requestsTonight) regular\(game.requestsTonight == 1 ? "" : "s") tonight"
+                   + (game.rushesTonight == 0 ? "" : " · \(game.rushesTonight) rush\(game.rushesTonight == 1 ? "" : "es")"))
                 .font(.orbitron(14, .bold))
                 .foregroundStyle(Self.gold)
             // M6: what tonight found, and the whole collection so far.

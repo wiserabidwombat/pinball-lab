@@ -303,12 +303,14 @@ enum LmpTableLayout {
     static let spinnerFrames = (columns: 6, rows: 4)
     static let spinnerPoints = 20
 
-    /// The mail slot: a narrow saucer on the right that only takes a soft shot (a ball slower than mailMaxSpeed).
+    /// The mail slot: a narrow saucer on the right, a precise shot from the left flipper between the ramp and the
+    /// right loop.
     static let mailSlotCenter = CGPoint(x: 380, y: 640)
-    static let mailCaptureRadius: CGFloat = 12
-    /// T5 M8 v1: 900 (was 650). With the upper flipper gone, a 650 gate left the slot almost out of reach, and the
-    /// favor requests need it.
-    static let mailMaxSpeed: CGFloat = 900
+    /// T5 M8 v3: 14 (was 12). Still clear of the ramp and right-loop shot lines by about 15 pt (Shot Lab crossings).
+    static let mailCaptureRadius: CGFloat = 14
+    /// T5 M8 v3: no speed gate any more (was 900, earlier 650). The soft-shot rule was for the upper flipper; the left
+    /// flipper's shots cross the slot at 1450-2200 pt/s, so every one was refused.
+    static let mailMaxSpeed: CGFloat = maxBallSpeed
     static let mailEject = CGVector(dx: -60, dy: -320)
     static let mailPoints = 2_000
 
@@ -543,6 +545,18 @@ enum LmpTableLayout {
     static let visitorCardSeconds: TimeInterval = 4
     /// A lamp ring round the mail slot, lit when a request wants it.
     static let mailLampRadius: CGFloat = 17
+
+    // MARK: The Evening Rush (milestone 8 round 2)
+    /// Every rushEvery-th request finished in an evening opens the Rush: a second ball is plunged in for you, and every
+    /// request finished pays double until you're back to one ball. Balls lost in the first rushSaveSeconds after the
+    /// Rush ball goes in come straight back.
+    static let rushEvery = 3
+    static let rushSaveSeconds: TimeInterval = 10
+    static let rushLaunchDelay: TimeInterval = 1.2
+    /// The Rush ball's plunge: a little under a tap's 0.6, well short of a full plunge into the loft.
+    static let rushLaunchPower: CGFloat = 0.55
+    /// During the Rush the next regular comes in this quickly.
+    static let rushRequestDelay: TimeInterval = 2
 
     // MARK: Rules placeholders
     static let slingPoints = 10

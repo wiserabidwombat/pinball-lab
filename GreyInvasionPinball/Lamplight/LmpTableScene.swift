@@ -73,6 +73,12 @@ final class LmpTableScene: SKScene {
     private var lastRegular: LmpRegular?
     private var nextRequestAt: TimeInterval?
     private var visitorClearAt: TimeInterval?
+    /// M8 round 2: the Evening Rush. Balls still to be plunged in for you, when the next goes, and the ball save
+    /// (infinite until the first Rush ball is in).
+    private var rushActive = false
+    private var rushBallsToServe = 0
+    private var rushLaunchAt: TimeInterval = 0
+    private var rushSaveUntil: TimeInterval = 0
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
     private var shotLab: ShotLab?
@@ -284,7 +290,7 @@ final class LmpTableScene: SKScene {
         // The evening: one more shop lamp every sixth of an evening, and the warm dim deepening toward closing.
         let evening = max(0, now - eveningStart) / LmpTableLayout.eveningSeconds
         let lit = min(LmpTableLayout.shopLamps.count, 1 + Int(evening * Double(LmpTableLayout.shopLamps.count)))
-        for i in 0..<LmpTableLayout.shopLamps.count { lamps.set("shop\(i)", i < lit ? .on : .off) }
+        for i in 0..<LmpTableLayout.shopLamps.count { lamps.set("shop\(i)", rushActive ? .fastBlink : (i < lit ? .on : .off)) }
         eveningDim?.alpha = LmpTableLayout.eveningDimMax * CGFloat(min(evening, 1))
         lamps.update(time: now)
     }
@@ -605,7 +611,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v1")
+        let label = SKLabelNode(text: "T5 M8 v3")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -651,7 +657,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M8 v1 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M8 v3 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -666,12 +672,14 @@ final class LmpTableScene: SKScene {
         balls.min(by: { $0.position.y < $1.position.y })
     }
 
-    private func placeBallOnPlunger() {
+    @discardableResult
+    private func placeBallOnPlunger() -> LmpBall {
         let r = LmpTableLayout.ballRadius
         let ball = LmpBall(at: CGPoint(x: LmpTableLayout.laneCenterX, y: LmpTableLayout.plungerRestTop + r + 2))
         addChild(ball)
         balls.append(ball)
         servedBall = ball
+        return ball
     }
 
     private func removeBall(_ ball: LmpBall) {
@@ -725,6 +733,9 @@ final class LmpTableScene: SKScene {
         eveningStart = gameTime
         request = nil
         nextRequestAt = gameTime + LmpTableLayout.firstRequestDelay
+        rushActive = false
+        rushBallsToServe = 0
+        rushSaveUntil = 0
         placeBallOnPlunger()
         refreshCamera()
     }
@@ -900,6 +911,7 @@ final class LmpTableScene: SKScene {
             game.banner = nil
         }
         updateRequests(now)
+        updateRush(now)
         if let due = visitorClearAt, now >= due {
             visitorClearAt = nil
             game.visitor = nil
@@ -913,7 +925,14 @@ final class LmpTableScene: SKScene {
         let drained = balls.filter { $0.position.y < -LmpTableLayout.ballRadius * 3 }
         if !drained.isEmpty {
             drained.forEach { removeBall($0) }
-            if balls.isEmpty, nextBallAt == nil {
+            if rushActive, now < rushSaveUntil {
+                // M8 round 2: the Rush's ball save puts them straight back in.
+                rushBallsToServe += drained.count
+                showBanner("SAVED · BALL BACK IN")
+            } else if rushActive, balls.count + rushBallsToServe <= 1 {
+                endRush()
+            }
+            if balls.isEmpty, rushBallsToServe == 0, nextBallAt == nil {
                 cameraRig.shake(strength: 4, duration: 0.3)
                 sfx(.drain)
                 game.ballDrained()
@@ -1009,7 +1028,7 @@ final class LmpTableScene: SKScene {
         request = r
         lastRegular = r.regular
         showBanner("\(r.regular.name.uppercased()) COMES IN")
-        game.status = r.status
+        game.status = statusText(r)
         game.visitor = r                                   // their card under the score
         visitorClearAt = now + LmpTableLayout.visitorCardSeconds
         sfx(.lane)
@@ -1021,18 +1040,62 @@ final class LmpTableScene: SKScene {
         r.stepIndex += 1
         if r.isDone {
             request = nil
-            game.status = nil
             game.requestsTonight += 1
-            game.add(LmpTableLayout.requestPoints)
+            game.add(LmpTableLayout.requestPoints * (rushActive ? 2 : 1))
             let level = LmpShop.shared.finishRequest(for: r.regular)
-            showBanner("THANK YOU! · \(r.regular.name.uppercased()) · FRIENDSHIP \(level)")
+            showBanner("THANK YOU! · \(r.regular.name.uppercased()) · FRIENDSHIP \(level)" + (rushActive ? " · ×2" : ""))
             sfx(.lanesComplete)
-            nextRequestAt = gameTime + LmpTableLayout.nextRequestDelay
+            if !rushActive, game.requestsTonight % LmpTableLayout.rushEvery == 0 { startRush() }
+            game.status = statusText(nil)
+            nextRequestAt = gameTime + (rushActive ? LmpTableLayout.rushRequestDelay : LmpTableLayout.nextRequestDelay)
         } else {
             request = r
-            game.status = r.status
+            game.status = statusText(r)
             sfx(.lane)
         }
+    }
+
+    /// The LED strip's bottom row: the request in progress, with the Rush in front while it lasts.
+    private func statusText(_ r: LmpRequest?) -> String? {
+        guard rushActive else { return r?.status }
+        return "RUSH ×2 · " + (r?.status ?? "the next regular's on the way")
+    }
+
+    // MARK: - The Evening Rush (milestone 8 round 2)
+
+    /// Enough requests done: the door opens, a second ball is plunged in for you and requests pay double.
+    private func startRush() {
+        rushActive = true
+        game.rushesTonight += 1
+        rushBallsToServe = 1
+        rushLaunchAt = gameTime + LmpTableLayout.rushLaunchDelay
+        rushSaveUntil = .infinity                      // the save starts when the Rush ball goes in
+        showBanner("THE EVENING RUSH · REQUESTS PAY DOUBLE")
+        lamps.play(.sweep, at: gameTime)
+        sfx(.jackpot)
+    }
+
+    /// Plunges the Rush's balls in one at a time (waiting while a ball sits on the plunger).
+    private func updateRush(_ now: TimeInterval) {
+        guard rushBallsToServe > 0, now >= rushLaunchAt, !isBallOnPlunger else { return }
+        rushBallsToServe -= 1
+        rushLaunchAt = now + 0.8
+        if rushSaveUntil == .infinity { rushSaveUntil = now + LmpTableLayout.rushSaveSeconds }
+        let ball = placeBallOnPlunger()
+        ball.launched = true
+        let speed = LmpTableLayout.minLaunchSpeed
+            + LmpTableLayout.rushLaunchPower * (LmpTableLayout.maxLaunchSpeed - LmpTableLayout.minLaunchSpeed)
+        ball.physicsBody?.velocity = CGVector(dx: 0, dy: speed)
+        plunger.run(.sequence([.moveBy(x: 0, y: -14, duration: 0.05), .move(to: LmpTableLayout.plungerRestPosition, duration: 0.04)]))
+        sfx(.launch)
+    }
+
+    /// Back to one ball: the Rush is over (requests pay as usual again).
+    private func endRush() {
+        rushActive = false
+        rushSaveUntil = 0
+        showBanner("THE RUSH IS OVER")
+        game.status = statusText(request)
     }
 
     /// A loop combo or a full plunge: better odds on rare books for the rest of the evening.

@@ -15,6 +15,8 @@ import Foundation
 // and the window seat, reached by a ramp from the left flipper; a ball that drains off it rolls down a chute into the
 // left lane. The bumpers move under the ramp's turn. The dumbwaiter and the plunge to the loft are round 2.
 // Milestone 4: the shop cat on her shelf at the top right (LmpCat).
+// Milestone 7 round 1: lamps (LmpLamp): shot arrows, the lucky-evening star, and six shop lamps on the apron that come
+// on one by one through the evening while the whole table warms and dims toward closing.
 
 /// All Table 05 geometry in world points. SpriteKit's origin is bottom-left.
 /// Same 600 x 1300 world, radius-9 ball and physics as Tables 02–04 (every physics value proven on device there).
@@ -507,6 +509,28 @@ enum LmpTableLayout {
 
     /// M6: how long a find shows under the score.
     static let findToastSeconds: TimeInterval = 3.0
+
+    // MARK: Lamps (milestone 7). Shot arrows sit on each shot's line in front of it, pointing along the shot
+    // (headings from the Shot Lab's probes).
+    static let shotArrows: [String: (CGPoint, CGFloat)] = [
+        "ramp": (CGPoint(x: 328, y: 585), 76 * .pi / 180),          // left flipper → the loft ramp
+        "rightLoop": (CGPoint(x: 428, y: 580), 60 * .pi / 180),     // left flipper → up the right lane
+        "leftLoop": (CGPoint(x: 128, y: 560), 117 * .pi / 180),     // right flipper → up the left lane
+        "kettle": (CGPoint(x: 238, y: 585), 104 * .pi / 180),       // right flipper → the kettle lane
+        "fireplace": (CGPoint(x: 284, y: 690), .pi / 2),            // straight up at the bookshelf
+        "windowSeat": (CGPoint(x: 185, y: 1030), 125 * .pi / 180),  // in the loft: loft flipper → the window seat
+    ]
+    static let arrowLength: CGFloat = 30
+    static let arrowWidth: CGFloat = 16
+    /// Lit for a lucky evening.
+    static let luckyLamp = CGPoint(x: 284, y: 330)
+    /// Six shop lamps on the apron (three each side, under the flippers), lit one by one as the evening goes on.
+    static let shopLamps: [CGPoint] = [CGPoint(x: 62, y: 192), CGPoint(x: 112, y: 174), CGPoint(x: 162, y: 157),
+                                       CGPoint(x: 506, y: 192), CGPoint(x: 456, y: 174), CGPoint(x: 406, y: 157)]
+    /// An evening is about this long: one more shop lamp every eveningSeconds / 6, and the warm dim reaches its
+    /// deepest (eveningDimMax) at the end.
+    static let eveningSeconds: TimeInterval = 300
+    static let eveningDimMax: CGFloat = 0.22
 
     // MARK: Rules placeholders
     static let slingPoints = 10

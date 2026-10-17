@@ -13,6 +13,9 @@
 // Milestone 6 round 1: finds. Knocking down the whole bookshelf, the fireplace, the window seat and waking the cat each
 // find a book (LmpShop: rarity, pity, saved at once); a loop combo or a full plunge makes it a lucky evening.
 // Round 3: the cat roams between the perches you own; each perch changes its shot a little (LmpPerch.effect).
+// Milestone 7 round 1: lamps. Arrows light the shots that are worth something right now (the open fireplace, the
+// kettle when the dumbwaiter is lit, the other loop during a combo, the ramp on a lucky evening, the window seat when
+// the cat's there); the lucky star; six shop lamps that come on through the evening as the table warms and dims.
 // Built from MonTableScene.swift's code, trimmed. Monsoon's sounds stand in until the table's own (juice milestone).
 import SpriteKit
 import UIKit
@@ -59,6 +62,10 @@ final class LmpTableScene: SKScene {
     private var loftFlipper: LmpFlipper!
     private var cat: LmpCat!
     private var catRoamAt: TimeInterval = 0
+    private let lamps = LmpLampController()
+    /// When tonight's first ball was served (for the evening's lamps and dimming).
+    private var eveningStart: TimeInterval = 0
+    private var eveningDim: SKSpriteNode?
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
     private var shotLab: ShotLab?
@@ -99,7 +106,11 @@ final class LmpTableScene: SKScene {
         didSet {
             guard isAttractMode != oldValue else { return }
             physicsWorld.speed = isAttractMode ? 0 : 1
-            if isAttractMode { releaseAllControls() }
+            if isAttractMode {
+                releaseAllControls()
+                lamps.play(.attract, at: gameTime)     // M7: the menu's light chase
+                eveningDim?.alpha = 0
+            }
             #if DEBUG
             if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
             #endif
@@ -208,6 +219,57 @@ final class LmpTableScene: SKScene {
         addUpperTable()
         addLoft()
         addCat()
+        addLamps()
+    }
+
+    /// Milestone 7: shot arrows, the lucky star, the shop lamps, and the warm dim over the whole table.
+    private func addLamps() {
+        let warm = SKColor(red: 1.0, green: 0.78, blue: 0.42, alpha: 1)
+        for (name, spot) in LmpTableLayout.shotArrows {
+            let lamp = LmpLamp(.arrow(length: LmpTableLayout.arrowLength, width: LmpTableLayout.arrowWidth),
+                               color: warm, at: spot.0, angle: spot.1)
+            if name == "windowSeat" { lamp.zPosition = 18 }          // over the loft's floor
+            addChild(lamp)
+            lamps.add(lamp, named: name)
+        }
+        let lucky = LmpLamp(.star(outer: 11, inner: 5), color: SKColor(red: 0.55, green: 0.85, blue: 0.55, alpha: 1),
+                            at: LmpTableLayout.luckyLamp)
+        addChild(lucky)
+        lamps.add(lucky, named: "lucky")
+        for (i, p) in LmpTableLayout.shopLamps.enumerated() {
+            let lamp = LmpLamp(.round(radius: 7), color: warm, at: p)
+            addChild(lamp)
+            lamps.add(lamp, named: "shop\(i)")
+        }
+        let dim = SKSpriteNode(color: SKColor(red: 0.20, green: 0.09, blue: 0.02, alpha: 1),
+                               size: CGSize(width: LmpTableLayout.worldSize.width + 400,
+                                            height: LmpTableLayout.worldSize.height + 400))
+        dim.anchorPoint = .zero
+        dim.position = CGPoint(x: -200, y: -200)
+        dim.zPosition = 40
+        dim.alpha = 0
+        addChild(dim)
+        eveningDim = dim
+        lamps.play(.attract, at: gameTime)
+    }
+
+    /// Which lamps are lit, from the table's state (no rules yet: just what's worth shooting right now).
+    private func updateLamps(_ now: TimeInterval) {
+        let bankDown = bookTargets.allSatisfy { $0.isDown }
+        lamps.set("fireplace", bankDown ? .fastBlink : .off)
+        lamps.set("kettle", dumbwaiterLit ? .blink : .off)
+        let comboOpen = now - lastLoopAt <= LmpTableLayout.loopComboWindow
+        lamps.set("leftLoop", comboOpen ? .fastBlink : .off)
+        lamps.set("rightLoop", comboOpen ? .fastBlink : .off)
+        lamps.set("ramp", game.lucky ? .blink : .off)
+        lamps.set("windowSeat", cat.perch == .windowSeat ? .blink : (balls.contains { $0.isUpper } ? .on : .off))
+        lamps.set("lucky", game.lucky ? .on : .off)
+        // The evening: one more shop lamp every sixth of an evening, and the warm dim deepening toward closing.
+        let evening = max(0, now - eveningStart) / LmpTableLayout.eveningSeconds
+        let lit = min(LmpTableLayout.shopLamps.count, 1 + Int(evening * Double(LmpTableLayout.shopLamps.count)))
+        for i in 0..<LmpTableLayout.shopLamps.count { lamps.set("shop\(i)", i < lit ? .on : .off) }
+        eveningDim?.alpha = LmpTableLayout.eveningDimMax * CGFloat(min(evening, 1))
+        lamps.update(time: now)
     }
 
     /// Milestone 4: the cat and her shelf (the shelf is only drawn; she is the solid part).
@@ -526,7 +588,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M6 v7")
+        let label = SKLabelNode(text: "T5 M7 v1")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -572,7 +634,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M6 v7 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M7 v1 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -642,6 +704,8 @@ final class LmpTableScene: SKScene {
         cat.move(to: start, animated: false)
         game.catPerch = start
         catRoamAt = gameTime + Double.random(in: LmpTableLayout.catRoamSeconds)
+        lamps.stopShow()
+        eveningStart = gameTime
         placeBallOnPlunger()
         refreshCamera()
     }
@@ -792,7 +856,10 @@ final class LmpTableScene: SKScene {
             return
         }
         #endif
-        if isAttractMode { return }
+        if isAttractMode {
+            lamps.update(time: now)                // the attract chase runs on the menu
+            return
+        }
 
         let dt = CGFloat(step)
         lastStep = dt
@@ -807,6 +874,7 @@ final class LmpTableScene: SKScene {
         updateRides(now)
         updateCat(dt, now: now)
         updateSpinner(dt, now: now)
+        updateLamps(now)
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil

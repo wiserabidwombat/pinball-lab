@@ -4,6 +4,7 @@
 // rare within 120), better odds from the loft, and "lucky evenings". The collection book (round 2) and furniture with
 // the cat's perches (round 3) build on this.
 import Foundation
+import CoreGraphics
 import Observation
 
 /// How rare a find is. The raw value orders them. (Value types are `nonisolated`: the app defaults to the main actor,
@@ -56,13 +57,89 @@ nonisolated struct LmpShopSave: Codable {
         var firstFound: Date
         var count: Int
     }
-    var version = 1
+    var version = 2
     var daysPlayed = 0
     var tips = 0
     var bestEvening = 0
     var owned: [String: Owned] = [:]
     var findsSinceRare = 0
     var findsSinceUltra = 0
+    /// M6 round 3 (version 2): furniture owned, by id (the cat's perches so far).
+    var furniture: [String] = []
+
+    init() {}
+
+    /// Every field is optional on the way in, so an older save (or one from a newer build) still loads.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        daysPlayed = try c.decodeIfPresent(Int.self, forKey: .daysPlayed) ?? 0
+        tips = try c.decodeIfPresent(Int.self, forKey: .tips) ?? 0
+        bestEvening = try c.decodeIfPresent(Int.self, forKey: .bestEvening) ?? 0
+        owned = try c.decodeIfPresent([String: Owned].self, forKey: .owned) ?? [:]
+        findsSinceRare = try c.decodeIfPresent(Int.self, forKey: .findsSinceRare) ?? 0
+        findsSinceUltra = try c.decodeIfPresent(Int.self, forKey: .findsSinceUltra) ?? 0
+        furniture = try c.decodeIfPresent([String].self, forKey: .furniture) ?? []
+        version = 2
+    }
+}
+
+/// The cat's perches (M6 round 3): furniture for her. The shelf is hers from the start; each perch you buy adds a spot
+/// she roams to, and wherever she is changes that shot a little (the sentence shown everywhere).
+nonisolated enum LmpPerch: String, CaseIterable, Codable {
+    case shelf, mantel, kettle, windowSeat
+
+    /// Where she sits ("on the mantel").
+    var spot: String {
+        switch self {
+        case .shelf: return "on her shelf"
+        case .mantel: return "on the mantel"
+        case .kettle: return "by the kettle"
+        case .windowSeat: return "in the window seat"
+        }
+    }
+
+    /// The piece of furniture that makes the spot hers.
+    var furnitureName: String {
+        switch self {
+        case .shelf: return "Cat shelf"
+        case .mantel: return "Mantel blanket"
+        case .kettle: return "Basket by the kettle"
+        case .windowSeat: return "Window-seat cushion"
+        }
+    }
+
+    var price: Int {
+        switch self {
+        case .shelf: return 0
+        case .mantel: return 8
+        case .kettle: return 5
+        case .windowSeat: return 6
+        }
+    }
+
+    /// The one sentence shown in the collection book, on the pause card and when she moves there.
+    var effect: String {
+        switch self {
+        case .shelf: return "She walks her shelf and swats balls back down."
+        case .mantel: return "She swats balls off the fireplace roof."
+        case .kettle: return "The kettle scores double while she warms her paws."
+        case .windowSeat: return "The window seat finds an extra book while she's there."
+        }
+    }
+
+    /// Up in the loft: drawn above it, with no body (floor balls can't reach her there).
+    var onLoft: Bool { self == .windowSeat }
+
+    /// Where she sits (the shelf is where she starts her walk).
+    var position: CGPoint {
+        switch self {
+        case .shelf: return CGPoint(x: 370, y: 1175)
+        case .mantel: return CGPoint(x: 252, y: 877)
+        case .kettle: return CGPoint(x: 134, y: 945)
+        case .windowSeat: return CGPoint(x: 165, y: 1140)
+        }
+    }
 }
 
 @MainActor
@@ -193,6 +270,40 @@ final class LmpShop {
     func endEvening(score: Int) {
         save.daysPlayed += 1
         save.bestEvening = max(save.bestEvening, score)
+        save.tips += Self.tips(forScore: score)
+        write()
+    }
+
+    // MARK: Tips and furniture (M6 round 3)
+
+    /// The evening's score becomes tips at closing (the plan: 1 tip per 10,000 points, to tune).
+    static let pointsPerTip = 10_000
+    static func tips(forScore score: Int) -> Int { score / pointsPerTip }
+
+    func owns(_ perch: LmpPerch) -> Bool { perch == .shelf || save.furniture.contains(perch.rawValue) }
+
+    var ownedPerches: [LmpPerch] { LmpPerch.allCases.filter { owns($0) } }
+
+    /// Buys a perch with tips. Returns false if it's already owned or there aren't enough tips.
+    @discardableResult
+    func buy(_ perch: LmpPerch) -> Bool {
+        guard !owns(perch), save.tips >= perch.price else { return false }
+        save.tips -= perch.price
+        save.furniture.append(perch.rawValue)
+        write()
+        return true
+    }
+
+    #if DEBUG
+    func debugAddTips(_ n: Int) {
+        save.tips += n
+        write()
+    }
+    #endif
+
+    /// "Start a new shop" in the collection book (after a confirm): everything back to day one.
+    func startNewShop() {
+        save = LmpShopSave()
         write()
     }
 

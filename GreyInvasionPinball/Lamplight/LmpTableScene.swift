@@ -2,7 +2,7 @@
 // "center post + one outlane"): flippers 11 pt farther apart with a rubber center post between their tips, the left
 // side closed (a deflector off the left wall feeds the left inlane), one outlane on the right; slingshots, plunger,
 // the one-way launch gate flap, the three camera modes, 3 balls.
-// Milestone 2: the upper table in grey box: the loop pair (with combos), the upper flipper low on the left, the
+// Milestone 2: the upper table in grey box: the loop pair (with combos), the upper flipper low on the left (removed in M6 v6), the
 // bookshelf bank and the fireplace hole behind it, the kettle scoop and its spinner, the mail slot (soft shots only),
 // three teacup bumpers. Placeholder points and banners until the rules milestone.
 // Milestone 3 round 1: the loft (a raised mini-playfield with its own flipper on the right button and the window
@@ -12,6 +12,7 @@
 // Milestone 5: the Shot Lab robot (debug builds) from the left, right, upper and loft flippers.
 // Milestone 6 round 1: finds. Knocking down the whole bookshelf, the fireplace, the window seat and waking the cat each
 // find a book (LmpShop: rarity, pity, saved at once); a loop combo or a full plunge makes it a lucky evening.
+// Round 3: the cat roams between the perches you own; each perch changes its shot a little (LmpPerch.effect).
 // Built from MonTableScene.swift's code, trimmed. Monsoon's sounds stand in until the table's own (juice milestone).
 import SpriteKit
 import UIKit
@@ -45,7 +46,6 @@ final class LmpTableScene: SKScene {
     private var plunger: SKShapeNode!
     private var centerPost: SKShapeNode?
     private var centerPostHitAt: TimeInterval = -1
-    private var upperFlipper: LmpFlipper!
     private var bumpers: [LmpBumper] = []
     private var bookTargets: [LmpDropTarget] = []
     private var pendingDrops: [LmpDropTarget] = []
@@ -58,6 +58,7 @@ final class LmpTableScene: SKScene {
     private var lastSpinTickAt: TimeInterval = 0
     private var loftFlipper: LmpFlipper!
     private var cat: LmpCat!
+    private var catRoamAt: TimeInterval = 0
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
     private var shotLab: ShotLab?
@@ -227,6 +228,16 @@ final class LmpTableScene: SKScene {
     /// Moves the cat, and lets her swat any floor ball that comes within reach while she's awake.
     private func updateCat(_ dt: CGFloat, now: TimeInterval) {
         cat.update(dt: dt, now: now)
+        // M6 round 3: now and then she wanders to another perch you own.
+        if !isLabRunning, now >= catRoamAt {
+            catRoamAt = now + Double.random(in: LmpTableLayout.catRoamSeconds)
+            let others = LmpShop.shared.ownedPerches.filter { $0 != cat.perch }
+            if let next = others.randomElement() {
+                cat.move(to: next)
+                game.catPerch = next
+                showBanner("THE CAT MOVES \(next.spot.uppercased())")
+            }
+        }
         for ball in balls where !ball.isUpper && ball.ride == nil && ball.heldIn == nil {
             guard let body = ball.physicsBody, cat.trySwat(ballAt: ball.position, now: now) else { continue }
             let dir: CGFloat = ball.position.x >= cat.position.x ? 1 : -1
@@ -281,8 +292,8 @@ final class LmpTableScene: SKScene {
 
         loftFlipper = LmpFlipper(side: .right, pivot: LmpTableLayout.loftFlipperPivot,
                                  length: LmpTableLayout.loftFlipperLength,
-                                 pivotRadius: LmpTableLayout.upperFlipperPivotRadius,
-                                 tipRadius: LmpTableLayout.upperFlipperTipRadius)
+                                 pivotRadius: LmpTableLayout.loftFlipperPivotRadius,
+                                 tipRadius: LmpTableLayout.loftFlipperTipRadius)
         loftFlipper.zPosition = 20
         loftFlipper.attach(to: self)
         loftFlipper.physicsBody?.categoryBitMask = LmpPhysicsCategory.loftFlipper
@@ -306,14 +317,7 @@ final class LmpTableScene: SKScene {
                 friction: LmpTableLayout.railFriction, restitution: LmpTableLayout.railRestitution)
         addWall(points: LmpTableLayout.alcoveWall)
         addWall(points: LmpTableLayout.kettleLaneWall)
-        addWall(points: LmpTableLayout.upperFlipperGuide)
         addOrbitDeflector()
-
-        upperFlipper = LmpFlipper(side: .left, pivot: LmpTableLayout.upperFlipperPivot,
-                                  length: LmpTableLayout.upperFlipperLength,
-                                  pivotRadius: LmpTableLayout.upperFlipperPivotRadius,
-                                  tipRadius: LmpTableLayout.upperFlipperTipRadius)
-        upperFlipper.attach(to: self)
 
         for c in LmpTableLayout.bookTargetCenters {
             let t = LmpDropTarget(at: c)
@@ -522,7 +526,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M6 v2")
+        let label = SKLabelNode(text: "T5 M6 v7")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -568,7 +572,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M6 v2 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T5 M6 v7 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -633,6 +637,11 @@ final class LmpTableScene: SKScene {
         lastLoopAt = -100
         cat.reset()
         game.reset()
+        // M6 round 3: she starts the evening on any perch you own.
+        let start = LmpShop.shared.ownedPerches.randomElement() ?? .shelf
+        cat.move(to: start, animated: false)
+        game.catPerch = start
+        catRoamAt = gameTime + Double.random(in: LmpTableLayout.catRoamSeconds)
         placeBallOnPlunger()
         refreshCamera()
     }
@@ -703,7 +712,6 @@ final class LmpTableScene: SKScene {
         if left && !leftFlipper.isPressed { sfx(.flipper) }
         if right && !rightFlipper.isPressed { sfx(.flipper) }
         leftFlipper.isPressed = left
-        upperFlipper?.isPressed = left
         rightFlipper.isPressed = right
         loftFlipper?.isPressed = right
     }
@@ -790,7 +798,6 @@ final class LmpTableScene: SKScene {
         lastStep = dt
         updateGamepad()
         leftFlipper.step(dt: dt)
-        upperFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         loftFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
@@ -1048,6 +1055,9 @@ final class LmpTableScene: SKScene {
             body.affectedByGravity = false
             body.velocity = .zero
             game.add(scoop.points)
+            if scoop === kettle, cat.perch == .kettle, !isLabRunning {
+                game.add(scoop.points)                 // her perch: the kettle scores double
+            }
             shotEvent(scoop === fireplace ? "fireplace" : scoop === kettle ? "kettle"
                       : scoop === windowSeat ? "windowSeat" : "mail")
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
@@ -1057,6 +1067,12 @@ final class LmpTableScene: SKScene {
             scoop.flash()
             hitHaptic.impactOccurred(intensity: 0.8)
             if scoop === fireplace { awardFind(from: .shelf) } else if scoop === windowSeat { awardFind(from: .loft) }
+            if scoop === windowSeat, cat.perch == .windowSeat {
+                awardFind(from: .loft)                 // her perch: an extra book
+                showBanner("THE CAT FOUND ONE TOO")
+            } else if scoop === kettle, cat.perch == .kettle {
+                showBanner("KETTLE × 2 · THE CAT'S BASKET")
+            }
         }
     }
 
@@ -1181,7 +1197,6 @@ extension LmpTableScene {
         let now = shotLabTime
         lastStep = dt
         leftFlipper.step(dt: dt)
-        upperFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         loftFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
@@ -1215,7 +1230,7 @@ extension LmpTableScene: ShotLabHost {
     }
 
     /// Cradles as on Tables 02–04: 40 pt out and 14 above the raised main flippers; on the shorter upper (64) and
-    /// loft (56) flippers, half their length out and 17 above. The upper flipper is left-handed (points right), the
+    /// loft (56) flippers, half their length out and 17 above. (M6 v6: no upper flipper.) The
     /// loft flipper right-handed (points left).
     var shotLabFlippers: [ShotLab.FlipperSpec] {
         let up = LmpTableLayout.flipperTravel - LmpTableLayout.flipperRestAngle      // 30° above horizontal
@@ -1226,23 +1241,20 @@ extension LmpTableScene: ShotLabHost {
             return CGPoint(x: pivot.x + along * d.dx + above * n.dx, y: pivot.y + along * d.dy + above * n.dy)
         }
         let l = LmpTableLayout.leftFlipperPivot, r = LmpTableLayout.rightFlipperPivot
-        let u = LmpTableLayout.upperFlipperPivot, lf = LmpTableLayout.loftFlipperPivot
+        let lf = LmpTableLayout.loftFlipperPivot
+        // T5 M6 v6: no upper flipper any more.
         return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: cradle(l, along: 40, above: 14, pointsLeft: false)),
                 ShotLab.FlipperSpec(name: "right", pivot: r, cradle: cradle(r, along: 40, above: 14, pointsLeft: true)),
-                ShotLab.FlipperSpec(name: "upper", pivot: u,
-                                    cradle: cradle(u, along: LmpTableLayout.upperFlipperLength / 2, above: 17,
-                                                   pointsLeft: false)),
                 ShotLab.FlipperSpec(name: "loft", pivot: lf,
                                     cradle: cradle(lf, along: LmpTableLayout.loftFlipperLength / 2, above: 17,
                                                    pointsLeft: true))]
     }
 
-    /// Each flipper on its own (in play the upper one shares the left button and the loft one the right).
+    /// Each flipper on its own (in play the loft one shares the right button).
     func shotLabSetFlipper(_ index: Int, pressed: Bool) {
         switch index {
         case 0: leftFlipper.isPressed = pressed
         case 1: rightFlipper.isPressed = pressed
-        case 2: upperFlipper.isPressed = pressed
         default: loftFlipper.isPressed = pressed
         }
     }

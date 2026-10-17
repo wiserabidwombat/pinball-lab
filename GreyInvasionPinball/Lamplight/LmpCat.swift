@@ -2,6 +2,7 @@
 // She walks the shelf, stops for naps in different spots, and when she's awake and a ball comes within reach she
 // swats it back down the table. A ball that hits her pets her (or wakes her from a nap). The scene moves her and
 // reports the events; she is a toy (category `toy`), so the ball bounces off her and the contact is reported.
+// M6 round 3: she can sit on other perches you own (LmpPerch): there she stays put and dozes off now and then.
 import SpriteKit
 import CoreGraphics
 import Foundation
@@ -11,6 +12,10 @@ final class LmpCat: SKNode {
     enum HitResult { case petted, woke, none }
 
     private(set) var mode: Mode = .walk
+    /// M6 round 3: where she is. On the shelf she walks; on any other perch she sits, dozing off now and then.
+    private(set) var perch: LmpPerch = .shelf
+    private var sitUntil: TimeInterval = 0
+    private var lastNow: TimeInterval = 0
     private var targetX: CGFloat
     private var napUntil: TimeInterval = 0
     private var swatUntil: TimeInterval = 0
@@ -97,23 +102,23 @@ final class LmpCat: SKNode {
 
     /// Walks toward her next spot; on arriving, naps there about half the time.
     func update(dt: CGFloat, now: TimeInterval) {
+        lastNow = now
         switch mode {
         case .nap:
             if now >= napUntil { wake() }
         case .swat:
             if now >= swatUntil { mode = .walk }
         case .walk:
+            if perch != .shelf {
+                if now >= sitUntil { startNap(now) }
+                return
+            }
             let dx = targetX - position.x
             let step = LmpTableLayout.catWalkSpeed * dt
             if abs(dx) <= step {
                 position.x = targetX
                 if Double.random(in: 0..<1, using: &rng) < 0.5 {
-                    mode = .nap
-                    napUntil = now + Double.random(in: LmpTableLayout.catNapSeconds, using: &rng)
-                    zzz.isHidden = false
-                    zzz.run(.repeatForever(.sequence([.fadeAlpha(to: 0.3, duration: 0.8),
-                                                      .fadeAlpha(to: 1, duration: 0.8)])), withKey: "zzz")
-                    head.run(.moveBy(x: 0, y: -LmpTableLayout.catRadius * 0.3, duration: 0.4))
+                    startNap(now)
                 } else {
                     pickTarget()
                 }
@@ -126,7 +131,7 @@ final class LmpCat: SKNode {
 
     /// A ball in reach while she's awake: she swats it (at most once every catSwatCooldown). Returns true if she did.
     func trySwat(ballAt p: CGPoint, now: TimeInterval) -> Bool {
-        guard mode != .nap, now - lastSwat >= LmpTableLayout.catSwatCooldown,
+        guard mode != .nap, !perch.onLoft, now - lastSwat >= LmpTableLayout.catSwatCooldown,
               hypot(p.x - position.x, p.y - position.y) <= LmpTableLayout.catReach else { return false }
         lastSwat = now
         mode = .swat
@@ -153,10 +158,36 @@ final class LmpCat: SKNode {
     }
 
     func reset() {
-        position = CGPoint(x: LmpTableLayout.catHomeX, y: LmpTableLayout.catShelfY)
+        move(to: .shelf, animated: false)
+    }
+
+    /// Settles her on a perch (a quick fade out and in). In the loft she has no body: floor balls can't reach her.
+    func move(to newPerch: LmpPerch, animated: Bool = true) {
+        guard animated else { settle(on: newPerch); return }
+        art.run(.sequence([.fadeOut(withDuration: 0.25),
+                           .run { [weak self] in self?.settle(on: newPerch) },
+                           .fadeIn(withDuration: 0.3)]))
+    }
+
+    private func settle(on newPerch: LmpPerch) {
+        perch = newPerch
+        position = newPerch.position
         if mode == .nap { wake() }
         mode = .walk
-        pickTarget()
+        zPosition = newPerch.onLoft ? 22 : 12
+        physicsBody?.categoryBitMask = newPerch.onLoft ? LmpPhysicsCategory.none : LmpPhysicsCategory.toy
+        physicsBody?.collisionBitMask = newPerch.onLoft ? LmpPhysicsCategory.none : LmpPhysicsCategory.ball
+        sitUntil = lastNow + Double.random(in: 4...8, using: &rng)
+        if newPerch == .shelf { pickTarget() }
+    }
+
+    private func startNap(_ now: TimeInterval) {
+        mode = .nap
+        napUntil = now + Double.random(in: LmpTableLayout.catNapSeconds, using: &rng)
+        zzz.isHidden = false
+        zzz.run(.repeatForever(.sequence([.fadeAlpha(to: 0.3, duration: 0.8),
+                                          .fadeAlpha(to: 1, duration: 0.8)])), withKey: "zzz")
+        head.run(.moveBy(x: 0, y: -LmpTableLayout.catRadius * 0.3, duration: 0.4))
     }
 
     /// Turns her to face right (+1) or left (-1); the z's stay above her head.
@@ -170,7 +201,11 @@ final class LmpCat: SKNode {
         zzz.removeAction(forKey: "zzz")
         zzz.isHidden = true
         head.position = CGPoint(x: LmpTableLayout.catRadius * 1.05, y: LmpTableLayout.catRadius * 0.35)
-        pickTarget()
+        if perch == .shelf {
+            pickTarget()
+        } else {
+            sitUntil = lastNow + Double.random(in: 5...9, using: &rng)
+        }
     }
 
     private func pickTarget() {

@@ -12,6 +12,7 @@ struct LmpTableView: View {
     @State private var scene: LmpTableScene
     @State private var screen: Screen = .menu
     @State private var isPaused = false
+    @State private var showCollection = false      // M6 round 2: the collection book
     @Environment(\.scenePhase) private var scenePhase
 
     /// Lamp amber, the table's accent (the warm light in the shop window).
@@ -49,6 +50,9 @@ struct LmpTableView: View {
                 EmptyView()
             }
         }
+        .fullScreenCover(isPresented: $showCollection) {
+            LmpCollectionView { showCollection = false }
+        }
         .background(Color.black)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -83,6 +87,7 @@ struct LmpTableView: View {
     }
 
     private func gamepadA() {
+        guard !showCollection else { return }
         switch screen {
         case .menu:
             startGame()
@@ -92,7 +97,7 @@ struct LmpTableView: View {
     }
 
     private func gamepadMenu() {
-        guard screen == .playing, !game.isGameOver else { return }
+        guard !showCollection, screen == .playing, !game.isGameOver else { return }
         setPaused(!isPaused)
     }
 
@@ -216,6 +221,7 @@ struct LmpTableView: View {
                 Spacer()
 
                 overlayButton("Play", prominent: true, action: startGame)
+                overlayButton("The Collection") { showCollection = true }
                 cameraButton
 
                 Text("Touch left or right to flip · pull down to launch")
@@ -253,6 +259,16 @@ struct LmpTableView: View {
                 .font(.orbitron(17))
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.75))
+            // M6 round 3: where the cat is and what she does there.
+            VStack(spacing: 2) {
+                Text("The cat is \(game.catPerch.spot)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Self.gold)
+                Text(game.catPerch.effect)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
             overlayButton("Resume", prominent: true) { setPaused(false) }
                 .padding(.top, 8)
             cameraButton
@@ -353,6 +369,7 @@ struct LmpTableView: View {
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.7))
             overlayButton("Play Again", prominent: true, action: startGame)
+            overlayButton("The Collection") { showCollection = true }
                 .padding(.top, 8)
             overlayButton("Menu", action: goToMenu)
         }

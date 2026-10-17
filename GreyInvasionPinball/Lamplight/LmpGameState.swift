@@ -21,6 +21,8 @@ final class LmpGameState {
     var newTonight = 0
     /// M6: a loop combo or a full plunge makes it a lucky evening: better odds on rare books until closing.
     var lucky = false
+    /// M6 round 3: where the cat is tonight (shown on the pause card with what she does there).
+    var catPerch: LmpPerch = .shelf
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
     var bestEvening = UserDefaults.standard.integer(forKey: lmpBestEveningKey)
 

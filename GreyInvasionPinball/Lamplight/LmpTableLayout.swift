@@ -8,7 +8,7 @@ import Foundation
 // Milestone 1: the card and a NEW lower table in grey box (Aaron chose "center post + one outlane"): the flippers sit
 // 11 pt farther apart with a rubber post between their tips, and only the right side has an outlane (the left side is
 // closed: a deflector off the left wall feeds the left inlane).
-// Milestone 2: the upper table in grey box (tools/lmp_render_m2.py): a loop pair joined over the top, the upper flipper
+// Milestone 2: the upper table in grey box (tools/lmp_render_m2.py): a loop pair joined over the top, the upper flipper (removed in M6 v6)
 // low on the LEFT wall, the bookshelf bank across the middle guarding the fireplace hole, the kettle scoop with its
 // spinner up a lane on the left, the mail slot on the right, three teacup bumpers top right.
 // Milestone 3 round 1 (tools/lmp_render_m3.py): the loft, a raised mini-playfield at the top left with its own flipper
@@ -171,7 +171,9 @@ enum LmpTableLayout {
     /// comes round the top and down the other. The left lane's mouth is at y 780 (shot by the right flipper); the
     /// right lane's at y 762 (shot by the left flipper).
     static let leftOrbitInnerX: CGFloat = 62
-    static let leftOrbitMouthY: CGFloat = 780
+    /// T5 M6 v7 (Aaron: the right flipper can't really get up the left loop, its wall comes down too far): the inner
+    /// wall now starts at y 900 (was 780), so shots a few degrees right of the old line still get into the lane.
+    static let leftOrbitMouthY: CGFloat = 900
     static let rightOrbitInnerX: CGFloat = 506
     static let rightOrbitMouthY: CGFloat = 762      // T5 M2 v2: was 720
     static let orbitTopInnerY: CGFloat = 1228
@@ -220,22 +222,10 @@ enum LmpTableLayout {
     /// A plunged ball is marked until it first comes back down below this height (so its trip over the top isn't a loop).
     static let launchedClearY: CGFloat = 700
 
-    /// The upper flipper, low on the left wall. A ball coming down the left lane drops onto it; it shoots the bank,
-    /// the mail slot and the right orbit (a loop combo). On the left button.
-    static let upperFlipperPivot = CGPoint(x: 36, y: 600)
-    static let upperFlipperLength: CGFloat = 64
-    static let upperFlipperPivotRadius: CGFloat = 10
-    static let upperFlipperTipRadius: CGFloat = 5
-    /// From the left wall to the top of the pivot, so a ball can't rest wedged between them.
-    /// T5 M5 v3 (Shot Lab: every upper-flipper ball stayed 19 pt from the pivot): it ended at (31, 609), the pivot's
-    /// top-LEFT. This flipper is left-handed (points right), so its top face leaves the pivot at the top-RIGHT; the
-    /// crown between was bare and the ball sat on it. Now it ends there (as the loft flipper's guide does, mirrored).
-    static var upperFlipperGuide: [CGPoint] {
-        let r = upperFlipperPivotRadius + 1
-        let top = CGPoint(x: upperFlipperPivot.x + r * sin(flipperRestAngle),
-                          y: upperFlipperPivot.y + r * cos(flipperRestAngle))
-        return [CGPoint(x: leftWallX, y: top.y + 30), top]
-    }
+    /// T5 M6 v6 (Aaron: "we can just lose that flipper altogether"): no upper flipper. A ball coming back down the
+    /// left lane falls to the left deflector and into the left inlane. The loft flipper's size lives here now.
+    static let loftFlipperPivotRadius: CGFloat = 10
+    static let loftFlipperTipRadius: CGFloat = 5
 
     /// The bookshelf bank: four book drop targets across the mouth of the fireplace alcove. All four down opens the
     /// fireplace hole behind them; the bank comes back up once the ball has left the alcove.
@@ -286,7 +276,8 @@ enum LmpTableLayout {
     /// T5 M5 v5 (run 3: 60 Hz kettle shots, ~4° left of the lane, bounced off v4's 49° flare out to the right):
     /// the flare now runs almost straight down from the lane's mouth (20° out from the lane's line), so those shots
     /// glance off it into the lane.
-    static let kettleLeftFlareEnd = CGPoint(x: 143, y: 725)
+    /// T5 M6 v7 (Aaron: shorten the part that comes straight down below the kettle): 25 pt long (was 52).
+    static let kettleLeftFlareEnd = CGPoint(x: 146, y: 752)
     static var kettleLaneWall: [CGPoint] {
         let h = kettleLaneHalfWidth
         var pts = [kettleLeftFlareEnd, kettlePoint(along: -kettleLaneLength, side: h)]
@@ -398,7 +389,7 @@ enum LmpTableLayout {
     /// This flipper is right-hand (it points down-left), so its top edge leaves the pivot at the top-LEFT; the ball
     /// sat on the pivot's crown between it and the guide. The guide now ends there, covering the crown.
     static var loftFlipperGuide: [CGPoint] {
-        let r = upperFlipperPivotRadius + 1
+        let r = loftFlipperPivotRadius + 1
         let top = CGPoint(x: loftFlipperPivot.x - r * sin(flipperRestAngle),
                           y: loftFlipperPivot.y + r * cos(flipperRestAngle))
         return [CGPoint(x: loftRightX, y: top.y + 30), top]
@@ -511,6 +502,8 @@ enum LmpTableLayout {
     static let catPetPoints = 250
     static let catWakePoints = 500
     static let catSwatPoints = 100
+    /// M6 round 3: with more than one perch owned, she moves to another one this often (seconds).
+    static let catRoamSeconds: ClosedRange<Double> = 35...55
 
     /// M6: how long a find shows under the score.
     static let findToastSeconds: TimeInterval = 3.0

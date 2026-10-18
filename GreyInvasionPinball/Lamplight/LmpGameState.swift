@@ -30,6 +30,10 @@ final class LmpGameState {
     var rushesTonight = 0
     /// M8: the regular who just came in (their card shows for a few seconds).
     var visitor: LmpRequest?
+    /// The Play Lab's robot is playing (its evenings never count as your best).
+    var isRobot = false
+    /// M8 round 3: tonight's cozy spots (shown on the pause card).
+    var cozy: [LmpCozy] = []
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
     var bestEvening = UserDefaults.standard.integer(forKey: lmpBestEveningKey)
 
@@ -42,7 +46,7 @@ final class LmpGameState {
     func ballDrained() {
         ballOnPlunger = false
         ballsLeft = max(0, ballsLeft - 1)
-        if isGameOver, score > bestEvening {
+        if isGameOver, !isRobot, score > bestEvening {
             bestEvening = score
             UserDefaults.standard.set(score, forKey: lmpBestEveningKey)
         }

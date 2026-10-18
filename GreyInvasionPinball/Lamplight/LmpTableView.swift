@@ -62,6 +62,18 @@ struct LmpTableView: View {
         .onAppear {
             // Game controller: A = Play / Resume / Play Again, Menu = pause (flippers and plunger: the scene)
             LabGamepad.shared.claim("lamplight", onA: { gamepadA() }, onMenu: { gamepadMenu() })
+            #if DEBUG
+            // Launched with `-playlab lamplight`: run the Play Lab unattended (the scene quits the app when it's done).
+            if PlayLab.launchTable == "lamplight" {
+                Task { @MainActor in
+                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }   // the scene is built in didMove
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartPlayLab()
+                }
+            }
+            #endif
         }
         .onDisappear { LabGamepad.shared.release("lamplight") }
         .onChange(of: scenePhase) { _, phase in
@@ -282,6 +294,26 @@ struct LmpTableView: View {
                     .foregroundStyle(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
             }
+            // M8 round 3: the cozy spots and what each piece does.
+            if !game.cozy.isEmpty {
+                VStack(spacing: 4) {
+                    Text("Your cozy spots")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Self.gold)
+                    ForEach(game.cozy, id: \.self) { piece in
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: piece.symbol)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Self.gold)
+                            Text("\(piece.name): \(piece.effect)")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.7))
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
             overlayButton("Resume", prominent: true) { setPaused(false) }
                 .padding(.top, 8)
             cameraButton
@@ -292,6 +324,9 @@ struct LmpTableView: View {
             // Milestone 5: the Shot Lab robot (~40 min in the Simulator; results go to ShotLab/ on the Mac)
             debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
                 .padding(.top, 4)
+            // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator);
+            // report in ShotLab/ on the Mac
+            debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
             #endif
         }
     }

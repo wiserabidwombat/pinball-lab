@@ -36,6 +36,9 @@ final class LmpBall: SKNode {
         }
     }
     var releaseAt: TimeInterval = 0
+    /// T5 M8 v7: window-seat catches on this loft visit (the first scores and finds a book; after that the seat sends
+    /// the ball down the chute). Cleared when the ball leaves the upper layer.
+    var windowSeatCatches = 0
     var scoopIgnoreUntil: TimeInterval = 0
     /// Just plunged: its first trip over the top isn't a loop. Cleared once it comes back down the table.
     var launched = false
@@ -51,6 +54,7 @@ final class LmpBall: SKNode {
     func setUpper(_ up: Bool) {
         guard up != isUpper else { return }
         isUpper = up
+        if !up { windowSeatCatches = 0 }
         zPosition = up ? 30 : 10
         visual.setScale(up ? 1.1 : 1)
         physicsBody?.categoryBitMask = up ? LmpPhysicsCategory.rampBall : LmpPhysicsCategory.ball

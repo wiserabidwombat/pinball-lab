@@ -57,7 +57,7 @@ nonisolated struct LmpShopSave: Codable {
         var firstFound: Date
         var count: Int
     }
-    var version = 2
+    var version = 3
     var daysPlayed = 0
     var tips = 0
     var bestEvening = 0
@@ -68,6 +68,8 @@ nonisolated struct LmpShopSave: Codable {
     var furniture: [String] = []
     /// M8: friendship with each regular (requests finished for them), by regular id.
     var friendship: [String: Int] = [:]
+    /// M8 round 3 (version 3): the pieces in the three cozy spots, by LmpCozy raw value (owned ones are in furniture).
+    var cozy: [String] = []
 
     init() {}
 
@@ -83,7 +85,8 @@ nonisolated struct LmpShopSave: Codable {
         findsSinceUltra = try c.decodeIfPresent(Int.self, forKey: .findsSinceUltra) ?? 0
         furniture = try c.decodeIfPresent([String].self, forKey: .furniture) ?? []
         friendship = try c.decodeIfPresent([String: Int].self, forKey: .friendship) ?? [:]
-        version = 2
+        cozy = try c.decodeIfPresent([String].self, forKey: .cozy) ?? []
+        version = 3
     }
 }
 
@@ -297,6 +300,41 @@ final class LmpShop {
         return true
     }
 
+    // MARK: Cozy spots (M8 round 3)
+
+    static let cozySpots = 3
+
+    func owns(_ piece: LmpCozy) -> Bool { save.furniture.contains(piece.rawValue) }
+
+    func isPlaced(_ piece: LmpCozy) -> Bool { save.cozy.contains(piece.rawValue) }
+
+    /// The pieces in the cozy spots, in the order they were placed (spot 1, 2, 3).
+    var placedCozy: [LmpCozy] { save.cozy.compactMap { LmpCozy(rawValue: $0) } }
+
+    /// Buys a piece with tips; it goes straight into a free cozy spot if there is one.
+    @discardableResult
+    func buy(_ piece: LmpCozy) -> Bool {
+        guard !owns(piece), save.tips >= piece.price else { return false }
+        save.tips -= piece.price
+        save.furniture.append(piece.rawValue)
+        if save.cozy.count < Self.cozySpots { save.cozy.append(piece.rawValue) }
+        write()
+        return true
+    }
+
+    /// Puts an owned piece into a free spot, or takes it out of its spot.
+    func togglePlaced(_ piece: LmpCozy) {
+        guard owns(piece) else { return }
+        if let i = save.cozy.firstIndex(of: piece.rawValue) {
+            save.cozy.remove(at: i)
+        } else if save.cozy.count < Self.cozySpots {
+            save.cozy.append(piece.rawValue)
+        } else {
+            return
+        }
+        write()
+    }
+
     // MARK: Regulars (M8)
 
     /// A finished request: a tip from them and a step of friendship. Returns their new friendship.
@@ -337,7 +375,35 @@ final class LmpShop {
         }
     }
 
+    // MARK: Sandbox (the Play Lab, debug builds)
+
+    /// While the Play Lab runs, the real save waits here and a test save (every perch and cozy piece owned) is used;
+    /// nothing is written to disk.
+    private var realSave: LmpShopSave?
+    var isSandboxed: Bool { realSave != nil }
+
+    func beginSandbox() {
+        guard realSave == nil else { return }
+        realSave = save
+        var test = LmpShopSave()
+        test.furniture = LmpPerch.allCases.filter { $0 != .shelf }.map(\.rawValue) + LmpCozy.allCases.map(\.rawValue)
+        save = test
+    }
+
+    /// The robot evening's cozy pieces.
+    func setSandboxCozy(_ pieces: [LmpCozy]) {
+        guard isSandboxed else { return }
+        save.cozy = pieces.map(\.rawValue)
+    }
+
+    func endSandbox() {
+        guard let real = realSave else { return }
+        save = real
+        realSave = nil
+    }
+
     private func write() {
+        guard realSave == nil else { return }      // the Play Lab's test shop is never saved
         do {
             try FileManager.default.createDirectory(at: Self.fileURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)

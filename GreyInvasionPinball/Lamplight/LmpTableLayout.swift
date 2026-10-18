@@ -378,10 +378,15 @@ enum LmpTableLayout {
                                                       CGPoint(x: 200, y: loftBottomY - 25)]
     }
     /// The block under the loft on the floor layer (its outline is a floor wall).
+    /// T5 M8 v7 (Play Lab: balls stuck at (189, 1213)): the block's roof is now the arch offset by the left lane's 42
+    /// (the inner wall's line) instead of the loft's 52. With 52 there was a 10 pt slot between the end of the lane's
+    /// inner wall (x ~190) and the roof, and a slow ball dropping off the arch onto the roof rolled left into it and
+    /// wedged. Now the roof carries on from the inner wall, so the ball rolls into the lane.
     static var loftBlock: [CGPoint] {
-        [CGPoint(x: leftOrbitInnerX, y: archStartY), CGPoint(x: leftOrbitInnerX, y: loftBottomY),
-         CGPoint(x: loftRightX, y: loftBottomY), loftTopRight] + Array(loftOutline.reversed())
-            + [CGPoint(x: leftOrbitInnerX, y: archStartY)]
+        let roof = archOffset(inset: leftOrbitInnerX - leftWallX, maxX: loftRightX)
+        let roofRight = CGPoint(x: loftRightX, y: roof.last?.y ?? 1225)
+        return [CGPoint(x: leftOrbitInnerX, y: archStartY), CGPoint(x: leftOrbitInnerX, y: loftBottomY),
+                CGPoint(x: loftRightX, y: loftBottomY), roofRight] + Array(roof.reversed())   // ends at the start point
     }
 
     /// The loft flipper: right-hand, at the loft's bottom right, on the RIGHT button. A ball falls onto it from the
@@ -407,6 +412,11 @@ enum LmpTableLayout {
     static let windowSeatCapture: CGFloat = 16
     static let windowSeatEject = CGVector(dx: 300, dy: -80)
     static let windowSeatPoints = 5_000
+    /// T5 M8 v7 (Play Lab: the loft was a farm, good players never came down): one window seat per loft visit. A
+    /// second catch on the same visit scores this little, finds nothing, and kicks the ball at the drain gap left of
+    /// the loft flipper's tip (through (177, 960) about 0.3 s later), so it rolls down the chute to the lower table.
+    static let windowSeatRepeatPoints = 500
+    static let windowSeatDownEject = CGVector(dx: 207, dy: -293)
 
     /// A drained loft ball rolling left down the chute crosses this line inside the left lane and drops to the floor.
     static let loftExitSwitch = LmpSwitch(a: CGPoint(x: 46, y: 850), b: CGPoint(x: 46, y: 960),
@@ -557,6 +567,19 @@ enum LmpTableLayout {
     static let rushLaunchPower: CGFloat = 0.55
     /// During the Rush the next regular comes in this quickly.
     static let rushRequestDelay: TimeInterval = 2
+
+    // MARK: Cozy spots (milestone 8 round 3)
+    /// Three lamps on the left apron, under the slope and below the shop lamps, one per cozy spot.
+    static let cozyLamps: [CGPoint] = [CGPoint(x: 70, y: 148), CGPoint(x: 118, y: 131), CGPoint(x: 166, y: 114)]
+    static let cozyLampRadius: CGFloat = 10
+    /// The grandfather clock's ball save at the start of each ball.
+    /// T5 M8 v8: 8 (was 3). In two Play Lab runs a 3 s save never fired: a ball almost never drains that soon after a
+    /// plunge. 8 s is a real ball save you can feel.
+    static let clockSaveSeconds: TimeInterval = 8
+    /// What the clock adds to the Rush's ball save (unchanged at 3).
+    static let clockRushBonus: TimeInterval = 3
+    /// The library ladder brings the last book down this long after the third falls.
+    static let ladderDelay: TimeInterval = 0.7
 
     // MARK: Rules placeholders
     static let slingPoints = 10

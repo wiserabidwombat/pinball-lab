@@ -18,6 +18,7 @@ struct LmpCollectionView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     header
+                    catalog
                     perches
                     ForEach(LmpShop.genres.map { $0.name }, id: \.self) { genre in
                         shelf(genre)
@@ -88,6 +89,63 @@ struct LmpCollectionView: View {
             .padding(.top, 4)
         }
         .padding(.top, 12)
+    }
+
+    /// M8 round 3: the catalog's cozy pieces. Bought ones go into a free cozy spot; tap to move them in or out.
+    private var catalog: some View {
+        let used = shop.placedCozy.count
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("THE CATALOG")
+                    .font(.orbitron(13, .bold))
+                    .tracking(1.5)
+                    .foregroundStyle(.white.opacity(0.9))
+                Spacer()
+                Text("COZY SPOTS \(used) / \(LmpShop.cozySpots)")
+                    .font(.orbitron(12, .bold))
+                    .foregroundStyle(LmpTableView.gold)
+            }
+            ForEach(LmpCozy.allCases, id: \.self) { piece in
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: piece.symbol)
+                        .font(.system(size: 18))
+                        .foregroundStyle(shop.isPlaced(piece) ? LmpTableView.gold : .white.opacity(0.45))
+                        .frame(width: 26)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(piece.name)
+                            .font(.system(size: 15, weight: .semibold, design: .serif))
+                            .foregroundStyle(.white)
+                        Text(piece.effect)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.65))
+                    }
+                    Spacer(minLength: 8)
+                    if !shop.owns(piece) {
+                        Button("\(piece.price) tips") { shop.buy(piece) }
+                            .font(.orbitron(12, .bold))
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color(red: 0.62, green: 0.40, blue: 0.20))
+                            .disabled(shop.save.tips < piece.price)
+                    } else if shop.isPlaced(piece) {
+                        Button("IN A SPOT") { shop.togglePlaced(piece) }
+                            .font(.orbitron(11, .bold))
+                            .buttonStyle(.bordered)
+                            .tint(LmpTableView.gold)
+                    } else {
+                        Button("PLACE") { shop.togglePlaced(piece) }
+                            .font(.orbitron(11, .bold))
+                            .buttonStyle(.bordered)
+                            .tint(.white)
+                            .disabled(used >= LmpShop.cozySpots)
+                    }
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            }
+            Text("Up to three pieces sit in your cozy spots and change play; tap one you own to take it out or put it back.")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.5))
+        }
     }
 
     /// M6 round 3: the cat's perches. Each one bought adds a spot she roams to; the sentence says what she does there.

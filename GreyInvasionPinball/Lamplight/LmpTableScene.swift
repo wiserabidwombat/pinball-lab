@@ -79,9 +79,26 @@ final class LmpTableScene: SKScene {
     private var rushBallsToServe = 0
     private var rushLaunchAt: TimeInterval = 0
     private var rushSaveUntil: TimeInterval = 0
+    /// M8 round 3: tonight's cozy pieces (read at the start of the evening), the clock's ball save (armed for each new
+    /// ball until it's plunged), the ladder's pending drop, and the icons on the cozy-spot lamps.
+    private var cozy: Set<LmpCozy> = []
+    private var cozySlots: [LmpCozy] = []
+    private var ballSaveUntil: TimeInterval = 0
+    private var ballSaveArmed = false
+    private var ladderDropAt: TimeInterval?
+    private var ladderDropped = false
+    private var cozyIcons: [SKSpriteNode] = []
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
     private var shotLab: ShotLab?
+    /// Play Lab (shared, PlayLab.swift): the run, and when its next game starts.
+    private var playLab: PlayLab?
+    private var playLabNextAt: TimeInterval?
+    private var playLabStarting = false
+    /// The watchdog: where each ball last moved and when, holds already reported, and what it caught in your games.
+    private var watchSpots: [ObjectIdentifier: (CGPoint, TimeInterval)] = [:]
+    private var watchHeld: Set<ObjectIdentifier> = []
+    private var watchLog: [PlayIncident] = []
     private var shotLabTime: TimeInterval = 0
     #endif
     private var windowSeat: LmpScoop!
@@ -101,6 +118,9 @@ final class LmpTableScene: SKScene {
     // Game controller (LabGamepad): the flippers it holds, whether it's pulling the plunger and how far at most,
     // and whether A has been let go since the last Play / Resume (so that press doesn't also pull the plunger).
     private var padLeft = false
+    /// The Play Lab robot's buttons (debug builds; always false otherwise).
+    private var robotLeft = false
+    private var robotRight = false
     private var padRight = false
     private var padPulling = false
     private var padPeakPull: CGFloat = 0
@@ -126,6 +146,7 @@ final class LmpTableScene: SKScene {
             }
             #if DEBUG
             if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
+            if isAttractMode { stopPlayLab(saving: true) }   // and the Play Lab (saving the evenings so far)
             #endif
             refreshCamera()
         }
@@ -259,6 +280,19 @@ final class LmpTableScene: SKScene {
             addChild(lamp)
             lamps.add(lamp, named: "shop\(i)")
         }
+        // M8 round 3: one lamp per cozy spot, with the piece's icon on it.
+        for (i, p) in LmpTableLayout.cozyLamps.enumerated() {
+            let lamp = LmpLamp(.round(radius: LmpTableLayout.cozyLampRadius),
+                               color: SKColor(red: 0.98, green: 0.62, blue: 0.38, alpha: 1), at: p)
+            addChild(lamp)
+            lamps.add(lamp, named: "cozy\(i)")
+            let icon = SKSpriteNode()
+            icon.size = CGSize(width: 12, height: 12)
+            icon.zPosition = 1
+            icon.isHidden = true
+            lamp.addChild(icon)
+            cozyIcons.append(icon)
+        }
         let dim = SKSpriteNode(color: SKColor(red: 0.20, green: 0.09, blue: 0.02, alpha: 1),
                                size: CGSize(width: LmpTableLayout.worldSize.width + 400,
                                             height: LmpTableLayout.worldSize.height + 400))
@@ -280,9 +314,22 @@ final class LmpTableScene: SKScene {
         lamps.set("leftLoop", comboOpen ? .fastBlink : .off)
         lamps.set("rightLoop", comboOpen ? .fastBlink : .off)
         lamps.set("ramp", game.lucky ? .blink : .off)
-        lamps.set("windowSeat", cat.perch == .windowSeat ? .blink : (balls.contains { $0.isUpper } ? .on : .off))
+        lamps.set("windowSeat", cat.perch == .windowSeat ? .blink : (balls.contains { $0.isUpper && $0.windowSeatCatches == 0 } ? .on : .off))
         lamps.set("lucky", game.lucky ? .on : .off)
         lamps.set("mail", .off)
+        // M8 round 3: a placed piece's lamp is lit, and flashes while it's acting.
+        for (i, piece) in cozySlots.enumerated() {
+            let acting: Bool
+            switch piece {
+            case .clock: acting = now < ballSaveUntil
+            case .ladder: acting = ladderDropAt != nil
+            case .teapot: acting = balls.contains { $0.heldIn === kettle }
+            case .shopBell: acting = request == nil && nextRequestAt != nil
+            case .readingLamp: acting = false
+            }
+            lamps.set("cozy\(i)", acting ? .fastBlink : .on)
+        }
+        for i in cozySlots.count..<LmpTableLayout.cozyLamps.count { lamps.set("cozy\(i)", .off) }
         // M8: the request's next shot fast-blinks.
         if let step = request?.step {
             for name in Self.requestLamps(for: step) { lamps.set(name, .fastBlink) }
@@ -611,7 +658,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v3")
+        let label = SKLabelNode(text: "T5 M8 v9")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -657,7 +704,10 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T5 M8 v3 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v9 \(effectiveCameraMode.tag) · \(speed)"
+        #if DEBUG
+        if let lab = playLab { text += "\n" + lab.progressText }
+        #endif
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -686,6 +736,10 @@ final class LmpTableScene: SKScene {
         ball.removeFromParent()
         balls.removeAll(where: { $0 === ball })
         if servedBall === ball { servedBall = nil }
+        #if DEBUG
+        watchSpots[ObjectIdentifier(ball)] = nil
+        watchHeld.remove(ObjectIdentifier(ball))
+        #endif
     }
 
     private func removeAllBalls() {
@@ -709,6 +763,10 @@ final class LmpTableScene: SKScene {
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                              // a new game stops the Shot Lab
+        if !playLabStarting { stopPlayLab(saving: true) }   // and the Play Lab, unless it's starting its next evening
+        watchSpots.removeAll()
+        watchHeld.removeAll()
+        watchLog.removeAll()
         #endif
         fpsLow = 0
         isAttractMode = false
@@ -732,21 +790,29 @@ final class LmpTableScene: SKScene {
         lamps.stopShow()
         eveningStart = gameTime
         request = nil
-        nextRequestAt = gameTime + LmpTableLayout.firstRequestDelay
+        setUpCozy()
+        nextRequestAt = gameTime + LmpTableLayout.firstRequestDelay * requestDelayScale
         rushActive = false
         rushBallsToServe = 0
         rushSaveUntil = 0
         placeBallOnPlunger()
+        startOfBall()
         refreshCamera()
     }
 
     private func showBanner(_ text: String) {
+        #if DEBUG
+        playLab?.banner(text)
+        #endif
         game.banner = text
         bannerClearAt = gameTime + LmpTableLayout.bannerSeconds
     }
 
     private func sfx(_ s: MonSound) {
         if isLabRunning { return }                 // the robot plays silently
+        #if DEBUG
+        if playLab != nil { return }               // and so do the Play Lab's players
+        #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }
 
@@ -801,8 +867,8 @@ final class LmpTableScene: SKScene {
     }
 
     private func updateFlippers() {
-        let left = activeTouches.values.contains(.left) || padLeft
-        let right = activeTouches.values.contains(.right) || padRight
+        let left = activeTouches.values.contains(.left) || padLeft || robotLeft
+        let right = activeTouches.values.contains(.right) || padRight || robotRight
         if left && !leftFlipper.isPressed { sfx(.flipper) }
         if right && !rightFlipper.isPressed { sfx(.flipper) }
         leftFlipper.isPressed = left
@@ -826,6 +892,8 @@ final class LmpTableScene: SKScene {
         let maxPull = LmpTableLayout.plungerMaxPull
         let power = plungerPull < 4 ? LmpTableLayout.tapLaunchPower : plungerPull / maxPull
         if let ball = plungerBall, let body = ball.physicsBody {
+            if ballSaveArmed, has(.clock) { ballSaveUntil = gameTime + LmpTableLayout.clockSaveSeconds }
+            ballSaveArmed = false
             ball.launched = true
             let speed = LmpTableLayout.minLaunchSpeed
                 + power * (LmpTableLayout.maxLaunchSpeed - LmpTableLayout.minLaunchSpeed)
@@ -876,7 +944,10 @@ final class LmpTableScene: SKScene {
     // MARK: - Game loop
 
     override func update(_ realTime: TimeInterval) {
-        let step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        var step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        #if DEBUG
+        if let lab = playLab { step *= Double(lab.physicsSpeed) }   // the Play Lab's pass: 120 Hz or 60 Hz steps
+        #endif
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
@@ -894,6 +965,9 @@ final class LmpTableScene: SKScene {
         let dt = CGFloat(step)
         lastStep = dt
         updateGamepad()
+        #if DEBUG
+        updatePlayLab(now)
+        #endif
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         loftFlipper.step(dt: dt)
@@ -931,19 +1005,36 @@ final class LmpTableScene: SKScene {
                 showBanner("SAVED · BALL BACK IN")
             } else if rushActive, balls.count + rushBallsToServe <= 1 {
                 endRush()
+            } else if !rushActive, now < ballSaveUntil {
+                // M8 round 3: the grandfather clock's save at the start of a ball (once per ball).
+                ballSaveUntil = 0
+                rushBallsToServe += drained.count
+                rushLaunchAt = now + 0.6
+                showBanner("GRANDFATHER CLOCK · BALL SAVED")
             }
             if balls.isEmpty, rushBallsToServe == 0, nextBallAt == nil {
                 cameraRig.shake(strength: 4, duration: 0.3)
                 sfx(.drain)
                 game.ballDrained()
-                if !game.isGameOver { nextBallAt = now + 1.0 } else { LmpShop.shared.endEvening(score: game.score) }
+                if !game.isGameOver { nextBallAt = now + 1.0 } else {
+                    LmpShop.shared.endEvening(score: game.score)
+                    #if DEBUG
+                    saveWatchLog()
+                    #endif
+                }
             }
         }
 
         if let due = nextBallAt, now >= due {
             nextBallAt = nil
             placeBallOnPlunger()
+            startOfBall()
         }
+
+        #if DEBUG
+        runWatchdog(now)
+        checkPlayLabGame(now)
+        #endif
 
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
@@ -1001,6 +1092,7 @@ final class LmpTableScene: SKScene {
         if isLabRunning { return }
         let find = LmpShop.shared.find(from: source, lucky: game.lucky)
         game.findsTonight += 1
+        labObjective("find")
         if find.isNew { game.newTonight += 1 }
         game.findToast = find
         findToastClearAt = gameTime + LmpTableLayout.findToastSeconds
@@ -1041,13 +1133,15 @@ final class LmpTableScene: SKScene {
         if r.isDone {
             request = nil
             game.requestsTonight += 1
+            labObjective("request")
             game.add(LmpTableLayout.requestPoints * (rushActive ? 2 : 1))
             let level = LmpShop.shared.finishRequest(for: r.regular)
             showBanner("THANK YOU! · \(r.regular.name.uppercased()) · FRIENDSHIP \(level)" + (rushActive ? " · ×2" : ""))
             sfx(.lanesComplete)
             if !rushActive, game.requestsTonight % LmpTableLayout.rushEvery == 0 { startRush() }
             game.status = statusText(nil)
-            nextRequestAt = gameTime + (rushActive ? LmpTableLayout.rushRequestDelay : LmpTableLayout.nextRequestDelay)
+            nextRequestAt = gameTime + (rushActive ? LmpTableLayout.rushRequestDelay
+                                                   : LmpTableLayout.nextRequestDelay * requestDelayScale)
         } else {
             request = r
             game.status = statusText(r)
@@ -1061,12 +1155,53 @@ final class LmpTableScene: SKScene {
         return "RUSH ×2 · " + (r?.status ?? "the next regular's on the way")
     }
 
+    // MARK: - Cozy spots (milestone 8 round 3)
+
+    /// Whether a cozy piece is in a spot tonight (never for the Shot Lab robot).
+    private func has(_ piece: LmpCozy) -> Bool { !isLabRunning && cozy.contains(piece) }
+
+    /// The shop bell brings regulars in twice as fast.
+    private var requestDelayScale: Double { has(.shopBell) ? 0.5 : 1 }
+
+    /// Reads tonight's cozy spots and puts each piece's icon on its lamp.
+    private func setUpCozy() {
+        let placed = LmpShop.shared.placedCozy
+        cozy = Set(placed)
+        cozySlots = Array(placed.prefix(LmpTableLayout.cozyLamps.count))
+        game.cozy = placed
+        ballSaveUntil = 0
+        ballSaveArmed = false
+        ladderDropAt = nil
+        ladderDropped = false
+        for (i, icon) in cozyIcons.enumerated() {
+            if i < cozySlots.count,
+               let image = UIImage(systemName: cozySlots[i].symbol)?.withTintColor(.white, renderingMode: .alwaysOriginal) {
+                icon.texture = SKTexture(image: image)
+                icon.isHidden = false
+            } else {
+                icon.isHidden = true
+            }
+        }
+    }
+
+    /// A new ball on the plunger: the clock's save is armed for its plunge, and the reading lamp opens the fireplace.
+    private func startOfBall() {
+        ballSaveArmed = true
+        ballSaveUntil = 0
+        if has(.readingLamp), !bookTargets.allSatisfy({ $0.isDown }) {
+            bookTargets.forEach { $0.drop() }
+            pendingDrops.removeAll()
+            showBanner("READING LAMP · FIREPLACE OPEN")
+        }
+    }
+
     // MARK: - The Evening Rush (milestone 8 round 2)
 
     /// Enough requests done: the door opens, a second ball is plunged in for you and requests pay double.
     private func startRush() {
         rushActive = true
         game.rushesTonight += 1
+        labObjective("rush")
         rushBallsToServe = 1
         rushLaunchAt = gameTime + LmpTableLayout.rushLaunchDelay
         rushSaveUntil = .infinity                      // the save starts when the Rush ball goes in
@@ -1080,7 +1215,9 @@ final class LmpTableScene: SKScene {
         guard rushBallsToServe > 0, now >= rushLaunchAt, !isBallOnPlunger else { return }
         rushBallsToServe -= 1
         rushLaunchAt = now + 0.8
-        if rushSaveUntil == .infinity { rushSaveUntil = now + LmpTableLayout.rushSaveSeconds }
+        if rushSaveUntil == .infinity {
+            rushSaveUntil = now + LmpTableLayout.rushSaveSeconds + (has(.clock) ? LmpTableLayout.clockRushBonus : 0)
+        }
         let ball = placeBallOnPlunger()
         ball.launched = true
         let speed = LmpTableLayout.minLaunchSpeed
@@ -1102,6 +1239,7 @@ final class LmpTableScene: SKScene {
     private func makeLucky() {
         guard !game.lucky, !isLabRunning else { return }
         game.lucky = true
+        labObjective("luckyEvening")
         showBanner("LUCKY EVENING")
     }
 
@@ -1138,6 +1276,7 @@ final class LmpTableScene: SKScene {
         if LmpTableLayout.rampMadeSwitch.crossing(from: p0, to: p) == .forward {
             game.add(LmpTableLayout.rampPoints)
             shotEvent("ramp")
+            labObjective("loft")
             requestEvent(.ramp)
             requestEvent(.loft)
             showBanner("UP TO THE LOFT")
@@ -1149,6 +1288,11 @@ final class LmpTableScene: SKScene {
         let outside = p.y < LmpTableLayout.rampMouth.y - 40
             || p.x > LmpTableLayout.rampMouthRightX + 30
             || (p.x > LmpTableLayout.loftRightX + 5 && p.y > LmpTableLayout.loftDoorTop + 25)
+            // T5 M8 v9 (Play Lab: two balls flew off the left side at (-30, 834) and (-33, 846)): an upper ball left
+            // of the loft's left wall is in the left lane, with no upper-layer wall between it and the edge of the
+            // table. It happens when a ball leaves the loft over the left end of its slope, above the exit switch.
+            // The loft never reaches left of x 72, so anything left of the lane's inner wall goes back on the floor.
+            || p.x < LmpTableLayout.leftOrbitInnerX - LmpTableLayout.ballRadius - 1
         if LmpTableLayout.rampEntrySwitch.crossing(from: p0, to: p) == .backward
             || LmpTableLayout.loftExitSwitch.crossing(from: p0, to: p) == .forward
             || outside {
@@ -1169,6 +1313,7 @@ final class LmpTableScene: SKScene {
                 startRide(ball, to: LmpTableLayout.loftHatch, seconds: LmpTableLayout.loftHatchSeconds,
                           exit: LmpTableLayout.loftHatchExitVelocity)
                 game.add(LmpTableLayout.fullPlungePoints)
+                labObjective("loft")
                 showBanner("FULL PLUNGE · THE LOFT")
                 requestEvent(.loft)
                 sfx(.skillShot)
@@ -1178,6 +1323,7 @@ final class LmpTableScene: SKScene {
         }
         if gameTime - lastLoopAt <= LmpTableLayout.loopComboWindow {
             loopCombo += 1
+            labObjective("loopCombo")
             game.add(LmpTableLayout.loopPoints + LmpTableLayout.loopComboPoints * loopCombo)
             showBanner("LOOP COMBO × \(loopCombo + 1)")
             makeLucky()
@@ -1201,11 +1347,27 @@ final class LmpTableScene: SKScene {
             pendingDrops.removeAll()
             if bookTargets.allSatisfy({ $0.isDown }) {
                 game.add(LmpTableLayout.bankCompletePoints)
-                showBanner("FIREPLACE OPEN")
+                labObjective("fireplaceOpen")
+                showBanner(ladderDropped ? "LIBRARY LADDER · FIREPLACE OPEN" : "FIREPLACE OPEN")
+                ladderDropped = false
                 sfx(.lanesComplete)
                 awardFind(from: .shelf)
                 requestEvent(.bookshelf)
             }
+        }
+        // M8 round 3: the library ladder brings the last book down.
+        let up = bookTargets.filter { !$0.isDown }
+        if has(.ladder), up.count == 1, bookTargets.count > 1 {
+            if ladderDropAt == nil { ladderDropAt = now + LmpTableLayout.ladderDelay }
+            if let due = ladderDropAt, now >= due, let last = up.first {
+                ladderDropAt = nil
+                if last.registerHit() {
+                    ladderDropped = true
+                    pendingDrops.append(last)
+                }
+            }
+        } else {
+            ladderDropAt = nil
         }
         if let due = bankResetAt, now >= due, !balls.contains(where: { isInAlcove($0.position) }) {
             bankResetAt = nil
@@ -1236,6 +1398,7 @@ final class LmpTableScene: SKScene {
                         startRide(ball, to: LmpTableLayout.dumbwaiterExit, seconds: LmpTableLayout.dumbwaiterSeconds,
                                   exit: LmpTableLayout.dumbwaiterExitVelocity)
                         game.add(LmpTableLayout.dumbwaiterPoints)
+                        labObjective("loft")
                         showBanner("DUMBWAITER")
                         requestEvent(.loft)
                         sfx(.upKick)
@@ -1243,7 +1406,8 @@ final class LmpTableScene: SKScene {
                     }
                     if scoop === kettle { dumbwaiterLit = true }
                     body.affectedByGravity = true
-                    body.velocity = scoop.ejectVelocity
+                    body.velocity = scoop === windowSeat && ball.windowSeatCatches > 1
+                        ? LmpTableLayout.windowSeatDownEject : scoop.ejectVelocity
                     sfx(.scoopOut)
                     if scoop === fireplace { bankResetAt = now + LmpTableLayout.bankResetDelay }
                 }
@@ -1259,15 +1423,30 @@ final class LmpTableScene: SKScene {
             }) else { continue }
             if scoop === mailSlot, hypot(v.dx, v.dy) > LmpTableLayout.mailMaxSpeed { continue }
             ball.heldIn = scoop
-            ball.releaseAt = now + LmpTableLayout.scoopHold
+            ball.releaseAt = now + LmpTableLayout.scoopHold * (scoop === kettle && has(.teapot) ? 0.5 : 1)
             body.affectedByGravity = false
             body.velocity = .zero
+            // T5 M8 v7: one window seat per loft visit; a second one sends the ball back downstairs.
+            if scoop === windowSeat {
+                ball.windowSeatCatches += 1
+                if ball.windowSeatCatches > 1 {
+                    game.add(LmpTableLayout.windowSeatRepeatPoints)
+                    shotEvent("windowSeatRepeat")
+                    scoop.flash()
+                    sfx(.scoopIn)
+                    showBanner("WINDOW SEAT · BACK DOWNSTAIRS")
+                    continue
+                }
+            }
             game.add(scoop.points)
             if scoop === kettle, cat.perch == .kettle, !isLabRunning {
                 game.add(scoop.points)                 // her perch: the kettle scores double
             }
             shotEvent(scoop === fireplace ? "fireplace" : scoop === kettle ? "kettle"
                       : scoop === windowSeat ? "windowSeat" : "mail")
+            if scoop !== kettle {
+                labObjective(scoop === fireplace ? "fireplace" : scoop === windowSeat ? "windowSeat" : "mail")
+            }
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
             sfx(scoop === fireplace ? .jackpot : .scoopIn)
             showBanner(scoop === fireplace ? "FIREPLACE" : scoop === kettle ? "KETTLE"
@@ -1333,6 +1512,7 @@ final class LmpTableScene: SKScene {
                 case .woke:
                     game.add(LmpTableLayout.catWakePoints)
                     shotEvent("cat")
+                    labObjective("cat")
                     showBanner("MRRP?!")
                     awardFind(from: .cat)
                     sfx(.captiveKnock)
@@ -1382,6 +1562,14 @@ extension LmpTableScene {
     fileprivate func shotEvent(_ name: String) {
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
+        playLab?.shot(name, now: gameTime)
+        #endif
+    }
+
+    /// One of the table's objectives (playLabObjectives) happened; for the Play Lab's record, nothing in play.
+    fileprivate func labObjective(_ name: String) {
+        #if DEBUG
+        playLab?.objective(name, now: gameTime)
         #endif
     }
 
@@ -1390,6 +1578,7 @@ extension LmpTableScene {
     /// upper and loft flippers, at 120 Hz and 60 Hz physics steps (768 trials, ~40 min in the Simulator). Results go to
     /// ShotLab/ on the Mac. Menu or a new game stops it.
     func debugStartShotLab() {
+        stopPlayLab(saving: true)                  // the Play Lab and the Shot Lab never run together
         isAttractMode = false
         shotLabTime = 0
         shotLab = ShotLab(host: self)
@@ -1504,3 +1693,241 @@ extension LmpTableScene: SKPhysicsContactDelegate {
         MainActor.assumeIsolated { handleContact(contact) }
     }
 }
+
+// MARK: - Play Lab and watchdog (debug builds)
+
+#if DEBUG
+extension LmpTableScene: PlayLabHost {
+    var playLabTableName: String { shotLabTableName }
+    var playLabBallRadius: CGFloat { LmpTableLayout.ballRadius }
+
+    /// The table's goals as the How to Play will describe them (reported with labObjective as they happen).
+    var playLabObjectives: [PlayObjective] {
+        [PlayObjective(name: "request", text: "Finish a regular's request (the shots on their card, in order)"),
+         PlayObjective(name: "rush", text: "Finish 3 requests in an evening to start the Evening Rush (2 balls, requests ×2)"),
+         PlayObjective(name: "fireplaceOpen", text: "Knock down all four books to open the fireplace"),
+         PlayObjective(name: "fireplace", text: "Shoot the open fireplace"),
+         PlayObjective(name: "find", text: "Find a book (bookshelf, fireplace, window seat, or waking the cat)"),
+         PlayObjective(name: "loft", text: "Reach the loft (the ramp, the dumbwaiter or a full plunge)"),
+         PlayObjective(name: "windowSeat", text: "Shoot the window seat from the loft flipper"),
+         PlayObjective(name: "loopCombo", text: "Make two loops within 5 s"),
+         PlayObjective(name: "luckyEvening", text: "A loop combo or a full plunge: better odds on rare books"),
+         PlayObjective(name: "mail", text: "Post a letter in the mail slot"),
+         PlayObjective(name: "cat", text: "Wake the napping cat")]
+    }
+
+    /// The robot's flippers: the Shot Lab's cradles, and the flip delay (from dropping a cradled flipper) at the middle
+    /// of each shot's window in the Shot Lab runs at 120 Hz.
+    var playLabFlippers: [PlayRobotFlipper] {
+        let specs = shotLabFlippers
+        let rest = LmpTableLayout.flipperRestAngle
+        return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
+                                 shots: [("bookTarget", 0.34), ("fireplace", 0.344), ("ramp", 0.443), ("mail", 0.467),
+                                         ("rightLoop", 0.51)]),
+                PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
+                                 shots: [("bookTarget", 0.34), ("kettle", 0.445), ("leftLoop", 0.503)]),
+                PlayRobotFlipper(name: "loft", pivot: specs[2].pivot, length: LmpTableLayout.loftFlipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: true,
+                                 shots: [("windowSeat", 0.347)])]
+    }
+
+    /// The cozy pieces rotate: 3 of the 5 per game, a different three each time.
+    var playLabVariantCount: Int { LmpCozy.allCases.count }
+
+    func playLabStartGame(variant: Int) -> String {
+        let pieces = LmpCozy.allCases
+        let cozy = (0..<3).map { pieces[(variant + $0) % pieces.count] }
+        LmpShop.shared.setSandboxCozy(cozy)
+        game.isRobot = true
+        playLabStarting = true
+        newGame()
+        playLabStarting = false
+        physicsWorld.speed = playLab?.physicsSpeed ?? 1
+        return cozy.map(\.rawValue).joined(separator: ",")
+    }
+
+    func playLabEndGame() -> [String: Int] {
+        if !game.isGameOver {
+            removeAllBalls()
+            nextBallAt = nil
+            rushBallsToServe = 0
+        }
+        return ["requests": game.requestsTonight, "rushes": game.rushesTonight,
+                "finds": game.findsTonight, "newBooks": game.newTonight]
+    }
+
+    func playLabStop() {
+        LmpShop.shared.endSandbox()
+        game.isRobot = false
+    }
+
+    /// Starts the Play Lab: robot players at four skills, two games each at 120 Hz and 60 Hz steps (or as the
+    /// launch arguments say), with the shop sandboxed. Menu or a new game stops it (saving the games played so far).
+    func debugStartPlayLab() {
+        shotLab = nil
+        stopPlayLab(saving: true)                  // a run already going is saved first
+        LmpShop.shared.beginSandbox()
+        let lab = PlayLab(host: self)
+        playLab = lab
+        lab.beginGame(now: gameTime)
+    }
+
+    /// Everything the robot needs to know this frame, and its buttons and plunger applied.
+    fileprivate func updatePlayLab(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if game.isGameOver || playLabNextAt != nil {
+            if robotLeft || robotRight { robotLeft = false; robotRight = false; updateFlippers() }
+            return
+        }
+        let view = PlayRobotView(now: now, balls: balls.map { b in
+            PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: b.isUpper,
+                               isHeld: b.heldIn != nil || b.ride != nil, onPlunger: isOnPlunger(b))
+        }, wanted: robotWanted())
+        guard let cmd = lab.frame(view) else { return }
+        if cmd.left != robotLeft || cmd.right != robotRight {
+            robotLeft = cmd.left
+            robotRight = cmd.right
+            updateFlippers()
+        }
+        if let power = cmd.plunge, isBallOnPlunger {
+            plungerPull = power * LmpTableLayout.plungerMaxPull
+            releasePlunger()
+        }
+    }
+
+    /// The shots the table wants, most wanted first: the request's next step, then what the lamps say (a
+    /// fast-blinking arrow before a blinking one), then the shots worth taking anyway.
+    private func robotWanted() -> [String] {
+        var w: [String] = []
+        if let step = request?.step {
+            switch step {
+            case .bookshelf: w += ["bookTarget"]
+            case .loop: w += ["leftLoop", "rightLoop"]
+            case .ramp: w += ["ramp"]
+            case .kettle: w += ["kettle"]
+            case .mail: w += ["mail"]
+            case .loft: w += dumbwaiterLit ? ["ramp", "kettle"] : ["ramp"]
+            }
+        }
+        let shots = ["fireplace", "leftLoop", "rightLoop", "ramp", "kettle", "mail", "windowSeat"]
+        w += shots.filter { lamps.state(of: $0) == .fastBlink }
+        w += shots.filter { lamps.state(of: $0) == .blink }
+        w += ["windowSeat", "bookTarget", "ramp"]
+        return w
+    }
+
+    /// At game over (or after the cap) the game is recorded; the next one starts 2 s later.
+    fileprivate func checkPlayLabGame(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if let due = playLabNextAt {
+            if now >= due {
+                playLabNextAt = nil
+                if lab.isDone { finishPlayLab() } else { lab.beginGame(now: now) }
+            }
+            return
+        }
+        guard lab.current != nil, game.isGameOver || lab.isTimeUp(now: now) else { return }
+        let over = game.isGameOver
+        lab.endGame(score: game.score,
+                    ballsPlayed: LmpTableLayout.ballsPerGame - game.ballsLeft + (over ? 0 : 1),
+                    endedBy: over ? "gameOver" : "time", now: now)
+        physicsWorld.speed = lab.physicsSpeed      // the next game's pass, so the 2 s wait runs at its rate
+        playLabNextAt = now + 2
+    }
+
+    private func finishPlayLab() {
+        guard let lab = playLab else { return }
+        let saved = lab.save()
+        let count = lab.games.count
+        stopPlayLab(saving: false)
+        newGame()
+        game.banner = "PLAY LAB DONE · \(count) GAMES · \(saved)"
+        bannerClearAt = nil
+        PlayLab.quitIfLaunchedForLab()
+    }
+
+    /// Stops the Play Lab and puts your shop back.
+    fileprivate func stopPlayLab(saving: Bool) {
+        guard let lab = playLab else { return }
+        playLab = nil
+        lab.stop(saving: saving)
+        playLabNextAt = nil
+        robotLeft = false
+        robotRight = false
+        if leftFlipper != nil { updateFlippers() }
+        physicsWorld.speed = isAttractMode ? 0 : 1
+    }
+
+    // MARK: Watchdog
+
+    /// Every frame of play: a ball off the table, a ball that hasn't moved 4 pt in 5 s (not held, riding, on the
+    /// plunger or cradled), or a hole that never let go. Stuck and lost balls are put back on the plunger and
+    /// plunged for you, with a banner giving where it was.
+    fileprivate func runWatchdog(_ now: TimeInterval) {
+        let w = LmpTableLayout.worldSize
+        for ball in balls {
+            let id = ObjectIdentifier(ball)
+            let p = ball.position
+            if !p.x.isFinite || !p.y.isFinite || p.x < -30 || p.x > w.width + 30 || p.y > w.height + 30 {
+                watchdogRescue("offTable", ball, now)
+                continue
+            }
+            if ball.heldIn != nil {
+                if now > ball.releaseAt + 3, !watchHeld.contains(id) {
+                    watchHeld.insert(id)
+                    recordIncident(PlayIncident(kind: "heldTooLong", x: Double(p.x), y: Double(p.y), upper: ball.isUpper,
+                                               time: (now - eveningStart).rounded()))
+                }
+                watchSpots[id] = (p, now)
+                continue
+            }
+            watchHeld.remove(id)
+            if ball.ride != nil || isOnPlunger(ball) || isCradled(ball) || p.y < 0 {
+                watchSpots[id] = (p, now)
+                continue
+            }
+            if let spot = watchSpots[id], hypot(p.x - spot.0.x, p.y - spot.0.y) < 4 {
+                if now - spot.1 > 5 { watchdogRescue("stuck", ball, now) }
+            } else {
+                watchSpots[id] = (p, now)
+            }
+        }
+    }
+
+    /// A ball resting on a raised flipper is being held on purpose.
+    private func isCradled(_ ball: LmpBall) -> Bool {
+        let specs = shotLabFlippers
+        let raised = [leftFlipper.isPressed, rightFlipper.isPressed, loftFlipper.isPressed]
+        for (i, spec) in specs.enumerated() where i < raised.count && raised[i] {
+            if hypot(ball.position.x - spec.cradle.x, ball.position.y - spec.cradle.y) < 30 { return true }
+        }
+        return false
+    }
+
+    private func watchdogRescue(_ kind: String, _ ball: LmpBall, _ now: TimeInterval) {
+        let p = ball.position
+        let x = p.x.isFinite ? Double(p.x) : -1, y = p.y.isFinite ? Double(p.y) : -1
+        recordIncident(PlayIncident(kind: kind, x: x.rounded(), y: y.rounded(), upper: ball.isUpper,
+                                   time: (now - eveningStart).rounded()))
+        watchSpots[ObjectIdentifier(ball)] = nil
+        removeBall(ball)
+        rushBallsToServe += 1
+        rushLaunchAt = now + 0.5
+        showBanner("WATCHDOG · \(kind == "stuck" ? "STUCK BALL" : "BALL OFF THE TABLE") AT \(Int(x)), \(Int(y))")
+    }
+
+    private func recordIncident(_ incident: PlayIncident) {
+        if let lab = playLab { lab.incident(incident) } else { watchLog.append(incident) }
+    }
+
+    /// Your own evening's watchdog catches, if any (in the Simulator they land in ShotLab/ on the Mac).
+    fileprivate func saveWatchLog() {
+        guard playLab == nil, !watchLog.isEmpty else { return }
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        _ = LabFiles.write(watchLog, prefix: "watchdog", table: shotLabTableName, stamp: stamp)
+        watchLog.removeAll()
+    }
+}
+#endif

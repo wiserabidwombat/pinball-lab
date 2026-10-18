@@ -127,19 +127,37 @@ final class LmpBall: SKNode {
 
     private func updateCollisionMask() {
         guard let body = physicsBody else { return }
+        var mask: UInt32
         if ride != nil {
-            body.collisionBitMask = 0
-            return
+            mask = 0
+        } else if isUpper {
+            mask = LmpPhysicsCategory.rampWall | LmpPhysicsCategory.loftFlipper
+        } else {
+            mask = LmpPhysicsCategory.wall | LmpPhysicsCategory.flipper | LmpPhysicsCategory.slingshot
+                | LmpPhysicsCategory.bumper | LmpPhysicsCategory.target | LmpPhysicsCategory.ball
+                | LmpPhysicsCategory.toy
+            if launchGateSolid { mask |= LmpPhysicsCategory.launchGate }
+            if orbitDeflectorSolid { mask |= LmpPhysicsCategory.orbitDeflector }
         }
-        if isUpper {
-            body.collisionBitMask = LmpPhysicsCategory.rampWall | LmpPhysicsCategory.loftFlipper
-            return
-        }
-        var mask = LmpPhysicsCategory.wall | LmpPhysicsCategory.flipper | LmpPhysicsCategory.slingshot
-            | LmpPhysicsCategory.bumper | LmpPhysicsCategory.target | LmpPhysicsCategory.ball
-            | LmpPhysicsCategory.toy
-        if launchGateSolid { mask |= LmpPhysicsCategory.launchGate }
-        if orbitDeflectorSolid { mask |= LmpPhysicsCategory.orbitDeflector }
+        let old = body.collisionBitMask
+        guard old != mask else { return }
         body.collisionBitMask = mask
+        // Only a change of layer or the start / end of a ride needs it (the gates flip often; they stay as they were).
+        let layerOf = { (m: UInt32) in m == 0 ? 0 : (m & LmpPhysicsCategory.rampWall != 0 ? 1 : 2) }
+        if layerOf(old) != layerOf(mask) { refreshContacts(body) }
+    }
+
+    /// T5 M8 v14 (Play Lab: a ball flew straight through the left wall at (-31, 836) just after leaving the loft):
+    /// the physics engine only checks the masks when a ball first comes near a wall. A ball rolling down the loft's
+    /// chute on the upper layer is already "near" the left wall (x 20) when the exit switch at x 46 puts it on the
+    /// floor, so the wall was still being ignored and the ball could pass through it before the pair was checked again.
+    /// Taking the body out of the world and putting it back makes every pair be checked with the new masks at once.
+    private func refreshContacts(_ body: SKPhysicsBody) {
+        guard parent != nil else { return }
+        let v = body.velocity, spin = body.angularVelocity
+        physicsBody = nil
+        physicsBody = body
+        body.velocity = v
+        body.angularVelocity = spin
     }
 }

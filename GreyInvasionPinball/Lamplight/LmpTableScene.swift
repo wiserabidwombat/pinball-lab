@@ -668,7 +668,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v11")
+        let label = SKLabelNode(text: "T5 M8 v14")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -714,7 +714,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v11 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v14 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1060,6 +1060,16 @@ final class LmpTableScene: SKScene {
         let line = LmpTableLayout.rightOutlaneLine
         for ball in balls {
             guard let body = ball.physicsBody else { continue }
+            // T5 M8 v12: a flip gives the ball its full speed at 60 Hz too (the loft flipper for loft balls).
+            if ball.ride == nil, ball.heldIn == nil {
+                let r = LmpTableLayout.ballRadius
+                if ball.isUpper {
+                    loftFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                } else {
+                    leftFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                    rightFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                }
+            }
             let v = body.velocity
             let speed = hypot(v.dx, v.dy)
             if speed > LmpTableLayout.maxBallSpeed {
@@ -1775,17 +1785,18 @@ extension LmpTableScene: PlayLabHost {
         // 120 Hz, 0.319–0.330 at 60 Hz) from both flippers; the robot uses the first.
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
-                                 shots: [("bookTarget", 0.34), ("fireplace", 0.307), ("ramp", 0.443), ("mail", 0.467),
-                                         ("rightLoop", 0.51)],
-                                 shots60: [("bookTarget", 0.36), ("fireplace", 0.325), ("leftLoop", 0.473), ("rightLoop", 0.491),
-                                           ("mail", 0.507)]),
+                                 // T5 M8 v13: centres from the Shot Lab sweep after the flip assist (2026-10-18T19-35)
+                                 shots: [("bookTarget", 0.322), ("fireplace", 0.307), ("ramp", 0.441), ("mail", 0.486),
+                                         ("rightLoop", 0.502)],
+                                 shots60: [("bookTarget", 0.333), ("fireplace", 0.325), ("ramp", 0.425), ("mail", 0.445),
+                                           ("rightLoop", 0.490)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
-                                 shots: [("bookTarget", 0.34), ("fireplace", 0.307), ("kettle", 0.445), ("leftLoop", 0.503)],
-                                 shots60: [("bookTarget", 0.36), ("fireplace", 0.325), ("kettle", 0.433)]),
+                                 shots: [("bookTarget", 0.322), ("fireplace", 0.307), ("kettle", 0.433), ("leftLoop", 0.494)],
+                                 shots60: [("bookTarget", 0.334), ("fireplace", 0.325), ("kettle", 0.416), ("leftLoop", 0.459)]),
                 PlayRobotFlipper(name: "loft", pivot: specs[2].pivot, length: LmpTableLayout.loftFlipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: true,
-                                 shots: [("windowSeat", 0.347)], shots60: [("windowSeat", 0.333)])]
+                                 shots: [("windowSeat", 0.345)], shots60: [("windowSeat", 0.332)])]
     }
 
     /// The cozy pieces rotate: 3 of the 5 per game, a different three each time.

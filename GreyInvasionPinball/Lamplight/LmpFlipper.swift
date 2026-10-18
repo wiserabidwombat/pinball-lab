@@ -27,6 +27,9 @@ final class LmpFlipper: SKNode {
     private let length: CGFloat
     private let pivotRadius: CGFloat
     private let tipRadius: CGFloat
+    /// T5 M8 v12: how far it was raised when this frame's step() ran, and that frame's length (for flipAssist).
+    private var raisedAtStep: CGFloat = 0
+    private var stepDt: CGFloat = 1.0 / 120
 
     init(side: Side, pivot: CGPoint,
          length: CGFloat = LmpTableLayout.flipperLength,
@@ -71,12 +74,41 @@ final class LmpFlipper: SKNode {
         if raised < -slack || raised > travel + slack {
             zRotation = restRotation + raiseSign * min(max(raised, 0), travel)
         }
+        raisedAtStep = raised                                  // after the safety net, so a snap-back isn't a swing
+        stepDt = dt
 
         let target: CGFloat = isPressed ? travel : 0
         let wanted = (target - raised) / dt
         let speed = min(max(wanted, -LmpTableLayout.flipperDownSpeed), LmpTableLayout.flipperUpSpeed)
         body.isResting = false                        // a sleeping body ignores new velocities
         body.angularVelocity = raiseSign * speed
+    }
+
+    /// T5 M8 v12 (Play Lab / Shot Lab: at 60 Hz the same flip sent the ball ~15% slower than at 120 Hz, so the left loop
+    /// stalled short of the top and the ramp had no window): at 60 Hz the flipper swings a quarter of its travel per
+    /// physics step and part of the hit is lost untangling the overlap. Call after the physics step: if this flipper
+    /// swung up this frame and the ball is touching its top face, the ball leaves at least as fast (along the face's
+    /// normal) as that point of the face was moving. It never slows a ball, and does nothing at rest or when held up.
+    func flipAssist(_ body: SKPhysicsBody, ballAt p: CGPoint, ballRadius: CGFloat) {
+        let swung = raised - raisedAtStep
+        guard isPressed, swung > 0.02, stepDt > 0 else { return }   // a real flip step is 0.2–0.4 rad
+        let omega = min(swung / stepDt, LmpTableLayout.flipperUpSpeed)   // this frame's angular speed (rad/s)
+        // The ball in the flipper's own frame (arm along +x for the left flipper, −x for the right).
+        let dx = p.x - position.x, dy = p.y - position.y
+        let c = cos(zRotation), s = sin(zRotation)
+        let lx = dx * c + dy * s
+        let ly = -dx * s + dy * c
+        let along = side == .left ? lx : -lx                      // distance out along the arm
+        guard along > -pivotRadius, along < length, ly > 0 else { return }
+        let t = min(max(along / length, 0), 1)
+        let half = pivotRadius + (tipRadius - pivotRadius) * t
+        guard ly - half - ballRadius < 3 else { return }          // touching the top face (3 pt of slack)
+        let surface = omega * max(along, 0)                       // the face's speed at that point
+        let n = CGVector(dx: -s, dy: c)                           // the top face's normal in the scene
+        let v = body.velocity
+        let vn = v.dx * n.dx + v.dy * n.dy
+        guard vn < surface else { return }
+        body.velocity = CGVector(dx: v.dx + (surface - vn) * n.dx, dy: v.dy + (surface - vn) * n.dy)
     }
 
     private func buildShape() {

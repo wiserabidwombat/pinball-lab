@@ -455,6 +455,17 @@ struct LmpTableView: View {
                         .foregroundStyle(Self.gold)
                 }
             }
+            // M8 round 5: tonight's Festival Night, or how close the season's festival is.
+            if let festival = game.festivalTonight {
+                Text("Festival Night · the \(festival)")
+                    .font(.orbitron(14, .bold))
+                    .foregroundStyle(Self.gold)
+            } else if !game.festivalLine.isEmpty {
+                Text(game.festivalLine)
+                    .font(.system(size: 13, design: .serif))
+                    .italic()
+                    .foregroundStyle(.white.opacity(0.7))
+            }
             // M8: the regulars helped tonight.
             Text(game.requestsTonight == 0 ? "No requests finished tonight"
                  : "Helped \(game.requestsTonight) regular\(game.requestsTonight == 1 ? "" : "s") tonight"

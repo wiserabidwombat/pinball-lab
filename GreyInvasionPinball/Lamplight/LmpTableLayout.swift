@@ -590,6 +590,15 @@ enum LmpTableLayout {
     static let clockSaveSeconds: TimeInterval = 8
     /// What the clock adds to the Rush's ball save (unchanged at 3).
     static let clockRushBonus: TimeInterval = 3
+
+    // MARK: Festival Night (milestone 8 round 5)
+    /// Once the season's festival is lit (LmpSeason.festivalGoal regulars helped, or its last evening), the fireplace
+    /// starts it: the whole village comes in for a multiball of this many balls, plunged in for you like the Rush's,
+    /// with a longer save. Every shot is lit and pays festivalShotPoints on top; requests pay double; finds are rare or
+    /// better. Back to one ball ends it. Once a season.
+    static let festivalBalls = 3
+    static let festivalSaveSeconds: TimeInterval = 15
+    static let festivalShotPoints = 25_000
     /// The library ladder brings the last book down this long after the third falls.
     static let ladderDelay: TimeInterval = 0.7
 

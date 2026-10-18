@@ -36,6 +36,10 @@ final class LmpGameState {
     var cozy: [LmpCozy] = []
     /// M8 round 4: tonight's place in the year ("Spring · evening 3 of 7 · year 1"), for the closing card.
     var seasonLine = ""
+    /// M8 round 5: the season's festival — progress toward it, lit, or held (for the closing card).
+    var festivalLine = ""
+    /// Tonight's Festival Night, if there was one ("Blossom Fair").
+    var festivalTonight: String?
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
     var bestEvening = UserDefaults.standard.integer(forKey: lmpBestEveningKey)
 
@@ -67,5 +71,7 @@ final class LmpGameState {
         requestsTonight = 0
         rushesTonight = 0
         visitor = nil
+        festivalLine = ""
+        festivalTonight = nil
     }
 }

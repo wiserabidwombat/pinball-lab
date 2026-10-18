@@ -98,6 +98,11 @@ enum LmpRegulars {
     static func next(after last: LmpRegular?, winter: Bool = false) -> LmpRequest {
         let pool = winter ? all + [winterVisitor] : all
         let who = pool.filter { $0 != last }.randomElement() ?? all[0]
+        return request(from: who)
+    }
+
+    /// A request from someone in particular (the Winter Lights bring the visitor in first).
+    static func request(from who: LmpRegular) -> LmpRequest {
         let kind = LmpRequestKind.allCases.randomElement() ?? .book
         return LmpRequest(regular: who, kind: kind, line: kind.lines.randomElement() ?? "")
     }

@@ -79,6 +79,11 @@ final class LmpTableScene: SKScene {
     private var rushBallsToServe = 0
     private var rushLaunchAt: TimeInterval = 0
     private var rushSaveUntil: TimeInterval = 0
+    /// M8 round 5: Festival Night. Lit (the fireplace starts it) once the season's goal is met; while it lasts the Rush's
+    /// machinery runs it (rushActive is true too). In winter the visitor comes in first.
+    private var festivalLit = false
+    private var festivalActive = false
+    private var visitorDue = false
     /// M8 round 3: tonight's cozy pieces (read at the start of the evening), the clock's ball save (armed for each new
     /// ball until it's plunged), the ladder's pending drop, and the icons on the cozy-spot lamps.
     private var cozy: Set<LmpCozy> = []
@@ -343,6 +348,15 @@ final class LmpTableScene: SKScene {
         // M8: the request's next shot fast-blinks.
         if let step = request?.step {
             for name in Self.requestLamps(for: step) { lamps.set(name, .fastBlink) }
+        }
+        // M8 round 5: a lit festival waits in the fireplace; during the festival every shot is lit.
+        if festivalLit, !rushActive, lamps.state(of: "fireplace") != .fastBlink {
+            lamps.set("fireplace", bankDown ? .fastBlink : .blink)    // the bank first, then the open fireplace
+        }
+        if festivalActive {
+            for name in ["fireplace", "leftLoop", "rightLoop", "ramp", "kettle", "mail", "windowSeat"] {
+                lamps.set(name, .fastBlink)
+            }
         }
         // The evening: one more shop lamp every sixth of an evening, and the warm dim deepening toward closing.
         let evening = max(0, now - eveningStart) / LmpTableLayout.eveningSeconds
@@ -668,7 +682,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v14")
+        let label = SKLabelNode(text: "T5 M8 v15")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -714,7 +728,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v14 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v15 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -804,6 +818,12 @@ final class LmpTableScene: SKScene {
         // M8 round 4: tonight's season, on the LED strip until the first regular comes in.
         game.seasonLine = LmpShop.shared.seasonLine
         game.status = game.seasonLine
+        // M8 round 5: the season's festival, if it's lit (on the LED strip instead of the season).
+        festivalLit = LmpShop.shared.festivalLit
+        festivalActive = false
+        visitorDue = false
+        game.festivalLine = LmpShop.shared.festivalLine
+        if festivalLit { game.status = "Festival Night · the \(LmpShop.shared.season.festival) · shoot the fireplace" }
         nextRequestAt = gameTime + LmpTableLayout.firstRequestDelay * requestDelayScale
         rushActive = false
         rushBallsToServe = 0
@@ -1030,6 +1050,10 @@ final class LmpTableScene: SKScene {
                 sfx(.drain)
                 game.ballDrained()
                 if !game.isGameOver { nextBallAt = now + 1.0 } else {
+                    // M8 round 5: a festival still lit on the season's last evening is gone tomorrow.
+                    if festivalLit, LmpShop.shared.eveningOfSeason == LmpSeason.eveningsPerSeason {
+                        game.festivalLine = "The \(LmpShop.shared.season.festival) slipped by · next year"
+                    }
                     LmpShop.shared.endEvening(score: game.score)
                     catFlapLit = false
                     #if DEBUG
@@ -1117,7 +1141,7 @@ final class LmpTableScene: SKScene {
     /// Finds a book (saved at once) and shows it under the score. The robot never finds anything.
     private func awardFind(from source: LmpFindSource) {
         if isLabRunning { return }
-        let find = LmpShop.shared.find(from: source, lucky: game.lucky)
+        let find = LmpShop.shared.find(from: source, lucky: game.lucky, festival: festivalActive)
         game.findsTonight += 1
         labObjective("find")
         if find.isNew { game.newTonight += 1 }
@@ -1143,7 +1167,9 @@ final class LmpTableScene: SKScene {
     private func updateRequests(_ now: TimeInterval) {
         guard request == nil, !game.isGameOver, let due = nextRequestAt, now >= due else { return }
         nextRequestAt = nil
-        let r = LmpRegulars.next(after: lastRegular, winter: LmpShop.shared.season == .winter)
+        let r = visitorDue ? LmpRegulars.request(from: LmpRegulars.winterVisitor)
+            : LmpRegulars.next(after: lastRegular, winter: LmpShop.shared.season == .winter)
+        visitorDue = false
         request = r
         lastRegular = r.regular
         showBanner("\(r.regular.name.uppercased()) COMES IN")
@@ -1163,7 +1189,12 @@ final class LmpTableScene: SKScene {
             labObjective("request")
             game.add(LmpTableLayout.requestPoints * (rushActive ? 2 : 1))
             let level = LmpShop.shared.finishRequest(for: r.regular)
-            showBanner("THANK YOU! · \(r.regular.name.uppercased()) · FRIENDSHIP \(level)" + (rushActive ? " · ×2" : ""))
+            game.festivalLine = LmpShop.shared.festivalLine
+            // M8 round 5: the season's goal met tonight lights its festival.
+            let nowLit = !festivalLit && !festivalActive && LmpShop.shared.festivalLit
+            if nowLit { festivalLit = true }
+            showBanner("THANK YOU! · \(r.regular.name.uppercased()) · "
+                       + (nowLit ? "FESTIVAL NIGHT IS LIT" : "FRIENDSHIP \(level)" + (rushActive ? " · ×2" : "")))
             sfx(.lanesComplete)
             if !rushActive, game.requestsTonight % LmpTableLayout.rushEvery == 0 { startRush() }
             game.status = statusText(nil)
@@ -1179,7 +1210,8 @@ final class LmpTableScene: SKScene {
     /// The LED strip's bottom row: the request in progress, with the Rush in front while it lasts.
     private func statusText(_ r: LmpRequest?) -> String? {
         guard rushActive else { return r?.status }
-        return "RUSH ×2 · " + (r?.status ?? "the next regular's on the way")
+        let head = festivalActive ? LmpShop.shared.season.festival.uppercased() : "RUSH"
+        return head + " ×2 · " + (r?.status ?? "the next regular's on the way")
     }
 
     // MARK: - Cozy spots (milestone 8 round 3)
@@ -1244,7 +1276,8 @@ final class LmpTableScene: SKScene {
         rushBallsToServe -= 1
         rushLaunchAt = now + 0.8
         if rushSaveUntil == .infinity {
-            rushSaveUntil = now + LmpTableLayout.rushSaveSeconds + (has(.clock) ? LmpTableLayout.clockRushBonus : 0)
+            rushSaveUntil = now + (festivalActive ? LmpTableLayout.festivalSaveSeconds : LmpTableLayout.rushSaveSeconds)
+                + (has(.clock) ? LmpTableLayout.clockRushBonus : 0)
         }
         let ball = placeBallOnPlunger()
         ball.launched = true
@@ -1259,8 +1292,45 @@ final class LmpTableScene: SKScene {
     private func endRush() {
         rushActive = false
         rushSaveUntil = 0
-        showBanner("THE RUSH IS OVER")
+        if festivalActive {
+            festivalActive = false
+            showBanner("WHAT A NIGHT · FESTIVAL NIGHT IS OVER")
+        } else {
+            showBanner("THE RUSH IS OVER")
+        }
         game.status = statusText(request)
+    }
+
+    // MARK: - Festival Night (milestone 8 round 5)
+
+    /// The lit festival's fireplace shot: the whole village comes in. Up to three balls (the others plunged in for you),
+    /// a longer save, every shot lit, requests ×2, the rarest finds. In winter the visitor is the next to come in.
+    private func startFestival() {
+        festivalLit = false
+        festivalActive = true
+        rushActive = true
+        let season = LmpShop.shared.season
+        LmpShop.shared.holdFestival()
+        game.festivalTonight = season.festival
+        game.festivalLine = LmpShop.shared.festivalLine
+        labObjective("festival")
+        rushBallsToServe = max(0, LmpTableLayout.festivalBalls - balls.count)
+        rushLaunchAt = gameTime + LmpTableLayout.rushLaunchDelay
+        rushSaveUntil = .infinity                      // the save starts when the first festival ball goes in
+        if season == .winter, request?.regular != LmpRegulars.winterVisitor, lastRegular != LmpRegulars.winterVisitor {
+            visitorDue = true
+            if request == nil { nextRequestAt = min(nextRequestAt ?? .infinity, gameTime + LmpTableLayout.rushRequestDelay) }
+        }
+        showBanner("THE \(season.festival.uppercased()) · THE WHOLE VILLAGE IS HERE")
+        game.status = statusText(request)
+        lamps.play(.sweep, at: gameTime)
+        sfx(.jackpot)
+    }
+
+    /// During the festival every lit shot pays a little extra.
+    private func festivalShot() {
+        guard festivalActive, !isLabRunning else { return }
+        game.add(LmpTableLayout.festivalShotPoints)
     }
 
     /// A loop combo or a full plunge: better odds on rare books for the rest of the evening.
@@ -1303,6 +1373,7 @@ final class LmpTableScene: SKScene {
     private func updateUpperBall(_ ball: LmpBall, from p0: CGPoint, to p: CGPoint) {
         if LmpTableLayout.rampMadeSwitch.crossing(from: p0, to: p) == .forward {
             game.add(LmpTableLayout.rampPoints)
+            festivalShot()
             shotEvent("ramp")
             labObjective("loft")
             requestEvent(.ramp)
@@ -1361,6 +1432,7 @@ final class LmpTableScene: SKScene {
             showBanner(rightToLeft ? "LEFT LOOP" : "RIGHT LOOP")
         }
         lastLoopAt = gameTime
+        festivalShot()
         shotEvent(rightToLeft ? "rightLoop" : "leftLoop")   // named for the lane the ball went up
         requestEvent(.loop)
         sfx(.orbit)
@@ -1490,6 +1562,7 @@ final class LmpTableScene: SKScene {
                 }
             }
             game.add(scoop.points)
+            festivalShot()
             if scoop === kettle, cat.perch == .kettle, !isLabRunning {
                 game.add(scoop.points)                 // her perch: the kettle scores double
             }
@@ -1505,6 +1578,8 @@ final class LmpTableScene: SKScene {
             scoop.flash()
             hitHaptic.impactOccurred(intensity: 0.8)
             if scoop === fireplace { awardFind(from: .shelf) } else if scoop === windowSeat { awardFind(from: .loft) }
+            // M8 round 5: the lit festival starts in the fireplace (after an Evening Rush, if one is going).
+            if scoop === fireplace, festivalLit, !rushActive, !isLabRunning { startFestival() }
             if scoop === kettle { requestEvent(.kettle) } else if scoop === mailSlot { requestEvent(.mail) }
             if scoop === windowSeat, cat.perch == .windowSeat {
                 awardFind(from: .loft)                 // her perch: an extra book
@@ -1770,7 +1845,8 @@ extension LmpTableScene: PlayLabHost {
          PlayObjective(name: "loopCombo", text: "Make two loops within 5 s"),
          PlayObjective(name: "luckyEvening", text: "A loop combo or a full plunge: better odds on rare books"),
          PlayObjective(name: "mail", text: "Post a letter in the mail slot"),
-         PlayObjective(name: "cat", text: "Wake the napping cat")]
+         PlayObjective(name: "cat", text: "Wake the napping cat"),
+         PlayObjective(name: "festival", text: "Help 9 regulars in a season (or reach its last evening), then shoot the fireplace: Festival Night, 3 balls, every shot lit")]
     }
 
     /// The robot's flippers: the Shot Lab's cradles, and the flip delay (from dropping a cradled flipper) at the middle

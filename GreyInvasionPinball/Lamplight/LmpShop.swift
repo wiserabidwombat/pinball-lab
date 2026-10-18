@@ -66,7 +66,7 @@ nonisolated struct LmpShopSave: Codable {
         var firstFound: Date
         var count: Int
     }
-    var version = 3
+    var version = 4
     var daysPlayed = 0
     var tips = 0
     var bestEvening = 0
@@ -79,6 +79,11 @@ nonisolated struct LmpShopSave: Codable {
     var friendship: [String: Int] = [:]
     /// M8 round 3 (version 3): the pieces in the three cozy spots, by LmpCozy raw value (owned ones are in furniture).
     var cozy: [String] = []
+    /// M8 round 5 (version 4): regulars helped in the season numbered seasonNumber (seasons since the first evening),
+    /// and the seasons whose Festival Night has been held.
+    var seasonNumber = 0
+    var seasonRequests = 0
+    var festivalsHeld: [Int] = []
 
     init() {}
 
@@ -95,7 +100,10 @@ nonisolated struct LmpShopSave: Codable {
         furniture = try c.decodeIfPresent([String].self, forKey: .furniture) ?? []
         friendship = try c.decodeIfPresent([String: Int].self, forKey: .friendship) ?? [:]
         cozy = try c.decodeIfPresent([String].self, forKey: .cozy) ?? []
-        version = 3
+        seasonNumber = try c.decodeIfPresent(Int.self, forKey: .seasonNumber) ?? 0
+        seasonRequests = try c.decodeIfPresent(Int.self, forKey: .seasonRequests) ?? 0
+        festivalsHeld = try c.decodeIfPresent([Int].self, forKey: .festivalsHeld) ?? []
+        version = 4
     }
 }
 
@@ -252,6 +260,34 @@ final class LmpShop {
     /// A find in season turns out to be one of the season's missing treasures this often.
     static let treasureChance = 0.12
 
+    // MARK: Festival Night (M8 round 5)
+
+    /// Seasons since the first evening (0, 1, 2, …), so each season's goal and festival are its own.
+    var seasonNumber: Int { save.daysPlayed / LmpSeason.eveningsPerSeason }
+    /// Regulars helped so far this season.
+    var seasonRequests: Int { save.seasonNumber == seasonNumber ? save.seasonRequests : 0 }
+    var festivalHeld: Bool { save.festivalsHeld.contains(seasonNumber) }
+    /// Lit once the season's goal is met, and on its last evening anyway (nobody misses the party). It stays lit until
+    /// the festival is held or the season ends.
+    var festivalLit: Bool {
+        !festivalHeld && (seasonRequests >= LmpSeason.festivalGoal || eveningOfSeason == LmpSeason.eveningsPerSeason)
+    }
+    /// "Blossom Fair: 4 of 9 regulars helped this season" / "Festival Night is lit · the Blossom Fair"
+    var festivalLine: String {
+        let name = season.festival
+        if festivalHeld { return "This \(season.name.lowercased())'s Festival Night: the \(name)" }
+        if festivalLit { return "Festival Night is lit · the \(name) · shoot the fireplace" }
+        return "\(name): \(seasonRequests) of \(LmpSeason.festivalGoal) regulars helped this season"
+    }
+    /// The festival has started (it's held once a season).
+    func holdFestival() {
+        guard !festivalHeld else { return }
+        save.festivalsHeld.append(seasonNumber)
+        write()
+    }
+    /// During Festival Night every find is rare or better, and a season's treasure turns up this often.
+    static let festivalTreasureChance = 0.35
+
     func owns(_ book: LmpBook) -> Bool { save.owned[book.id] != nil }
 
     // MARK: Finding
@@ -266,10 +302,11 @@ final class LmpShop {
     static let pityUltra = 120
 
     /// Rolls a find, records it and saves. A duplicate is lent to a neighbour for a tip.
-    func find(from source: LmpFindSource, lucky: Bool) -> LmpFind {
+    func find(from source: LmpFindSource, lucky: Bool, festival: Bool = false) -> LmpFind {
         // M8 round 4: sometimes one of this season's missing treasures instead (it doesn't touch the pity counters).
         let missingTreasures = Self.treasures(of: season).filter { save.owned[$0.id] == nil }
-        if let treasure = missingTreasures.randomElement(), Double.random(in: 0..<1) < Self.treasureChance {
+        let chance = festival ? Self.festivalTreasureChance : Self.treasureChance
+        if let treasure = missingTreasures.randomElement(), Double.random(in: 0..<1) < chance {
             save.owned[treasure.id] = LmpShopSave.Owned(firstFound: Date(), count: 1)
             write()
             return LmpFind(book: treasure, isNew: true)
@@ -277,6 +314,7 @@ final class LmpShop {
         save.findsSinceRare += 1
         save.findsSinceUltra += 1
         var rarity = rollRarity(source: source, lucky: lucky)
+        if festival, rarity < .rare { rarity = .rare }          // M8 round 5: the festival's rarest finds
         if save.findsSinceUltra >= Self.pityUltra {
             rarity = .ultraRare
         } else if save.findsSinceRare >= Self.pityRare, rarity < .rare {
@@ -379,6 +417,12 @@ final class LmpShop {
     @discardableResult
     func finishRequest(for regular: LmpRegular) -> Int {
         save.tips += 1
+        // M8 round 5: one more toward the season's festival (a new season starts the count again).
+        if save.seasonNumber != seasonNumber {
+            save.seasonNumber = seasonNumber
+            save.seasonRequests = 0
+        }
+        save.seasonRequests += 1
         let level = (save.friendship[regular.id] ?? 0) + 1
         save.friendship[regular.id] = level
         write()

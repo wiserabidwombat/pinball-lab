@@ -34,6 +34,8 @@ final class LmpGameState {
     var isRobot = false
     /// M8 round 3: tonight's cozy spots (shown on the pause card).
     var cozy: [LmpCozy] = []
+    /// M8 round 4: tonight's place in the year ("Spring · evening 3 of 7 · year 1"), for the closing card.
+    var seasonLine = ""
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
     var bestEvening = UserDefaults.standard.integer(forKey: lmpBestEveningKey)
 

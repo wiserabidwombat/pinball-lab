@@ -87,10 +87,14 @@ final class LmpTableScene: SKScene {
     private var ballSaveArmed = false
     private var ladderDropAt: TimeInterval?
     private var ladderDropped = false
+    /// T5 M8 v11: the cat flap in the right outlane, lit at the start of each ball, one save.
+    private var catFlapLit = false
     private var cozyIcons: [SKSpriteNode] = []
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
     private var shotLab: ShotLab?
+    /// Shot Lab scenario (round 4b): trials start with the bookshelf down, to measure the fireplace.
+    private var shotLabBooksDown = false
     /// Play Lab (shared, PlayLab.swift): the run, and when its next game starts.
     private var playLab: PlayLab?
     private var playLabNextAt: TimeInterval?
@@ -275,6 +279,11 @@ final class LmpTableScene: SKScene {
                             at: LmpTableLayout.luckyLamp)
         addChild(lucky)
         lamps.add(lucky, named: "lucky")
+        // T5 M8 v11: the cat flap's lamp in the right outlane.
+        let flap = LmpLamp(.round(radius: 8), color: SKColor(red: 0.55, green: 0.85, blue: 0.55, alpha: 1),
+                           at: LmpTableLayout.catFlapLamp)
+        addChild(flap)
+        lamps.add(flap, named: "catFlap")
         for (i, p) in LmpTableLayout.shopLamps.enumerated() {
             let lamp = LmpLamp(.round(radius: 7), color: warm, at: p)
             addChild(lamp)
@@ -316,6 +325,7 @@ final class LmpTableScene: SKScene {
         lamps.set("ramp", game.lucky ? .blink : .off)
         lamps.set("windowSeat", cat.perch == .windowSeat ? .blink : (balls.contains { $0.isUpper && $0.windowSeatCatches == 0 } ? .on : .off))
         lamps.set("lucky", game.lucky ? .on : .off)
+        lamps.set("catFlap", catFlapLit ? .on : .off)
         lamps.set("mail", .off)
         // M8 round 3: a placed piece's lamp is lit, and flashes while it's acting.
         for (i, piece) in cozySlots.enumerated() {
@@ -658,7 +668,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v9")
+        let label = SKLabelNode(text: "T5 M8 v11")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -704,7 +714,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v9 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v11 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -791,6 +801,9 @@ final class LmpTableScene: SKScene {
         eveningStart = gameTime
         request = nil
         setUpCozy()
+        // M8 round 4: tonight's season, on the LED strip until the first regular comes in.
+        game.seasonLine = LmpShop.shared.seasonLine
+        game.status = game.seasonLine
         nextRequestAt = gameTime + LmpTableLayout.firstRequestDelay * requestDelayScale
         rushActive = false
         rushBallsToServe = 0
@@ -1018,6 +1031,7 @@ final class LmpTableScene: SKScene {
                 game.ballDrained()
                 if !game.isGameOver { nextBallAt = now + 1.0 } else {
                     LmpShop.shared.endEvening(score: game.score)
+                    catFlapLit = false
                     #if DEBUG
                     saveWatchLog()
                     #endif
@@ -1059,7 +1073,10 @@ final class LmpTableScene: SKScene {
             } else if ball.isUpper {
                 updateUpperBall(ball, from: p0, to: p)
             } else {
-                if p0.y >= line.a.y, p.y < line.a.y, p.x > line.a.x, p.x < line.b.x { ball.inRightOutlane = true }
+                if p0.y >= line.a.y, p.y < line.a.y, p.x > line.a.x, p.x < line.b.x {
+                    ball.inRightOutlane = true
+                    if catFlapLit, !isLabRunning { catFlapSave(ball) }
+                }
                 if ball.launched, p.y < LmpTableLayout.launchedClearY, p.x < LmpTableLayout.laneWallX { ball.launched = false }
                 let loop = LmpTableLayout.loopSwitch.crossing(from: p0, to: p)
                 if loop != .none { madeLoop(ball, rightToLeft: loop == .forward) }
@@ -1116,7 +1133,7 @@ final class LmpTableScene: SKScene {
     private func updateRequests(_ now: TimeInterval) {
         guard request == nil, !game.isGameOver, let due = nextRequestAt, now >= due else { return }
         nextRequestAt = nil
-        let r = LmpRegulars.next(after: lastRegular)
+        let r = LmpRegulars.next(after: lastRegular, winter: LmpShop.shared.season == .winter)
         request = r
         lastRegular = r.regular
         showBanner("\(r.regular.name.uppercased()) COMES IN")
@@ -1186,6 +1203,7 @@ final class LmpTableScene: SKScene {
 
     /// A new ball on the plunger: the clock's save is armed for its plunge, and the reading lamp opens the fireplace.
     private func startOfBall() {
+        catFlapLit = true
         ballSaveArmed = true
         ballSaveUntil = 0
         if has(.readingLamp), !bookTargets.allSatisfy({ $0.isDown }) {
@@ -1375,6 +1393,27 @@ final class LmpTableScene: SKScene {
         }
     }
 
+    /// T5 M8 v11: inside the alcove above the bank's line (only reachable through a dropped book or the open bank).
+    private func isDeepInAlcove(_ p: CGPoint) -> Bool {
+        let r = LmpTableLayout.ballRadius
+        return p.x > LmpTableLayout.alcoveLeftX + r && p.x < LmpTableLayout.alcoveRightX - r
+            && p.y > LmpTableLayout.alcoveCatchBottomY
+            && p.y < LmpTableLayout.alcoveTopY + LmpTableLayout.alcoveRoofPeak
+    }
+
+    /// T5 M8 v11: the cat flap carries a ball out of the right outlane and drops it into the right inlane.
+    private func catFlapSave(_ ball: LmpBall) {
+        guard ball.ride == nil, let body = ball.physicsBody else { return }
+        catFlapLit = false
+        ball.inRightOutlane = false
+        ball.ride = (from: ball.position, to: LmpTableLayout.catFlapExit, start: gameTime,
+                     duration: LmpTableLayout.catFlapSeconds, exit: LmpTableLayout.catFlapExitVelocity)
+        body.affectedByGravity = false
+        body.velocity = .zero
+        showBanner("CAT FLAP · SAVED")
+        sfx(.upKick)
+    }
+
     private func isInAlcove(_ p: CGPoint) -> Bool {
         let r = LmpTableLayout.ballRadius
         return p.x > LmpTableLayout.alcoveLeftX - r && p.x < LmpTableLayout.alcoveRightX + r
@@ -1419,7 +1458,9 @@ final class LmpTableScene: SKScene {
             let from = CGPoint(x: ball.position.x - v.dx * lastStep, y: ball.position.y - v.dy * lastStep)
             guard let scoop = scoops.first(where: { candidate in
                 (candidate === windowSeat) == onLoft
-                    && candidate.catches(from: from, to: ball.position) && !balls.contains(where: { $0.heldIn === candidate })
+                    && (candidate.catches(from: from, to: ball.position)
+                        || (candidate === fireplace && !onLoft && isDeepInAlcove(ball.position)))
+                    && !balls.contains(where: { $0.heldIn === candidate })
             }) else { continue }
             if scoop === mailSlot, hypot(v.dx, v.dy) > LmpTableLayout.mailMaxSpeed { continue }
             ball.heldIn = scoop
@@ -1577,10 +1618,13 @@ extension LmpTableScene {
     /// Starts the robot: it takes over the flippers and sweeps flip timings from a cradled ball on the left, right,
     /// upper and loft flippers, at 120 Hz and 60 Hz physics steps (768 trials, ~40 min in the Simulator). Results go to
     /// ShotLab/ on the Mac. Menu or a new game stops it.
-    func debugStartShotLab() {
+    /// `booksDown` (Play Lab round 4b): every trial starts with the bookshelf bank down, so the sweep measures the
+    /// fireplace (a hole behind the alcove the bank normally covers); the results file says "(books down)".
+    func debugStartShotLab(booksDown: Bool = false) {
         stopPlayLab(saving: true)                  // the Play Lab and the Shot Lab never run together
         isAttractMode = false
         shotLabTime = 0
+        shotLabBooksDown = booksDown
         shotLab = ShotLab(host: self)
         refreshCamera()
     }
@@ -1610,8 +1654,10 @@ extension LmpTableScene {
             let saved = lab.save(now: now)
             shotLab = nil
             physicsWorld.speed = 1
+            shotLabBooksDown = false
             shotLabResetTable()
             game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+            ShotLab.quitIfLaunchedForLab()
         }
     }
     #endif
@@ -1619,7 +1665,7 @@ extension LmpTableScene {
 
 #if DEBUG
 extension LmpTableScene: ShotLabHost {
-    var shotLabTableName: String { "The Lamplight" }
+    var shotLabTableName: String { shotLabBooksDown && shotLab != nil ? "The Lamplight (books down)" : "The Lamplight" }
 
     /// The shots a player aims for end a trial; bumpers, slings, the post, the spinner and the cat's swats are
     /// noted only.
@@ -1669,6 +1715,7 @@ extension LmpTableScene: ShotLabHost {
         removeAllBalls()
         nextBallAt = nil
         bookTargets.forEach { $0.raise() }
+        if shotLabBooksDown, shotLab != nil { bookTargets.forEach { $0.drop() } }   // the fireplace sweep: the alcove is open
         pendingDrops.removeAll()
         bankResetAt = nil
         cat.reset()
@@ -1721,16 +1768,24 @@ extension LmpTableScene: PlayLabHost {
     var playLabFlippers: [PlayRobotFlipper] {
         let specs = shotLabFlippers
         let rest = LmpTableLayout.flipperRestAngle
+        // shots60 (Play Lab round 4b): the 60 Hz pass's windows from the Shot Lab run of 2026-10-17T02-41 — they differ
+        // from the 120 Hz ones, and some shots have none at 60 Hz from a cradle (the ramp from the left, the left loop
+        // from the right); those are left out so the robot doesn't aim at them on that pass and the report says so.
+        // "fireplace": the books-down sweep of 2026-10-18T11-23 — a narrow pair of windows (0.301–0.314 / 0.376–0.381 at
+        // 120 Hz, 0.319–0.330 at 60 Hz) from both flippers; the robot uses the first.
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
-                                 shots: [("bookTarget", 0.34), ("fireplace", 0.344), ("ramp", 0.443), ("mail", 0.467),
-                                         ("rightLoop", 0.51)]),
+                                 shots: [("bookTarget", 0.34), ("fireplace", 0.307), ("ramp", 0.443), ("mail", 0.467),
+                                         ("rightLoop", 0.51)],
+                                 shots60: [("bookTarget", 0.36), ("fireplace", 0.325), ("leftLoop", 0.473), ("rightLoop", 0.491),
+                                           ("mail", 0.507)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
-                                 shots: [("bookTarget", 0.34), ("kettle", 0.445), ("leftLoop", 0.503)]),
+                                 shots: [("bookTarget", 0.34), ("fireplace", 0.307), ("kettle", 0.445), ("leftLoop", 0.503)],
+                                 shots60: [("bookTarget", 0.36), ("fireplace", 0.325), ("kettle", 0.433)]),
                 PlayRobotFlipper(name: "loft", pivot: specs[2].pivot, length: LmpTableLayout.loftFlipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: true,
-                                 shots: [("windowSeat", 0.347)])]
+                                 shots: [("windowSeat", 0.347)], shots60: [("windowSeat", 0.333)])]
     }
 
     /// The cozy pieces rotate: 3 of the 5 per game, a different three each time.

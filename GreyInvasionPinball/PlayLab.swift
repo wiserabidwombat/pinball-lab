@@ -6,6 +6,8 @@
 // better they are. Every game is recorded: score, balls, catches, every banner and shot, aims tried and made, when
 // each of the table's objectives was first reached, and what the watchdog caught. The report lands in ShotLab/ on
 // the Mac (from the Simulator) as playlab-<table>-<date>.json; tools/playlab_report.py reads it.
+// Round 4b: flip delays per pass (the 60 Hz windows differ) and a drain log (where, how fast, what the robot was doing,
+// how long since the plunge) so the report can say why a skill loses balls.
 // Round 2: screenshots and shot tracks. The lab grabs a picture of the table (SKView.texture(from:)) the first time
 // each objective is reached in a game, at every watchdog incident and at the end of each game, into a folder beside
 // the JSON (playlab-<table>-<date>/NN-<reason>.png, at most `maxCapturesPerGame`). Every aimed flip records the ball's
@@ -114,6 +116,14 @@ struct PlayRobotFlipper {
     /// The shots from a cradle on this flipper and the Shot Lab's flip delay for each (seconds after dropping it):
     /// the middle of the shot's window in the 120 Hz pass.
     let shots: [(name: String, delay: Double)]
+    /// Round 4b: the same for the 60 Hz pass, whose windows differ (the Shot Lab's 60 Hz strip). A shot left out
+    /// here has no 60 Hz window: the robot doesn't try it on that pass and the report says so. Empty = use `shots`.
+    var shots60: [(name: String, delay: Double)] = []
+
+    /// The shots the robot can aim at on a pass.
+    func shots(for pass: PlayPass) -> [(name: String, delay: Double)] {
+        pass == .hz60 && !shots60.isEmpty ? shots60 : shots
+    }
 
     /// The resting flipper's tip.
     var restTip: CGPoint {
@@ -133,6 +143,7 @@ struct PlayRobotCommand {
 
 final class PlayRobot {
     let skill: PlaySkill
+    let pass: PlayPass
     private let flippers: [PlayRobotFlipper]
     private let ballRadius: CGFloat
     private var rng = SystemRandomNumberGenerator()
@@ -153,13 +164,25 @@ final class PlayRobot {
 
     private(set) var catches = 0
 
-    init(skill: PlaySkill, flippers: [PlayRobotFlipper], ballRadius: CGFloat) {
+    init(skill: PlaySkill, pass: PlayPass, flippers: [PlayRobotFlipper], ballRadius: CGFloat) {
         self.skill = skill
+        self.pass = pass
         self.flippers = flippers
         self.ballRadius = ballRadius
         trigger = Array(repeating: nil, count: flippers.count)
         holdUntil = Array(repeating: -1, count: flippers.count)
         decidedCatch = Array(repeating: nil, count: flippers.count)
+    }
+
+    /// What the robot is doing (for the drain log).
+    var modeName: String {
+        switch mode {
+        case .free: return "free"
+        case .catching: return "catching"
+        case .cradled: return "cradled"
+        case .dropped: return "dropped"
+        case .shooting: return "shooting"
+        }
     }
 
     private func gauss(_ sigma: Double) -> Double {
@@ -181,6 +204,31 @@ final class PlayRobot {
         let minX = min(f.pivot.x, tip.x) - 14, maxX = max(f.pivot.x, tip.x) + 14
         return b.position.x >= minX && b.position.x <= maxX
             && b.position.y >= tip.y - 12 && b.position.y <= f.pivot.y + height
+    }
+
+    /// Round 4d/4e: a ball worth holding the flipper up for: anything over the flipper except a ball crossing low from
+    /// the other flipper — that one used to raise the flipper too, and the raised tip clipped it into the drain (run 6's
+    /// repeated (251, 283) drains).
+    private func catchable(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
+        let tip = f.restTip
+        let lo = min(f.pivot.x, tip.x), hi = max(f.pivot.x, tip.x)
+        let span = (lo - 14)...(hi + 14)
+        guard span.contains(b.position.x) else { return false }
+        // Round 4e: only the crossing ball is refused — low (below pivot height + 20) and moving in from the tip side
+        // at speed. Inlane feeds (slow, at the pivot end) and balls dropping from above are caught as before.
+        let towardPivot = f.pointsLeft ? b.velocity.dx > 0 : b.velocity.dx < 0
+        let low = b.position.y < f.pivot.y + 20
+        let crossing = low && towardPivot && abs(b.velocity.dx) > 200 && abs(b.velocity.dx) > abs(b.velocity.dy)
+        return !crossing && b.velocity.dy < 80
+    }
+
+    /// While catching: the ball is still over the flipper (not past the tip into the gap, not gone).
+    private func overFlipper(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
+        let tip = f.restTip
+        let lo = min(f.pivot.x, tip.x), hi = max(f.pivot.x, tip.x)
+        let span = f.pointsLeft ? (lo + 4)...(hi + 14) : (lo - 14)...(hi - 4)
+        return b.isUpper == f.upper && !b.isHeld && span.contains(b.position.x) && b.position.y > tip.y - 12
+            && b.position.y < f.pivot.y + 160
     }
 
     func step(_ view: PlayRobotView) -> PlayRobotCommand {
@@ -220,7 +268,7 @@ final class PlayRobot {
                 } else {
                     mode = .catching(flipper: i, since: since, steadySince: s)
                 }
-            } else if now - since > 2.5 || !free.contains(where: { inZone($0, f, height: 160) }) {
+            } else if now - since > 2.5 || !free.contains(where: { overFlipper($0, f) }) {
                 mode = .free
             } else {
                 mode = .catching(flipper: i, since: since, steadySince: nil)
@@ -260,7 +308,7 @@ final class PlayRobot {
             // A catch? Only one lower ball in play, not too fast, and nothing else going on.
             if busy == nil, decidedCatch[i] == nil {
                 let calm = f.upper || lowerFree.count == 1
-                decidedCatch[i] = calm && hypot(b.velocity.dx, b.velocity.dy) < 1100
+                decidedCatch[i] = calm && hypot(b.velocity.dx, b.velocity.dy) < 1100 && catchable(b, f)
                     && Double.random(in: 0..<1, using: &rng) < skill.catchChance
             }
             if busy == nil, decidedCatch[i] == true {
@@ -293,10 +341,11 @@ final class PlayRobot {
 
     /// The shot to try from a cradle: the most wanted one this flipper has (if they aim), else one at random.
     private func pickShot(_ f: PlayRobotFlipper, wanted: [String]) -> (String, Double) {
+        let shots = f.shots(for: pass)
         if skill.aims {
-            for w in wanted { if let s = f.shots.first(where: { $0.name == w }) { return (s.name, s.delay) } }
+            for w in wanted { if let s = shots.first(where: { $0.name == w }) { return (s.name, s.delay) } }
         }
-        let s = f.shots.randomElement(using: &rng) ?? (name: "none", delay: 0.35)
+        let s = shots.randomElement(using: &rng) ?? (name: "none", delay: 0.35)
         return (s.name, s.delay)
     }
 }
@@ -327,6 +376,22 @@ nonisolated struct PlayTrack: Codable {
     var points: [[Double]] = []     // [x, y], rounded
 }
 
+/// Round 4b: a ball lost — where it was last seen below the flipper pivots, what the robot was doing, how long it
+/// had been in play. The report groups these to show WHY a skill drains (fast plunge returns, failed catches…).
+nonisolated struct PlayDrain: Codable {
+    var at: Double              // seconds into the game
+    var x: Double               // the ball's x when last seen below the pivots, heading down
+    var speed: Double           // its speed then (pt/s)
+    var life: Double            // seconds since the last plunge (the ball's life, with one ball in play)
+    var plunge: Double          // that plunge's power (0–1), -1 if no plunge was seen
+    var mode: String            // the robot at the last sighting: free / catching / cradled / dropped / shooting
+    /// Round 4c/4d: the ball's path over the ~4 s before it went out ([x, y, buttons] every 3rd frame; buttons 0 none,
+    /// 1 left, 2 right, 3 both) and the shot events of the 4 s before (newest last), so the report can say what fed
+    /// the drain and what the robot was holding.
+    var path: [[Double]] = []
+    var after: [String] = []
+}
+
 /// A screenshot the lab took.
 nonisolated struct PlayCapture: Codable {
     let file: String                // relative to the run's folder beside the JSON
@@ -354,6 +419,7 @@ nonisolated struct PlayGame: Codable {
     var incidents: [PlayIncident] = []
     var tracks: [PlayTrack] = []
     var captures: [PlayCapture] = []
+    var drains: [PlayDrain] = []
 }
 
 // MARK: - Host
@@ -449,6 +515,15 @@ final class PlayLab {
     private var track: (index: Int, id: Int, last: CGPoint, until: TimeInterval, frame: Int)?
     private var captureQueue: [(reason: String, at: TimeInterval)] = []
     private var capturesThisGame = 0
+    /// Round 4b (drain log): balls seen last frame, the lowest ball heading out, the last plunge.
+    private var ballCount = 0
+    private var lowBall: (x: CGFloat, speed: CGFloat, at: TimeInterval, mode: String)?
+    private var lastPlunge: (at: TimeInterval, power: CGFloat)?
+    /// Round 4c: where the lowest free ball has been (every 3rd frame, ~2 s) and the recent shot events, for the
+    /// drain log.
+    private var lowPath: [(x: CGFloat, y: CGFloat, at: TimeInterval, buttons: Double)] = []
+    private var recentShots: [(name: String, at: TimeInterval)] = []
+    private var lastButtons = 0.0
 
     init(host: PlayLabHost, config: PlayLabConfig = .fromLaunchArguments()) {
         self.host = host
@@ -483,11 +558,16 @@ final class PlayLab {
         guard index < plan.count else { return }
         let p = plan[index]
         let label = host.playLabStartGame(variant: p.variant)
-        robot = PlayRobot(skill: p.skill, flippers: host.playLabFlippers, ballRadius: host.playLabBallRadius)
+        robot = PlayRobot(skill: p.skill, pass: p.pass, flippers: host.playLabFlippers, ballRadius: host.playLabBallRadius)
         current = PlayGame(skill: p.skill.rawValue, pass: p.pass.rawValue, physicsStepMs: p.pass.stepMs, variant: label)
         pendingAim = nil
         gameStart = now
         track = nil
+        ballCount = 0
+        lowBall = nil
+        lastPlunge = nil
+        lowPath.removeAll()
+        recentShots.removeAll()
         captureQueue.removeAll()
         capturesThisGame = 0
     }
@@ -504,7 +584,10 @@ final class PlayLab {
         guard current != nil, let robot else { return nil }
         takeQueuedCaptures()
         stepTrack(view)
+        noteDrains(view, mode: robot.modeName)
         let cmd = robot.step(view)
+        lastButtons = (cmd.left ? 1 : 0) + (cmd.right ? 2 : 0)
+        if let power = cmd.plunge { lastPlunge = (view.now, power) }
         if let target = cmd.aimedAt {
             current?.aims[target, default: [0, 0]][0] += 1
             pendingAim = (target, view.now + config.aimWindow)
@@ -555,6 +638,40 @@ final class PlayLab {
 
     /// Below the lowest flipper pivot the ball is on its way out.
     private var drainY: CGFloat { (host.playLabFlippers.map(\.pivot.y).min() ?? 220) - 40 }
+
+    // MARK: Drain log
+
+    /// A ball that vanishes within 0.6 s of being seen below the flipper pivots, heading down, drained: note where it
+    /// was, how fast, what the robot was doing and how long since the plunge that put it in play.
+    private func noteDrains(_ view: PlayRobotView, mode: String) {
+        let count = view.balls.count
+        if count < ballCount { logDrain(now: view.now, mode: mode) }
+        ballCount = count
+        let pivots = drainY + 40
+        let lower = view.balls.filter { !$0.isUpper && !$0.isHeld && !$0.onPlunger }
+        if let b = lower.filter({ $0.position.y < pivots && $0.velocity.dy < 0 }).min(by: { $0.position.y < $1.position.y }) {
+            lowBall = (b.position.x, hypot(b.velocity.dx, b.velocity.dy), view.now, mode)
+        }
+        // The path of the lowest free ball, every 3rd frame, kept for 4 s, with the buttons the robot was holding.
+        if frames % 3 == 0, let b = lower.min(by: { $0.position.y < $1.position.y }) {
+            lowPath.append((b.position.x, b.position.y, view.now, lastButtons))
+            while let first = lowPath.first, view.now - first.at > 4 { lowPath.removeFirst() }
+        }
+    }
+
+    /// Records the drain if a ball was seen on its way out within the last 0.6 s.
+    private func logDrain(now: TimeInterval, mode: String) {
+        guard let low = lowBall, now - low.at < 0.6 else { return }
+        let life = now - (lastPlunge?.at ?? gameStart)
+        current?.drains.append(PlayDrain(at: (now - gameStart).rounded(), x: Double(low.x.rounded()),
+                                         speed: Double(low.speed.rounded()), life: (life * 10).rounded() / 10,
+                                         plunge: lastPlunge.map { (Double($0.power) * 100).rounded() / 100 } ?? -1,
+                                         mode: low.mode,
+                                         path: lowPath.map { [Double($0.x.rounded()), Double($0.y.rounded()), $0.buttons] },
+                                         after: recentShots.filter { now - $0.at <= 4 }.map(\.name)))
+        lowBall = nil
+        lowPath.removeAll()
+    }
 
     private func finishTrack(outcome: String) {
         guard let t = track else { return }
@@ -608,6 +725,8 @@ final class PlayLab {
     func shot(_ name: String, now: TimeInterval) {
         guard current != nil else { return }
         current?.shots[name, default: 0] += 1
+        recentShots.append((name, now))
+        if recentShots.count > 12 { recentShots.removeFirst() }
         // An event named after the target with a suffix ("windowSeatRepeat" for "windowSeat") is the same shot made
         // in a different state: the aim counts.
         if let aim = pendingAim, name.hasPrefix(aim.target), now <= aim.until {
@@ -635,6 +754,7 @@ final class PlayLab {
     /// The game in progress is over (or capped): record it; the host tidies up.
     func endGame(score: Int, ballsPlayed: Int, endedBy: String, now: TimeInterval) {
         finishTrack(outcome: "miss")
+        if ballCount > 0 { logDrain(now: now, mode: robot?.modeName ?? "free") }   // the game-ending drain: hosts stop calling frame() at game over
         requestCapture("gameEnd", now: now)
         takeQueuedCaptures()
         guard var g = current else { return }
@@ -662,6 +782,16 @@ final class PlayLab {
 
     /// Writes the report; returns the file name (or why it failed).
     func save() -> String {
+        struct Flipper: Codable {
+            let name: String
+            let pivot: [Double]
+            let length: Double
+            let restAngle: Double
+            let pointsLeft: Bool
+            let upper: Bool
+            let shots120: [String: Double]
+            let shots60: [String: Double]
+        }
         struct Report: Codable {
             let table: String
             let date: String
@@ -669,13 +799,23 @@ final class PlayLab {
             let gamesPerSkill: Int
             let maxGameSeconds: Double
             let objectives: [PlayObjective]
+            let flippers: [Flipper]
             let games: [PlayGame]
         }
         let real = CACurrentMediaTime() - startedAt
+        var flippers: [Flipper] = []
+        for f in host.playLabFlippers {
+            var s120: [String: Double] = [:], s60: [String: Double] = [:]
+            for s in f.shots { s120[s.name] = s.delay }
+            for s in f.shots(for: .hz60) { s60[s.name] = s.delay }
+            flippers.append(Flipper(name: f.name, pivot: [Double(f.pivot.x), Double(f.pivot.y)], length: Double(f.length),
+                                    restAngle: Double(f.restAngle), pointsLeft: f.pointsLeft, upper: f.upper,
+                                    shots120: s120, shots60: s60))
+        }
         let report = Report(table: host.playLabTableName, date: stamp,
                             fps: real > 0 ? (Double(frames) / real * 10).rounded() / 10 : 0,
                             gamesPerSkill: config.gamesPerSkill, maxGameSeconds: config.maxGameSeconds,
-                            objectives: host.playLabObjectives, games: games)
+                            objectives: host.playLabObjectives, flippers: flippers, games: games)
         return LabFiles.write(report, prefix: "playlab", table: host.playLabTableName, stamp: stamp)
     }
 

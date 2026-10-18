@@ -117,6 +117,29 @@ final class ShotLab {
         case flipped(at: TimeInterval)
     }
 
+    /// Round 4b (Play Lab): launched with `-shotlab <table>` (lowercase letters: "lamplight"), the table's view starts
+    /// the Shot Lab at once and the app quits when the results are saved. `-shotlab-scenario <name>` picks the
+    /// host's set-up ("booksdown" on The Lamplight); `-shotlab-flippers left,right` sweeps only those flippers.
+    nonisolated static let launchTable: String? = {
+        guard let t = UserDefaults.standard.string(forKey: "shotlab") else { return nil }
+        let slug = String(t.lowercased().filter { $0.isLetter })
+        return slug.isEmpty ? nil : slug
+    }()
+    nonisolated static let launchScenario: String? = {
+        UserDefaults.standard.string(forKey: "shotlab-scenario").map { String($0.lowercased().filter { $0.isLetter }) }
+    }()
+    nonisolated static let launchFlippers: [String]? = {
+        guard let s = UserDefaults.standard.string(forKey: "shotlab-flippers") else { return nil }
+        let names = s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        return names.isEmpty ? nil : names
+    }()
+
+    /// Launched with `-shotlab`: quit once the results are saved, so a script running the Simulator can move on.
+    static func quitIfLaunchedForLab() {
+        guard launchTable != nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { exit(0) }
+    }
+
     private unowned let host: ShotLabHost
     private let flippers: [FlipperSpec]
     private let majorEvents: Set<String>
@@ -131,14 +154,16 @@ final class ShotLab {
     private var frames = 0
     private var startedAt: CFTimeInterval?          // real time (the lab clock runs slow at times)
 
-    init(host: ShotLabHost) {
+    /// `only`: flipper names to sweep (nil = all; the launch argument `-shotlab-flippers` when there is one).
+    init(host: ShotLabHost, only: [String]? = ShotLab.launchFlippers) {
         self.host = host
         flippers = host.shotLabFlippers
         probes = host.shotLabProbes
         majorEvents = host.shotLabMajorEvents
         let steps = Int(((Self.maxDelay - Self.minDelay) / Self.delayStep).rounded())
+        let chosen = flippers.indices.filter { i in only.map { $0.contains(flippers[i].name.lowercased()) } ?? true }
         for speed in Self.passes {
-            for f in flippers.indices {
+            for f in chosen.isEmpty ? Array(flippers.indices) : chosen {
                 for i in 0...steps {
                     // A little jitter (± half a step) so frame timing samples every phase.
                     let jitter = Double.random(in: -0.5...0.5) * Self.delayStep

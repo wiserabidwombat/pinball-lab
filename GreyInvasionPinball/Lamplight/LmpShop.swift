@@ -41,6 +41,15 @@ nonisolated struct LmpBook: Identifiable, Hashable {
     let title: String
     let genre: String
     let rarity: LmpRarity
+
+    /// M8 round 4: a seasonal treasure (found only in its season) rather than a book.
+    var isSeasonal: Bool { id.hasPrefix("season.") }
+
+    /// The line under the title: "Mystery · signed copy", or "An autumn treasure".
+    var editionLine: String {
+        guard isSeasonal else { return "\(genre) · \(rarity.edition)" }
+        return (genre == "Autumn" ? "An " : "A ") + genre.lowercased() + " treasure"
+    }
 }
 
 /// Where a find came from: the loft keeps the rarest books.
@@ -221,6 +230,28 @@ final class LmpShop {
 
     var booksOwned: Int { Self.books.filter { save.owned[$0.id] != nil }.count }
 
+    // MARK: Seasons (M8 round 4)
+
+    /// Seven evenings a season, four seasons a year, counted in evenings played.
+    var season: LmpSeason { LmpSeason.of(evening: save.daysPlayed) }
+    /// Tonight's evening within the season (1–7) and the year (from 1).
+    var eveningOfSeason: Int { save.daysPlayed % LmpSeason.eveningsPerSeason + 1 }
+    var year: Int { save.daysPlayed / (LmpSeason.eveningsPerSeason * LmpSeason.allCases.count) + 1 }
+    /// "Spring · evening 3 of 7 · year 1"
+    var seasonLine: String {
+        "\(season.name) · evening \(eveningOfSeason) of \(LmpSeason.eveningsPerSeason) · year \(year)"
+    }
+
+    /// Each season's six treasures, kept in the same collection as the books (ids "season.<n>.<i>", rare).
+    static func treasures(of season: LmpSeason) -> [LmpBook] {
+        season.treasures.enumerated().map { i, title in
+            LmpBook(id: "season.\(season.rawValue).\(i)", title: title, genre: season.name, rarity: .rare)
+        }
+    }
+
+    /// A find in season turns out to be one of the season's missing treasures this often.
+    static let treasureChance = 0.12
+
     func owns(_ book: LmpBook) -> Bool { save.owned[book.id] != nil }
 
     // MARK: Finding
@@ -236,6 +267,13 @@ final class LmpShop {
 
     /// Rolls a find, records it and saves. A duplicate is lent to a neighbour for a tip.
     func find(from source: LmpFindSource, lucky: Bool) -> LmpFind {
+        // M8 round 4: sometimes one of this season's missing treasures instead (it doesn't touch the pity counters).
+        let missingTreasures = Self.treasures(of: season).filter { save.owned[$0.id] == nil }
+        if let treasure = missingTreasures.randomElement(), Double.random(in: 0..<1) < Self.treasureChance {
+            save.owned[treasure.id] = LmpShopSave.Owned(firstFound: Date(), count: 1)
+            write()
+            return LmpFind(book: treasure, isNew: true)
+        }
         save.findsSinceRare += 1
         save.findsSinceUltra += 1
         var rarity = rollRarity(source: source, lucky: lucky)

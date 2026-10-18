@@ -73,6 +73,16 @@ struct LmpTableView: View {
                     scene.debugStartPlayLab()
                 }
             }
+            // `-shotlab lamplight [-shotlab-scenario booksdown] [-shotlab-flippers left,right]`: the Shot Lab sweep.
+            if PlayLab.launchTable == nil, ShotLab.launchTable == "lamplight" {
+                Task { @MainActor in
+                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartShotLab(booksDown: ShotLab.launchScenario == "booksdown")
+                }
+            }
             #endif
         }
         .onDisappear { LabGamepad.shared.release("lamplight") }
@@ -324,6 +334,8 @@ struct LmpTableView: View {
             // Milestone 5: the Shot Lab robot (~40 min in the Simulator; results go to ShotLab/ on the Mac)
             debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
                 .padding(.top, 4)
+            // Round 4b: the same sweep with the bookshelf down (measures the fireplace; file "(books down)")
+            debugButton("Shot Lab · books down") { scene.debugStartShotLab(booksDown: true); setPaused(false) }
             // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator);
             // report in ShotLab/ on the Mac
             debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
@@ -369,7 +381,7 @@ struct LmpTableView: View {
         let color = Self.rarityColor(find.book.rarity)
         return VStack(spacing: 3) {
             HStack(spacing: 6) {
-                Text(find.isNew ? "NEW BOOK" : "ANOTHER COPY · LENT FOR A TIP")
+                Text(find.book.isSeasonal ? "SEASONAL TREASURE" : find.isNew ? "NEW BOOK" : "ANOTHER COPY · LENT FOR A TIP")
                     .font(.orbitron(11, .bold))
                     .foregroundStyle(.white.opacity(0.8))
                 Text(find.book.rarity.name.uppercased())
@@ -384,7 +396,7 @@ struct LmpTableView: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text("\(find.book.genre) · \(find.book.rarity.edition)")
+            Text(find.book.editionLine)
                 .font(.system(size: 12, design: .serif))
                 .italic()
                 .foregroundStyle(.white.opacity(0.65))
@@ -431,6 +443,18 @@ struct LmpTableView: View {
                 .font(.orbitron(15))
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.7))
+            // M8 round 4: where tonight sat in the year, and a new season tomorrow.
+            if !game.seasonLine.isEmpty {
+                Text(game.seasonLine)
+                    .font(.system(size: 13, design: .serif))
+                    .italic()
+                    .foregroundStyle(.white.opacity(0.7))
+                if LmpShop.shared.eveningOfSeason == 1, LmpShop.shared.save.daysPlayed > 0 {
+                    Text("Tomorrow, \(LmpShop.shared.season.name.lowercased()) begins")
+                        .font(.system(size: 13, weight: .semibold, design: .serif))
+                        .foregroundStyle(Self.gold)
+                }
+            }
             // M8: the regulars helped tonight.
             Text(game.requestsTonight == 0 ? "No requests finished tonight"
                  : "Helped \(game.requestsTonight) regular\(game.requestsTonight == 1 ? "" : "s") tonight"

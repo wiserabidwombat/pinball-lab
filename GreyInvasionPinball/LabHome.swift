@@ -93,10 +93,11 @@ enum LabTable: String, CaseIterable, Identifiable {
 struct PinballLabRoot: View {
     @State private var playing: LabTable? = PinballLabRoot.launchTable
 
-    /// Debug builds launched with `-playlab <table>` open that table at once (its view starts the Play Lab).
+    /// Debug builds launched with `-playlab <table>` (or `-shotlab <table>`) open that table at once (its view starts
+    /// the lab).
     private static var launchTable: LabTable? {
         #if DEBUG
-        switch PlayLab.launchTable {
+        switch PlayLab.launchTable ?? ShotLab.launchTable {
         case "lamplight": return .lamplight
         case "greyinvasion": return .greyInvasion
         case "cthulhu": return .cthulhu

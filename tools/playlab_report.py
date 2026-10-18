@@ -15,7 +15,7 @@ Too-hard flags (first-guess thresholds; tune them as the tables teach us):
   - an objective reached at one physics rate but never at the other (plays differently on 60 Hz phones)
   - a shot the experts aim for 8+ times and make under 15% of the time (unless listed with --precise)
 """
-import json, sys, argparse, collections, statistics, os, html
+import json, sys, argparse, collections, statistics, os, html, math
 
 SKILLS = ["beginner", "intermediate", "advanced", "expert"]
 OUTCOME_COLOR = {"made": "#2e9e4e", "miss": "#8a8a8a", "drain": "#d1403a"}
@@ -34,6 +34,36 @@ def pass_order(p):
 
 
 # ---------------------------------------------------------------- analysis
+
+def classify_drain(dr, flippers):
+    """How the ball went out, from its path: 'outlane L/R' (down a side wall), 'tip clip' (it struck a raised flipper
+    tip — the robot was holding that flipper), 'off tip' (rolled off a flipper tip into the gap), else 'centre'.
+    Also whether a button was held over the last second ('held')."""
+    p = dr.get("path") or []
+    if len(p) < 3:
+        return "?", False
+    pts = [(q[0], q[1]) for q in p]
+    buttons = [q[2] if len(q) > 2 else 0 for q in p]
+    tail = pts[-20:]
+    held = any(b for b in buttons[-7:])
+    if any(x > 490 and y < 220 for x, y in pts):
+        return "outlane R", held
+    if any(x < 110 and y < 220 for x, y in pts):
+        return "outlane L", held
+    lower = [f for f in flippers if not f.get("upper") and "pivot" in f]
+    for f in lower:
+        px, py = f["pivot"]
+        up = math.pi / 3 - f["restAngle"]            # raised: the travel is 60° on every table
+        sgn = -1 if f["pointsLeft"] else 1
+        tip = (px + sgn * f["length"] * math.cos(up), py + f["length"] * math.sin(up))
+        for (x, y), b in zip(pts, buttons):
+            if abs(x - tip[0]) < 16 and abs(y - tip[1] - 12) < 16 and b and (int(b) & (2 if f["pointsLeft"] else 1)):
+                return "tip clip", held
+        rest = (px + sgn * f["length"] * math.cos(f["restAngle"]), py - f["length"] * math.sin(f["restAngle"]))
+        if any(abs(x - rest[0]) < 14 and abs(y - rest[1] - 10) < 14 for x, y in tail):
+            return "off tip", held
+    return "centre", held
+
 
 def analyze(d, precise=()):
     games = d.get("games", d.get("evenings", []))
@@ -93,8 +123,41 @@ def analyze(d, precise=()):
         for fl, tg in sorted({(t["flipper"], t["target"]) for _, _, t in tracks}):
             track_rows.append((fl, tg, *(outcomes[(fl, tg, o)] for o in ("made", "miss", "drain"))))
 
+    # Round 4b: the drain log, per pass × skill — median ball life, drains soon after a plunge (full vs soft), drains
+    # while the robot was catching or cradling, and where they went out (left third / middle / right third).
+    drain_rows = []
+    for p in passes:
+        for sk in SKILLS:
+            ds = [dr for g in by.get((p, sk), []) for dr in g.get("drains", [])]
+            if not ds:
+                continue
+            fed = collections.Counter((dr.get("after") or ["(nothing)"])[-1] for dr in ds)
+            kinds = collections.Counter(classify_drain(dr, d.get("flippers", []))[0] for dr in ds)
+            held = sum(1 for dr in ds if classify_drain(dr, d.get("flippers", []))[1])
+            minutes = sum(g["seconds"] for g in by.get((p, sk), [])) / 60
+            drain_rows.append(dict(
+                fed=", ".join(f"{k} {n}" for k, n in fed.most_common(3)), per_min=len(ds) / minutes if minutes else 0,
+                kinds=", ".join(f"{k} {n}" for k, n in kinds.most_common()), held=held,
+                pass_=p, skill=sk, n=len(ds), life=median([dr["life"] for dr in ds]),
+                early_full=sum(1 for dr in ds if dr["life"] <= 6 and dr["plunge"] >= 0.9),
+                early_soft=sum(1 for dr in ds if dr["life"] <= 6 and 0 <= dr["plunge"] < 0.9),
+                catching=sum(1 for dr in ds if dr["mode"] in ("catching", "cradled")),
+                shooting=sum(1 for dr in ds if dr["mode"] in ("dropped", "shooting")),
+                speed=median([dr["speed"] for dr in ds]),
+                left=sum(1 for dr in ds if dr["x"] < 200), mid=sum(1 for dr in ds if 200 <= dr["x"] <= 400),
+                right=sum(1 for dr in ds if dr["x"] > 400)))
+    drains = [(g["pass"], g["skill"], dr) for g in games for dr in g.get("drains", [])]
+    no60 = []
+    for f in d.get("flippers", []):
+        missing = sorted(set(f.get("shots120", {})) - set(f.get("shots60", {})))
+        if f.get("shots60") and missing:
+            no60.append((f["name"], missing))
+
     # Too-hard flags
     flags = []
+    for name, missing in no60:
+        flags.append(f"no 60 Hz window in the Shot Lab for {', '.join(missing)} from the {name} flipper "
+                     "(the robot doesn't aim at them on that pass)")
     for name in names:
         reached = {p: any(name in g.get("objectives", {}) for g in games
                           if g["pass"] == p and g["skill"] in ("advanced", "expert")) for p in passes}
@@ -118,7 +181,8 @@ def analyze(d, precise=()):
 
     return dict(games=games, passes=passes, objectives=objectives, names=names, extras=extras, rows=rows, grid=grid,
                 aims=aims, banners=banners, shots=shots, objs=objs, incidents=incidents, captures=captures,
-                tracks=tracks, track_rows=track_rows, flags=flags, notes=notes)
+                tracks=tracks, track_rows=track_rows, flags=flags, notes=notes, drain_rows=drain_rows, no60=no60,
+                drains=drains, flippers=d.get("flippers", []))
 
 
 def run_checks(a, checks):
@@ -142,10 +206,12 @@ def tracks_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
     X, Y, W, H = map_rect
     tracks = a["tracks"]
     flippers = sorted({t["flipper"] for _, _, t in tracks}) or ["left", "right"]
+    drains = [dr for dr in a.get("drains", []) if len(dr[2].get("path", [])) >= 2]
+    panels = len(flippers) + (1 if drains else 0)
     panel_w, gap = W, 60
     attrs = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'
     style = ' style="width:100%;height:auto"' if inline else ''
-    out = [f'<svg {attrs} viewBox="0 0 {len(flippers) * (panel_w + gap)} {H + 60}" font-family="Helvetica, Arial" '
+    out = [f'<svg {attrs} viewBox="0 0 {panels * (panel_w + gap)} {H + 60}" font-family="Helvetica, Arial" '
            f'font-size="22"{style}>']
     for i, fl in enumerate(flippers):
         ox = i * (panel_w + gap)
@@ -164,6 +230,27 @@ def tracks_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
             out.append(f'<polyline points="{pts}" fill="none" stroke="{OUTCOME_COLOR.get(t["outcome"], "#888")}" '
                        f'stroke-width="2.5" stroke-opacity="0.55"><title>{skill} → {t["target"]}: {t["outcome"]} at {t["at"]:.0f}s</title></polyline>')
             x0, y0 = t["points"][0]
+            out.append(f'<circle cx="{x0 - X:.0f}" cy="{40 + (Y + H - y0):.0f}" r="4" fill="#fff"/>')
+        out.append("</g>")
+    # Round 4c: every drain's last ~2 s, by pass (120 Hz red, 60 Hz orange); a dot where the path starts.
+    if drains:
+        ox = len(flippers) * (panel_w + gap)
+        out.append(f'<g transform="translate({ox},0)">')
+        out.append(f'<rect x="0" y="40" width="{W}" height="{H}" fill="#101010"/>')
+        if map_file:
+            out.append(f'<image xlink:href="{html.escape(map_file)}" x="0" y="40" width="{W}" height="{H}" opacity="0.8"/>')
+        out.append(f'<rect x="{0 - X}" y="{40 + (Y + H - 1300)}" width="600" height="1300" fill="none" stroke="#555" stroke-width="2"/>')
+        out.append(f'<text x="8" y="28" fill="{"#ddd" if inline else "#222"}">drains · {len(drains)} · the last ~4 s of each ball '
+                   f'(120 Hz red, 60 Hz orange, dashed = a button held)</text>')
+        for p, skill, dr in drains:
+            pts = " ".join(f"{q[0] - X:.0f},{40 + (Y + H - q[1]):.0f}" for q in dr["path"])
+            color = "#d1403a" if p == "hz120" else "#e0a63a"
+            fed = (dr.get("after") or ["nothing"])[-1]
+            kind, held = classify_drain(dr, a.get("flippers", []))
+            dash = ' stroke-dasharray="6 4"' if held else ''
+            out.append(f'<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="2.5" stroke-opacity="0.6"{dash}>'
+                       f'<title>{p} {skill} at {dr["at"]:.0f}s · {kind}{" · button held" if held else ""} · after {fed} · x {dr["x"]:.0f} · {dr["speed"]:.0f} pt/s</title></polyline>')
+            x0, y0 = dr["path"][0][0], dr["path"][0][1]
             out.append(f'<circle cx="{x0 - X:.0f}" cy="{40 + (Y + H - y0):.0f}" r="4" fill="#fff"/>')
         out.append("</g>")
     out.append("</svg>")
@@ -216,6 +303,12 @@ def print_text(d, a, report_path, checks):
         print(f"\nShot tracks: {len(a['tracks'])} aimed flips recorded")
         for fl, tg, made, miss, drain in a["track_rows"]:
             print(f"  {fl:7}{tg:13} made {made:3}  miss {miss:3}  drain {drain:3}")
+    if a["drain_rows"]:
+        print("\nDrains (median ball life · within 6 s of a full / soft plunge · while catching · while shooting · median speed · button held · how · fed by):")
+        for r in a["drain_rows"]:
+            print(f"  {r['pass_']:7}{r['skill']:13}{r['n']:3} drains ({r['per_min']:.1f}/min)  life {r['life']:5.1f}s  early full {r['early_full']:2} soft {r['early_soft']:2}"
+                  f"  catching {r['catching']:2}  shooting {r['shooting']:2}  speed {r['speed']:4.0f}  held {r['held']:2}"
+                  f"  how: {r['kinds']}  fed by: {r['fed']}")
     print("\nToo hard:" if a["flags"] else "\nToo hard: nothing flagged")
     for f in a["flags"]:
         print(f"  - {f}")
@@ -333,6 +426,20 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
         for fl, tg, made, miss, drain in a["track_rows"]:
             h.append(f"<tr><td>{e(fl)}</td><td>{e(tg)}</td><td>{made}</td><td>{miss}</td><td>{drain}</td></tr>")
         h.append("</table></div><div class='panel'>" + tracks_svg(a, map_file, map_rect, inline=True) + "</div>")
+
+    # Drains (round 4b)
+    if a["drain_rows"]:
+        h.append("<h2>Drains</h2><div class='panel small'>every ball lost: median life since its plunge · lost within 6 s of a "
+                 "full (≥ 0.9) or softer plunge · lost while the robot was catching/cradling or flipping an aimed shot · "
+                 "median speed at the last sighting · a button held in the last second · how (from the path: outlane, "
+                 "a raised tip clipped it, rolled off a tip, centre) · the last shot event before it</div>"
+                 "<div class='panel'><table><tr><th>pass</th><th>skill</th><th>drains</th><th>per min</th><th>life</th><th>early · full</th>"
+                 "<th>early · soft</th><th>catching</th><th>shooting</th><th>speed</th><th>button held</th><th>how</th><th>last event before</th></tr>")
+        for r in a["drain_rows"]:
+            h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['n']}</td><td>{r['per_min']:.1f}</td><td>{r['life']:.1f}s</td>"
+                     f"<td>{r['early_full']}</td><td>{r['early_soft']}</td><td>{r['catching']}</td><td>{r['shooting']}</td>"
+                     f"<td>{r['speed']:.0f}</td><td>{r['held']}</td><td>{e(r['kinds'])}</td><td>{e(r['fed'])}</td></tr>")
+        h.append("</table></div>")
 
     # Incidents
     h.append(f"<h2>Watchdog</h2><div class='panel'>{len(a['incidents'])} incident(s)")

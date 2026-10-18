@@ -79,6 +79,18 @@ struct ContentView: View {
         }
         .onAppear {
             LabGamepad.shared.claim("greyInvasion", onA: { gamepadA() }, onMenu: { gamepadMenu() })
+            #if DEBUG
+            // Launched with `-playlab greyinvasion`: run the Play Lab unattended (the scene quits the app when done).
+            if PlayLab.launchTable == "greyinvasion" {
+                Task { @MainActor in
+                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }   // built in didMove
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartPlayLab()
+                }
+            }
+            #endif
         }
         .onDisappear { LabGamepad.shared.release("greyInvasion") }
         .onChange(of: scenePhase) { _, phase in
@@ -322,6 +334,8 @@ struct ContentView: View {
             .padding(.top, 4)
             // Shot Lab (M10 v12): a robot measures every shot's timing window (~15 min; best in the Simulator).
             debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
+            // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator).
+            debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
             #endif
         }
     }

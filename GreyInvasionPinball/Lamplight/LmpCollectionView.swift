@@ -23,6 +23,19 @@ struct LmpCollectionView: View {
                     ForEach(LmpShop.genres.map { $0.name }, id: \.self) { genre in
                         shelf(genre)
                     }
+                    // M8 round 4: the seasonal treasures, six a season, found only in their season.
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("SEASONAL TREASURES")
+                            .font(.orbitron(13, .bold))
+                            .tracking(1.5)
+                            .foregroundStyle(LmpTableView.gold)
+                        Text("Found only in their season; a missed one comes back next year.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    ForEach(LmpSeason.allCases, id: \.self) { season in
+                        shelf(season.name, books: LmpShop.treasures(of: season))
+                    }
                     Button(role: .destructive) { confirmNewShop = true } label: {
                         Text("Start a new shop")
                             .font(.system(size: 14, weight: .semibold))
@@ -75,7 +88,7 @@ struct LmpCollectionView: View {
             Text("Books \(shop.booksOwned) of \(LmpShop.books.count)")
                 .font(.orbitron(20, .black))
                 .foregroundStyle(LmpTableView.gold)
-            Text("Day \(shop.save.daysPlayed + 1) · best evening \(shop.save.bestEvening.formatted()) · \(shop.save.tips) tips")
+            Text("\(shop.seasonLine) · best evening \(shop.save.bestEvening.formatted()) · \(shop.save.tips) tips")
                 .font(.system(size: 14))
                 .foregroundStyle(.white.opacity(0.7))
             HStack(spacing: 10) {
@@ -187,8 +200,8 @@ struct LmpCollectionView: View {
         }
     }
 
-    private func shelf(_ genre: String) -> some View {
-        let books = LmpShop.books.filter { $0.genre == genre }
+    private func shelf(_ genre: String, books given: [LmpBook]? = nil) -> some View {
+        let books = given ?? LmpShop.books.filter { $0.genre == genre }
         let owned = books.filter { shop.owns($0) }.count
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -258,6 +271,10 @@ struct LmpCollectionView: View {
         case "Adventure": return Color(red: 0.22, green: 0.36, blue: 0.26)
         case "Poetry": return Color(red: 0.34, green: 0.26, blue: 0.42)
         case "Cookbooks": return Color(red: 0.50, green: 0.34, blue: 0.18)
+        case "Spring": return Color(red: 0.42, green: 0.30, blue: 0.40)     // M8 round 4: the seasons' treasures
+        case "Summer": return Color(red: 0.22, green: 0.38, blue: 0.44)
+        case "Autumn": return Color(red: 0.52, green: 0.28, blue: 0.14)
+        case "Winter": return Color(red: 0.26, green: 0.32, blue: 0.44)
         default: return Color(red: 0.36, green: 0.30, blue: 0.22)
         }
     }
@@ -274,7 +291,7 @@ struct LmpCollectionView: View {
             Text(book.title)
                 .font(.system(size: 22, weight: .semibold, design: .serif))
                 .multilineTextAlignment(.center)
-            Text("\(book.genre) · \(book.rarity.edition)")
+            Text(book.editionLine)
                 .font(.system(size: 14, design: .serif))
                 .italic()
                 .foregroundStyle(.secondary)

@@ -166,6 +166,14 @@ enum LmpTableLayout {
     }
     /// Crossed going down: the ball is draining down the right outlane (for the cat-flap save in the rules milestone).
     static let rightOutlaneLine = (a: CGPoint(x: 514, y: 240), b: CGPoint(x: laneWallX, y: 240))
+    /// T5 M8 v11: the cat flap (the plan's outlane save). Lit at the start of each ball; a ball going down the right
+    /// outlane while it's lit is carried back up (no collisions, like the dumbwaiter) and dropped into the right inlane
+    /// above the sling's top post (gap 487–514 at y 505), once per ball. Play Lab: the right outlane was the biggest
+    /// single drain (4–6 of 11–17 per run).
+    static let catFlapExit = CGPoint(x: 498, y: 505)
+    static let catFlapSeconds: TimeInterval = 0.45
+    static let catFlapExitVelocity = CGVector(dx: -15, dy: -120)
+    static let catFlapLamp = CGPoint(x: 531, y: 300)
 
     // MARK: Upper table (milestone 2, grey box). Shot lines checked in tools/lmp_render_m2.py.
 
@@ -251,6 +259,10 @@ enum LmpTableLayout {
     static let bankResetDelay: TimeInterval = 0.8
     static let fireplaceCenter = CGPoint(x: 284, y: 800)
     static let fireplaceEject = CGVector(dx: -130, dy: -520)
+    /// T5 M8 v11 (Play Lab, runs 5–9: 66 of 118 balls that got into the alcove came straight back down the middle,
+    /// off the roof and down the far wall, out of the mouth above the drain): a ball that gets deep into the alcove,
+    /// above the bank's line, drops into the fireplace wherever it is. With the bank down the open alcove is the shot.
+    static var alcoveCatchBottomY: CGFloat { bookTargetCenters[0].y + dropTargetSize.height / 2 + ballRadius + 2 }
     static let fireplacePoints = 2_500
 
     /// The kettle: a hole at the top of a short lane on the left, angled along the shot from the right flipper, with

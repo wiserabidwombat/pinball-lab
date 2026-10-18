@@ -91,9 +91,13 @@ enum LmpRegulars {
         LmpRegular(id: "musician", name: "Rook", who: "the stray musician"),
     ]
 
-    /// A new request from someone who isn't the last visitor.
-    static func next(after last: LmpRegular?) -> LmpRequest {
-        let who = all.filter { $0 != last }.randomElement() ?? all[0]
+    /// M8 round 4: the twelfth regular, who only comes in during winter.
+    static let winterVisitor = LmpRegular(id: "visitor", name: "The Visitor", who: "the mysterious winter visitor")
+
+    /// A new request from someone who isn't the last visitor (in winter the visitor may come in too).
+    static func next(after last: LmpRegular?, winter: Bool = false) -> LmpRequest {
+        let pool = winter ? all + [winterVisitor] : all
+        let who = pool.filter { $0 != last }.randomElement() ?? all[0]
         let kind = LmpRequestKind.allCases.randomElement() ?? .book
         return LmpRequest(regular: who, kind: kind, line: kind.lines.randomElement() ?? "")
     }

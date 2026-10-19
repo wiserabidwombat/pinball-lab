@@ -43,6 +43,9 @@ final class LmpBall: SKNode {
     var windowSeatFound = false
     /// T5 M8 v22: how far the plunger was pulled for this ball (0–1; 0 for the Rush's automatic plunges).
     var launchPower: CGFloat = 0
+    /// T5 M8 v24: the velocity going into this physics step (set in didSimulatePhysics), so a contact can tell how the
+    /// ball was moving before the bounce (the center post kicks only steep drops).
+    var velocityBeforeStep: CGVector = .zero
     var scoopIgnoreUntil: TimeInterval = 0
     /// Just plunged: its first trip over the top isn't a loop. Cleared once it comes back down the table.
     var launched = false

@@ -91,11 +91,25 @@ enum LmpTableLayout {
     }
 
     // MARK: Center post
-    /// A rubber post between the flipper tips: tips at rest are 53.8 apart edge to edge, so the r 7 post leaves two
-    /// gaps of 19.9 (a ball is 18): a ball dropping straight down the middle usually bounces onto a flipper.
+    /// A rubber post between the flipper tips: tips at rest are 53.8 apart edge to edge, so the r 8 post leaves two
+    /// gaps of 18.9 (a ball is 18): a ball dropping straight down the middle bounces onto a flipper.
+    /// T5 M8 v23 (Play Lab runs 12–19: ~15–25% of drains were bank rebounds dropping nearly straight down just left of
+    /// the post, clipping its shoulder and falling through the gap): r 7 → 8 and a kick toward the side the ball is on,
+    /// angled up, so it lands on that flipper. v23 kicked every touch (run 20: drains halved, every game to the 8-min
+    /// cap — too forgiving). T5 M8 v24 softens it: only a STEEP DROP is kicked (coming down faster than
+    /// centerPostKickMinDrop and within centerPostKickMaxSlant of vertical, judged by the ball's velocity before the
+    /// step), at |v| × centerPostKickScale clamped to centerPostKickMin…Max; every other touch is a plain rubber bounce
+    /// (restitution back to 0.5).
     static let centerPost = CGPoint(x: 284, y: 168)
-    static let centerPostRadius: CGFloat = 7
+    static let centerPostRadius: CGFloat = 8
     static let centerPostRestitution: CGFloat = 0.5
+    static let centerPostKickAngle: CGFloat = .pi * 35 / 180
+    static let centerPostKickScale: CGFloat = 0.5
+    static let centerPostKickMin: CGFloat = 220
+    static let centerPostKickMax: CGFloat = 380
+    static let centerPostKickMinDrop: CGFloat = 250
+    /// |dx| ≤ this × |dy|: 0.5 ≈ within 27° of straight down.
+    static let centerPostKickMaxSlant: CGFloat = 0.5
 
     // MARK: Plunger
     static let plungerSize = CGSize(width: 24, height: 50)

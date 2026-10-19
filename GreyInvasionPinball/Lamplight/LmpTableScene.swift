@@ -605,6 +605,28 @@ final class LmpTableScene: SKScene {
         centerPost = post
     }
 
+    /// T5 M8 v23/v24: the center post's kick. Only a ball that was DROPPING STEEPLY onto the post (its velocity before
+    /// this step: down faster than centerPostKickMinDrop, within ~27° of vertical) is sent toward the side it is on,
+    /// angled up, so it lands on that flipper — a near-vertical drop
+    /// used to clip the post's shoulder and fall through the gap beside it. A dead-centre drop goes the way it was
+    /// drifting. Every other touch is the post's plain rubber bounce.
+    private func kickOffCenterPost(_ ball: LmpBall, body: SKPhysicsBody) {
+        let vin = ball.velocityBeforeStep
+        guard -vin.dy > LmpTableLayout.centerPostKickMinDrop,
+              abs(vin.dx) <= LmpTableLayout.centerPostKickMaxSlant * -vin.dy else { return }
+        // T5 M8 v25: no "above the post's middle" test — at 60 Hz the contact arrives a step late, after the ball has
+        // already slid below the post's centre (run 21: five identical 60 Hz drains went through unkicked). A ball
+        // falling this steeply came from above anyway.
+        let dx = ball.position.x - LmpTableLayout.centerPost.x
+        var side: CGFloat = dx < 0 ? -1 : 1
+        if abs(dx) < 2 { side = vin.dx < 0 ? -1 : 1 }
+        let speed = min(max(hypot(vin.dx, vin.dy) * LmpTableLayout.centerPostKickScale,
+                            LmpTableLayout.centerPostKickMin), LmpTableLayout.centerPostKickMax)
+        let a = LmpTableLayout.centerPostKickAngle
+        body.velocity = CGVector(dx: side * cos(a) * speed, dy: sin(a) * speed)
+        ball.velocityBeforeStep = .zero     // one kick per drop: a second contact in the same step is a plain bounce
+    }
+
     private func addPlunger() {
         let size = LmpTableLayout.plungerSize
         let node = SKShapeNode(rectOf: size, cornerRadius: 4)
@@ -691,7 +713,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v22")
+        let label = SKLabelNode(text: "T5 M8 v25")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -737,7 +759,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v22 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v25 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1111,6 +1133,7 @@ final class LmpTableScene: SKScene {
                 let scale = LmpTableLayout.maxBallSpeed / speed
                 body.velocity = CGVector(dx: v.dx * scale, dy: v.dy * scale)
             }
+            ball.velocityBeforeStep = body.velocity      // T5 M8 v24: for the center post's steep-drop test
             // The right outlane: crossing its line going down marks the ball (the cat-flap save comes with the rules).
             let p0 = ball.previousPosition, p = ball.position
             if ball.ride != nil {
@@ -1736,13 +1759,16 @@ final class LmpTableScene: SKScene {
                     hitHaptic.impactOccurred(intensity: 0.7)
                     sfx(.bumper)
                 }
-            } else if node === centerPost, gameTime - centerPostHitAt > 0.15 {
-                centerPostHitAt = gameTime
-                game.add(LmpTableLayout.centerPostPoints)
-                shotEvent("post")
-                hitHaptic.impactOccurred(intensity: 0.5)
-                sfx(.standup)
-                centerPost?.run(.sequence([.scale(to: 1.25, duration: 0.04), .scale(to: 1, duration: 0.12)]))
+            } else if node === centerPost {
+                kickOffCenterPost(ballNode, body: ballBody)      // T5 M8 v24: steep drops only
+                if gameTime - centerPostHitAt > 0.15 {
+                    centerPostHitAt = gameTime
+                    game.add(LmpTableLayout.centerPostPoints)
+                    shotEvent("post")
+                    hitHaptic.impactOccurred(intensity: 0.5)
+                    sfx(.standup)
+                    centerPost?.run(.sequence([.scale(to: 1.25, duration: 0.04), .scale(to: 1, duration: 0.12)]))
+                }
             }
         default:
             break

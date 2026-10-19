@@ -39,6 +39,8 @@ final class LmpBall: SKNode {
     /// T5 M8 v7: window-seat catches on this loft visit (the first scores and finds a book; after that the seat sends
     /// the ball down the chute). Cleared when the ball leaves the upper layer.
     var windowSeatCatches = 0
+    /// T5 M8 v16 (economy): this ball has had its window-seat find (one per ball; later window seats score only).
+    var windowSeatFound = false
     var scoopIgnoreUntil: TimeInterval = 0
     /// Just plunged: its first trip over the top isn't a loop. Cleared once it comes back down the table.
     var launched = false

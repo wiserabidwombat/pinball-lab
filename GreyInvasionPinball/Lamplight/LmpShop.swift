@@ -323,9 +323,9 @@ final class LmpShop {
         if rarity >= .rare { save.findsSinceRare = 0 }
         if rarity == .ultraRare { save.findsSinceUltra = 0 }
 
-        let ofRarity = Self.books.filter { $0.rarity == rarity }
-        let missing = ofRarity.filter { save.owned[$0.id] == nil }
-        let book = (missing.randomElement() ?? ofRarity.randomElement())!
+        // T5 M8 v16 (economy): any book of the rarity, owned or not, so duplicates turn up (lent to a neighbour for a
+        // tip) and the shelves fill over months, not days. Before, a missing book was always picked first.
+        let book = Self.books.filter { $0.rarity == rarity }.randomElement()!
         let isNew = save.owned[book.id] == nil
         if isNew {
             save.owned[book.id] = LmpShopSave.Owned(firstFound: Date(), count: 1)

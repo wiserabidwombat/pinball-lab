@@ -512,6 +512,11 @@ enum LmpTableLayout {
     static let rampMadeSwitch = LmpSwitch(a: CGPoint(x: 262, y: 1100), b: CGPoint(x: 262, y: 1140),
                                           forward: CGVector(dx: -1, dy: 0))
     static let rampPoints = 1_000
+    /// T5 M8 v18 (Play Lab: a ball sat still at (323, 1114) for 5 s): the ramp's last run, from the end of the turn
+    /// (x ~398) west to the loft's door, is flat on a top-down table, so a ball that runs out of speed there rests on the
+    /// lower rail. A ball that slow on the top run is helped on into the loft at this speed (it's over the hump).
+    static var rampTopEastX: CGFloat { rampCenterline[rampCenterline.count - 2].x }
+    static let rampTopNudgeSpeed: CGFloat = 150
 
     // MARK: The cat (milestone 4). Her shelf runs along the top right, above the ramp's turn and below the gap at
     // the top of the arch; she walks it, naps, and swats balls that come within reach back down the table.

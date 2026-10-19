@@ -12,6 +12,8 @@
 // Milestone 5: the Shot Lab robot (debug builds) from the left, right, upper and loft flippers.
 // Milestone 6 round 1: finds. Knocking down the whole bookshelf, the fireplace, the window seat and waking the cat each
 // find a book (LmpShop: rarity, pity, saved at once); a loop combo or a full plunge makes it a lucky evening.
+// T5 M8 v16 (economy): the bank completed lights the fireplace's find (one per bank, the reading lamp's open fireplace
+// too), the window seat finds once per ball, the cat as before; Festival Night finds on every fireplace and window seat.
 // Round 3: the cat roams between the perches you own; each perch changes its shot a little (LmpPerch.effect).
 // Milestone 7 round 1: lamps. Arrows light the shots that are worth something right now (the open fireplace, the
 // kettle when the dumbwaiter is lit, the other loop during a combo, the ramp on a lucky evening, the window seat when
@@ -94,6 +96,8 @@ final class LmpTableScene: SKScene {
     private var ladderDropped = false
     /// T5 M8 v11: the cat flap in the right outlane, lit at the start of each ball, one save.
     private var catFlapLit = false
+    /// T5 M8 v16: the fireplace has a book waiting (lit by completing the bank; the next fireplace finds it).
+    private var fireplaceFindLit = false
     private var cozyIcons: [SKSpriteNode] = []
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
@@ -682,7 +686,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v15")
+        let label = SKLabelNode(text: "T5 M8 v18")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -728,7 +732,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v15 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v18 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -802,6 +806,7 @@ final class LmpTableScene: SKScene {
         bookTargets.forEach { $0.raise() }
         pendingDrops.removeAll()
         bankResetAt = nil
+        fireplaceFindLit = false
         loopCombo = 0
         lastLoopAt = -100
         cat.reset()
@@ -1107,6 +1112,12 @@ final class LmpTableScene: SKScene {
             } else if ball.isUpper {
                 updateUpperBall(ball, from: p0, to: p)
             } else {
+                // T5 M8 v17: a floor ball found outside the side walls goes back inside (and the Play Lab hears where it
+                // was the frame before, to find how it got out).
+                if p.y > LmpTableLayout.apronTopY, p.y < LmpTableLayout.archStartY,
+                   p.x < LmpTableLayout.leftWallX - 2 || p.x > LmpTableLayout.rightWallX + 2 {
+                    rescueFromWall(ball, from: p0)
+                }
                 if p0.y >= line.a.y, p.y < line.a.y, p.x > line.a.x, p.x < line.b.x {
                     ball.inRightOutlane = true
                     if catFlapLit, !isLabRunning { catFlapSave(ball) }
@@ -1128,6 +1139,24 @@ final class LmpTableScene: SKScene {
             ball.previousPosition = p
             ball.updateLook()
         }
+    }
+
+    /// T5 M8 v17 (Play Lab: a slow ball leaving the loft's chute was seen at (-59, 794), past the left wall in a single
+    /// frame, even after v14's contact refresh): puts a floor ball that got outside a side wall back just inside it,
+    /// moving gently inward. In debug builds it's reported as a "wallRescue" incident at the point it was the frame
+    /// before, so the next run shows where balls get out.
+    private func rescueFromWall(_ ball: LmpBall, from p0: CGPoint) {
+        guard let body = ball.physicsBody else { return }
+        let r = LmpTableLayout.ballRadius
+        let left = ball.position.x < LmpTableLayout.playfieldCenterX
+        ball.position = CGPoint(x: left ? LmpTableLayout.leftWallX + r + 2 : LmpTableLayout.rightWallX - r - 2,
+                                y: ball.position.y)
+        let v = body.velocity
+        body.velocity = CGVector(dx: (left ? 1 : -1) * abs(v.dx) * 0.3, dy: v.dy)
+        #if DEBUG
+        recordIncident(PlayIncident(kind: "wallRescue", x: Double(p0.x).rounded(), y: Double(p0.y).rounded(),
+                                    upper: ball.isUpper, time: (gameTime - eveningStart).rounded()))
+        #endif
     }
 
     override func didFinishUpdate() {
@@ -1251,6 +1280,7 @@ final class LmpTableScene: SKScene {
         if has(.readingLamp), !bookTargets.allSatisfy({ $0.isDown }) {
             bookTargets.forEach { $0.drop() }
             pendingDrops.removeAll()
+            fireplaceFindLit = true
             showBanner("READING LAMP · FIREPLACE OPEN")
         }
     }
@@ -1392,6 +1422,12 @@ final class LmpTableScene: SKScene {
             // table. It happens when a ball leaves the loft over the left end of its slope, above the exit switch.
             // The loft never reaches left of x 72, so anything left of the lane's inner wall goes back on the floor.
             || p.x < LmpTableLayout.leftOrbitInnerX - LmpTableLayout.ballRadius - 1
+        // T5 M8 v18: a ball out of speed on the ramp's flat top run rolls on into the loft.
+        if p.x > LmpTableLayout.loftRightX, p.x < LmpTableLayout.rampTopEastX,
+           abs(p.y - LmpTableLayout.rampCenterline[LmpTableLayout.rampCenterline.count - 1].y) < LmpTableLayout.rampHalfWidth + 4,
+           let body = ball.physicsBody, hypot(body.velocity.dx, body.velocity.dy) < LmpTableLayout.rampTopNudgeSpeed * 0.5 {
+            body.velocity = CGVector(dx: -LmpTableLayout.rampTopNudgeSpeed, dy: 0)
+        }
         if LmpTableLayout.rampEntrySwitch.crossing(from: p0, to: p) == .backward
             || LmpTableLayout.loftExitSwitch.crossing(from: p0, to: p) == .forward
             || outside {
@@ -1451,7 +1487,7 @@ final class LmpTableScene: SKScene {
                 showBanner(ladderDropped ? "LIBRARY LADDER · FIREPLACE OPEN" : "FIREPLACE OPEN")
                 ladderDropped = false
                 sfx(.lanesComplete)
-                awardFind(from: .shelf)
+                fireplaceFindLit = true                // the book behind the bank: the fireplace finds it
                 requestEvent(.bookshelf)
             }
         }
@@ -1577,11 +1613,20 @@ final class LmpTableScene: SKScene {
                        : scoop === windowSeat ? "WINDOW SEAT" : "MAIL POSTED")
             scoop.flash()
             hitHaptic.impactOccurred(intensity: 0.8)
-            if scoop === fireplace { awardFind(from: .shelf) } else if scoop === windowSeat { awardFind(from: .loft) }
+            // T5 M8 v16: one fireplace find per completed bank, one window-seat find per ball (every one at the festival).
+            if scoop === fireplace, fireplaceFindLit || festivalActive {
+                fireplaceFindLit = false
+                awardFind(from: .shelf)
+            }
+            let windowSeatFinds = scoop === windowSeat && (!ball.windowSeatFound || festivalActive)
+            if windowSeatFinds {
+                ball.windowSeatFound = true
+                awardFind(from: .loft)
+            }
             // M8 round 5: the lit festival starts in the fireplace (after an Evening Rush, if one is going).
             if scoop === fireplace, festivalLit, !rushActive, !isLabRunning { startFestival() }
             if scoop === kettle { requestEvent(.kettle) } else if scoop === mailSlot { requestEvent(.mail) }
-            if scoop === windowSeat, cat.perch == .windowSeat {
+            if windowSeatFinds, cat.perch == .windowSeat {
                 awardFind(from: .loft)                 // her perch: an extra book
                 showBanner("THE CAT FOUND ONE TOO")
             } else if scoop === kettle, cat.perch == .kettle {
@@ -1839,7 +1884,7 @@ extension LmpTableScene: PlayLabHost {
          PlayObjective(name: "rush", text: "Finish 3 requests in an evening to start the Evening Rush (2 balls, requests ×2)"),
          PlayObjective(name: "fireplaceOpen", text: "Knock down all four books to open the fireplace"),
          PlayObjective(name: "fireplace", text: "Shoot the open fireplace"),
-         PlayObjective(name: "find", text: "Find a book (bookshelf, fireplace, window seat, or waking the cat)"),
+         PlayObjective(name: "find", text: "Find a book (the fireplace after the bank, the window seat once a ball, or waking the cat)"),
          PlayObjective(name: "loft", text: "Reach the loft (the ramp, the dumbwaiter or a full plunge)"),
          PlayObjective(name: "windowSeat", text: "Shoot the window seat from the loft flipper"),
          PlayObjective(name: "loopCombo", text: "Make two loops within 5 s"),

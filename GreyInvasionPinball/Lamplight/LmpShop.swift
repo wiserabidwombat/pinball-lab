@@ -135,9 +135,9 @@ nonisolated enum LmpPerch: String, CaseIterable, Codable {
     var price: Int {
         switch self {
         case .shelf: return 0
-        case .mantel: return 8
-        case .kettle: return 5
-        case .windowSeat: return 6
+        case .mantel: return 20                    // T5 M8 v19: perches 8 / 5 / 6 → 20 / 12 / 15
+        case .kettle: return 12
+        case .windowSeat: return 15
         }
     }
 
@@ -358,8 +358,11 @@ final class LmpShop {
 
     // MARK: Tips and furniture (M6 round 3)
 
-    /// The evening's score becomes tips at closing (the plan: 1 tip per 10,000 points, to tune).
-    static let pointsPerTip = 10_000
+    /// The evening's score becomes tips at closing.
+    /// T5 M8 v19 (economy round 2): 10,000 → 25,000. With a tip per regular helped and per duplicate lent, a casual
+    /// evening (~100 K, 3 regulars, a duplicate) earns ~8 tips and a strong one (~300 K, 10 regulars, a few duplicates)
+    /// ~25, against a catalog that now totals 192 (the clock alone ~ a season of casual evenings).
+    static let pointsPerTip = 25_000
     static func tips(forScore score: Int) -> Int { score / pointsPerTip }
 
     func owns(_ perch: LmpPerch) -> Bool { perch == .shelf || save.furniture.contains(perch.rawValue) }

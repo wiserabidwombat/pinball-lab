@@ -30,14 +30,16 @@ nonisolated enum LmpCozy: String, CaseIterable, Codable {
         }
     }
 
-    /// From a few tips to a season's saving (the clock).
+    /// From a few evenings' tips to a season's saving (the clock).
+    /// T5 M8 v19 (economy round 2): 6 / 8 / 10 / 12 / 20 → 15 / 20 / 25 / 30 / 55 (a casual player earns ~8 tips an
+    /// evening, a strong one ~25).
     var price: Int {
         switch self {
-        case .shopBell: return 6
-        case .teapot: return 8
-        case .readingLamp: return 10
-        case .ladder: return 12
-        case .clock: return 20
+        case .shopBell: return 15
+        case .teapot: return 20
+        case .readingLamp: return 25
+        case .ladder: return 30
+        case .clock: return 55
         }
     }
 

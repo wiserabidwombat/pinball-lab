@@ -194,7 +194,7 @@ struct LmpCollectionView: View {
                 .padding(10)
                 .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
             }
-            Text("Tips come from your score at closing (1 per \(LmpShop.pointsPerTip.formatted()) points) and from lending spare books.")
+            Text("Tips come from your score at closing (1 per \(LmpShop.pointsPerTip.formatted()) points), from each regular you help, and from lending spare books.")
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.5))
         }

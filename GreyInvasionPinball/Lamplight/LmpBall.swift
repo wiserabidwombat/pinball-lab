@@ -41,6 +41,8 @@ final class LmpBall: SKNode {
     var windowSeatCatches = 0
     /// T5 M8 v16 (economy): this ball has had its window-seat find (one per ball; later window seats score only).
     var windowSeatFound = false
+    /// T5 M8 v22: how far the plunger was pulled for this ball (0–1; 0 for the Rush's automatic plunges).
+    var launchPower: CGFloat = 0
     var scoopIgnoreUntil: TimeInterval = 0
     /// Just plunged: its first trip over the top isn't a loop. Cleared once it comes back down the table.
     var launched = false

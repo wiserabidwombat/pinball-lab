@@ -442,9 +442,11 @@ enum LmpTableLayout {
     static let dumbwaiterExitVelocity = CGVector(dx: 250, dy: 0)
     static let dumbwaiterPoints = 1_000
 
-    /// M3 round 2: a full plunge (a plunged ball still this fast as it comes over the top, about 85% pull or more)
-    /// drops through a hatch into the loft instead of running down the left lane.
-    static let plungeToLoftSpeed: CGFloat = 1200
+    /// M3 round 2: a full plunge drops through a hatch into the loft instead of running down the left lane.
+    /// T5 M8 v22 (Play Lab: one hatch in ~200 robot games): it was judged by the ball's speed over the top (≥ 1200 pt/s),
+    /// and since the orbit rails got friction (M5) even a 97% pull arrived too slow. Now it's the pull itself: a plunge
+    /// of this much or more goes through the hatch (the Rush's automatic plunges are 0.55, never a full plunge).
+    static let fullPlungePower: CGFloat = 0.85
     static let loftHatch = CGPoint(x: 215, y: 1185)
     static let loftHatchSeconds: TimeInterval = 0.2
     static let loftHatchExitVelocity = CGVector(dx: -120, dy: -60)

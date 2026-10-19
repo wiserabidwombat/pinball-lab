@@ -96,6 +96,8 @@ final class LmpTableScene: SKScene {
     private var ladderDropped = false
     /// T5 M8 v11: the cat flap in the right outlane, lit at the start of each ball, one save.
     private var catFlapLit = false
+    /// T5 M8 v20: when the rocking chair last relit the cat flap (its lamp flashes for a moment).
+    private var rockingChairActedAt: TimeInterval = -100
     /// T5 M8 v16: the fireplace has a book waiting (lit by completing the bank; the next fireplace finds it).
     private var fireplaceFindLit = false
     private var cozyIcons: [SKSpriteNode] = []
@@ -345,6 +347,9 @@ final class LmpTableScene: SKScene {
             case .teapot: acting = balls.contains { $0.heldIn === kettle }
             case .shopBell: acting = request == nil && nextRequestAt != nil
             case .readingLamp: acting = false
+            case .rockingChair: acting = now - rockingChairActedAt < 2
+            case .windowSeat: acting = game.lucky
+            case .catBed: acting = cat.mode == .nap
             }
             lamps.set("cozy\(i)", acting ? .fastBlink : .on)
         }
@@ -686,7 +691,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v19")
+        let label = SKLabelNode(text: "T5 M8 v22")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -732,7 +737,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v19 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v22 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -933,6 +938,7 @@ final class LmpTableScene: SKScene {
             if ballSaveArmed, has(.clock) { ballSaveUntil = gameTime + LmpTableLayout.clockSaveSeconds }
             ballSaveArmed = false
             ball.launched = true
+            ball.launchPower = power
             let speed = LmpTableLayout.minLaunchSpeed
                 + power * (LmpTableLayout.maxLaunchSpeed - LmpTableLayout.minLaunchSpeed)
             body.velocity = CGVector(dx: 0, dy: speed)
@@ -1170,7 +1176,8 @@ final class LmpTableScene: SKScene {
     /// Finds a book (saved at once) and shows it under the score. The robot never finds anything.
     private func awardFind(from source: LmpFindSource) {
         if isLabRunning { return }
-        let find = LmpShop.shared.find(from: source, lucky: game.lucky, festival: festivalActive)
+        let find = LmpShop.shared.find(from: source, lucky: game.lucky, festival: festivalActive,
+                                       treasureBoost: has(.windowSeat) && game.lucky)
         game.findsTonight += 1
         labObjective("find")
         if find.isNew { game.newTonight += 1 }
@@ -1222,8 +1229,16 @@ final class LmpTableScene: SKScene {
             // M8 round 5: the season's goal met tonight lights its festival.
             let nowLit = !festivalLit && !festivalActive && LmpShop.shared.festivalLit
             if nowLit { festivalLit = true }
+            // T5 M8 v20: the rocking chair relights the cat flap.
+            let chairRelit = has(.rockingChair) && !catFlapLit
+            if chairRelit {
+                catFlapLit = true
+                rockingChairActedAt = gameTime
+            }
             showBanner("THANK YOU! · \(r.regular.name.uppercased()) · "
-                       + (nowLit ? "FESTIVAL NIGHT IS LIT" : "FRIENDSHIP \(level)" + (rushActive ? " · ×2" : "")))
+                       + (nowLit ? "FESTIVAL NIGHT IS LIT"
+                                 : chairRelit ? "ROCKING CHAIR · CAT FLAP LIT"
+                                              : "FRIENDSHIP \(level)" + (rushActive ? " · ×2" : "")))
             sfx(.lanesComplete)
             if !rushActive, game.requestsTonight % LmpTableLayout.rushEvery == 0 { startRush() }
             game.status = statusText(nil)
@@ -1256,6 +1271,7 @@ final class LmpTableScene: SKScene {
         let placed = LmpShop.shared.placedCozy
         cozy = Set(placed)
         cozySlots = Array(placed.prefix(LmpTableLayout.cozyLamps.count))
+        cat.napsMore = has(.catBed)                    // T5 M8 v21: the cat bed
         game.cozy = placed
         ballSaveUntil = 0
         ballSaveArmed = false
@@ -1442,8 +1458,7 @@ final class LmpTableScene: SKScene {
     private func madeLoop(_ ball: LmpBall, rightToLeft: Bool) {
         if ball.launched {
             // M3 round 2: a full plunge drops through the hatch into the loft.
-            let v = ball.physicsBody?.velocity ?? .zero
-            if rightToLeft, hypot(v.dx, v.dy) >= LmpTableLayout.plungeToLoftSpeed {
+            if rightToLeft, ball.launchPower >= LmpTableLayout.fullPlungePower {     // T5 M8 v22: by the pull
                 ball.launched = false
                 startRide(ball, to: LmpTableLayout.loftHatch, seconds: LmpTableLayout.loftHatchSeconds,
                           exit: LmpTableLayout.loftHatchExitVelocity)
@@ -1684,9 +1699,18 @@ final class LmpTableScene: SKScene {
                     game.add(LmpTableLayout.catWakePoints)
                     shotEvent("cat")
                     labObjective("cat")
-                    showBanner("MRRP?!")
-                    awardFind(from: .cat)
                     sfx(.captiveKnock)
+                    // T5 M8 v21: sometimes she brings you a gift instead of a book (twice as often with the cat bed).
+                    if !isLabRunning, let gift = LmpShop.shared.catGift(bed: has(.catBed)) {
+                        labObjective("catGift")
+                        game.findToast = gift
+                        findToastClearAt = gameTime + LmpTableLayout.findToastSeconds
+                        showBanner(gift.isNew ? "MRRP! · A GIFT FROM THE CAT" : "MRRP! · ANOTHER GIFT")
+                        if gift.isNew { sfx(.jackpot) }
+                    } else {
+                        showBanner("MRRP?!")
+                        awardFind(from: .cat)
+                    }
                 case .petted:
                     game.add(LmpTableLayout.catPetPoints)
                     shotEvent("cat")
@@ -1891,6 +1915,7 @@ extension LmpTableScene: PlayLabHost {
          PlayObjective(name: "luckyEvening", text: "A loop combo or a full plunge: better odds on rare books"),
          PlayObjective(name: "mail", text: "Post a letter in the mail slot"),
          PlayObjective(name: "cat", text: "Wake the napping cat"),
+         PlayObjective(name: "catGift", text: "Wake the cat and get a gift (twice as likely with the cat bed)"),
          PlayObjective(name: "festival", text: "Help 9 regulars in a season (or reach its last evening), then shoot the fireplace: Festival Night, 3 balls, every shot lit")]
     }
 

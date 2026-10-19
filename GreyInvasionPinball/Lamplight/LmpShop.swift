@@ -44,9 +44,12 @@ nonisolated struct LmpBook: Identifiable, Hashable {
 
     /// M8 round 4: a seasonal treasure (found only in its season) rather than a book.
     var isSeasonal: Bool { id.hasPrefix("season.") }
+    /// T5 M8 v21: one of the cat's gifts (she brings them when you wake her).
+    var isCatGift: Bool { id.hasPrefix("gift.") }
 
     /// The line under the title: "Mystery · signed copy", or "An autumn treasure".
     var editionLine: String {
+        if isCatGift { return "A gift from the cat" }
         guard isSeasonal else { return "\(genre) · \(rarity.edition)" }
         return (genre == "Autumn" ? "An " : "A ") + genre.lowercased() + " treasure"
     }
@@ -260,6 +263,31 @@ final class LmpShop {
     /// A find in season turns out to be one of the season's missing treasures this often.
     static let treasureChance = 0.12
 
+    // MARK: Cat gifts (T5 M8 v21)
+
+    /// The plan's 15 cat gifts, kept in the same owned dict as the books (ids "gift.<i>"; booksOwned counts books only).
+    static let catGifts: [LmpBook] = [
+        "Yarn Mouse", "Bottle Cap", "Golden Leaf", "Silver Button", "Lost Earring", "Feather Quill", "Thimble",
+        "Blue Marble", "Ribbon Bow", "Pine Cone", "Tiny Brass Key", "Seashell", "Postage Stamp", "Acorn Cap",
+        "Bell from a Collar",
+    ].enumerated().map { LmpBook(id: "gift.\($0.offset)", title: $0.element, genre: "Cat gift", rarity: .rare) }
+    /// Waking her brings a gift this often (twice as often with the cat bed).
+    static let catGiftChance = 0.3
+    /// A gift from the cat, or nil this time. A gift you already have is a duplicate: a tip, like a spare book.
+    func catGift(bed: Bool) -> LmpFind? {
+        guard Double.random(in: 0..<1) < Self.catGiftChance * (bed ? 2 : 1),
+              let gift = Self.catGifts.randomElement() else { return nil }
+        let isNew = save.owned[gift.id] == nil
+        if isNew {
+            save.owned[gift.id] = LmpShopSave.Owned(firstFound: Date(), count: 1)
+        } else {
+            save.owned[gift.id]?.count += 1
+            save.tips += 1
+        }
+        write()
+        return LmpFind(book: gift, isNew: isNew)
+    }
+
     // MARK: Festival Night (M8 round 5)
 
     /// Seasons since the first evening (0, 1, 2, …), so each season's goal and festival are its own.
@@ -302,10 +330,11 @@ final class LmpShop {
     static let pityUltra = 120
 
     /// Rolls a find, records it and saves. A duplicate is lent to a neighbour for a tip.
-    func find(from source: LmpFindSource, lucky: Bool, festival: Bool = false) -> LmpFind {
+    func find(from source: LmpFindSource, lucky: Bool, festival: Bool = false, treasureBoost: Bool = false) -> LmpFind {
         // M8 round 4: sometimes one of this season's missing treasures instead (it doesn't touch the pity counters).
+        // T5 M8 v20: the window seat (cozy) doubles the chance on a lucky evening.
         let missingTreasures = Self.treasures(of: season).filter { save.owned[$0.id] == nil }
-        let chance = festival ? Self.festivalTreasureChance : Self.treasureChance
+        let chance = (festival ? Self.festivalTreasureChance : Self.treasureChance) * (treasureBoost ? 2 : 1)
         if let treasure = missingTreasures.randomElement(), Double.random(in: 0..<1) < chance {
             save.owned[treasure.id] = LmpShopSave.Owned(firstFound: Date(), count: 1)
             write()

@@ -381,7 +381,9 @@ struct LmpTableView: View {
         let color = Self.rarityColor(find.book.rarity)
         return VStack(spacing: 3) {
             HStack(spacing: 6) {
-                Text(find.book.isSeasonal ? "SEASONAL TREASURE" : find.isNew ? "NEW BOOK" : "ANOTHER COPY · LENT FOR A TIP")
+                Text(find.book.isSeasonal ? "SEASONAL TREASURE"
+                     : find.book.isCatGift ? (find.isNew ? "A GIFT FROM THE CAT" : "ANOTHER GIFT · A TIP")
+                     : find.isNew ? "NEW BOOK" : "ANOTHER COPY · LENT FOR A TIP")
                     .font(.orbitron(11, .bold))
                     .foregroundStyle(.white.opacity(0.8))
                 Text(find.book.rarity.name.uppercased())

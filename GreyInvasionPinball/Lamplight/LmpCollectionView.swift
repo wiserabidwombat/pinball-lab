@@ -36,6 +36,8 @@ struct LmpCollectionView: View {
                     ForEach(LmpSeason.allCases, id: \.self) { season in
                         shelf(season.name, books: LmpShop.treasures(of: season))
                     }
+                    // T5 M8 v21: what the cat brings you when you wake her.
+                    shelf("Cat gifts", books: LmpShop.catGifts)
                     Button(role: .destructive) { confirmNewShop = true } label: {
                         Text("Start a new shop")
                             .font(.system(size: 14, weight: .semibold))

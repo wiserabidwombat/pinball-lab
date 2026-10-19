@@ -12,6 +12,8 @@ final class LmpCat: SKNode {
     enum HitResult { case petted, woke, none }
 
     private(set) var mode: Mode = .walk
+    /// T5 M8 v21: the cat bed (cozy) — she naps more often and for longer.
+    var napsMore = false
     /// M6 round 3: where she is. On the shelf she walks; on any other perch she sits, dozing off now and then.
     private(set) var perch: LmpPerch = .shelf
     private var sitUntil: TimeInterval = 0
@@ -117,7 +119,7 @@ final class LmpCat: SKNode {
             let step = LmpTableLayout.catWalkSpeed * dt
             if abs(dx) <= step {
                 position.x = targetX
-                if Double.random(in: 0..<1, using: &rng) < 0.5 {
+                if Double.random(in: 0..<1, using: &rng) < (napsMore ? 0.8 : 0.5) {
                     startNap(now)
                 } else {
                     pickTarget()
@@ -183,7 +185,7 @@ final class LmpCat: SKNode {
 
     private func startNap(_ now: TimeInterval) {
         mode = .nap
-        napUntil = now + Double.random(in: LmpTableLayout.catNapSeconds, using: &rng)
+        napUntil = now + Double.random(in: LmpTableLayout.catNapSeconds, using: &rng) * (napsMore ? 1.5 : 1)
         zzz.isHidden = false
         zzz.run(.repeatForever(.sequence([.fadeAlpha(to: 0.3, duration: 0.8),
                                           .fadeAlpha(to: 1, duration: 0.8)])), withKey: "zzz")

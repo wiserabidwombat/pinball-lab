@@ -732,6 +732,11 @@ final class LmpTableScene: SKScene {
         node.fillColor = SKColor(white: 0.65, alpha: 1)
         node.strokeColor = .clear
         node.position = LmpTableLayout.plungerRestPosition
+        // T5 M9 v14: the rendered plunger, when the table art is in.
+        if hasTableArt, let art = LmpTableLayout.artSprite("lmp_plunger", box: LmpTableLayout.plungerArtBox) {
+            node.fillColor = .clear
+            node.addChild(art)
+        }
 
         let body = SKPhysicsBody(rectangleOf: size)
         body.isDynamic = false
@@ -831,7 +836,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v13")
+        let label = SKLabelNode(text: "T5 M9 v14")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -877,7 +882,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v13 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v14 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

@@ -119,6 +119,8 @@ enum LmpTableLayout {
 
     // MARK: Plunger
     static let plungerSize = CGSize(width: 24, height: 50)
+    /// T5 M9 v14: the rendered plunger (rubber tip, brass rod, spring) round the plunger block's centre.
+    static let plungerArtBox = CGRect(x: -14, y: -27, width: 28, height: 62)
     static let plungerRestTop: CGFloat = 120
     static var plungerRestPosition: CGPoint {
         CGPoint(x: laneCenterX, y: plungerRestTop - plungerSize.height / 2)
@@ -339,7 +341,9 @@ enum LmpTableLayout {
     }
     static var kettleEject: CGVector { CGVector(dx: -kettleAxis.dx * 480, dy: -kettleAxis.dy * 480) }
     static let kettlePoints = 1_500
-    static let spinnerArtBox = CGRect(x: -22, y: -10, width: 44, height: 32)
+    /// T5 M9 v14: the teapot spinner's frames (tools/lmp_bake_parts.py), rendered in world orientation round the axle's
+    /// middle (the axle runs 16° across the kettle lane).
+    static let spinnerArtBox = CGRect(x: -32, y: -20, width: 64, height: 48)
     static let spinnerFrames = (columns: 6, rows: 4)
     static let spinnerPoints = 20
 

@@ -84,6 +84,20 @@ g.add_color_stop_rgba(0.5, 0.18, 0.08, 0.02, 0.0)
 g.add_color_stop_rgba(1, 0.18, 0.08, 0.02, 0.10)
 cr.set_source(g); cr.rectangle(X0, Y0, W, H); cr.fill()
 
+# ------------------------------------------------------------------ M9 v37: the worn path
+# Years of customers: the varnish is a little paler and duller where they walk, from the door (the counter, bottom)
+# up the middle to the fireplace, with a branch toward the stairs and one toward the bookcases on the right.
+def worn(pts, width):
+    for w_, a_ in ((width * 1.6, 0.025), (width * 1.2, 0.03), (width, 0.035), (width * 0.6, 0.03)):
+        cr.set_source_rgba(0.86, 0.72, 0.52, a_); cr.set_line_width(w_)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND); cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        cr.move_to(*pts[0])
+        for q in pts[1:]: cr.line_to(*q)
+        cr.stroke()
+worn([(284, 150), (290, 330), (280, 520), (284, 700)], 46)
+worn([(282, 600), (220, 760), (150, 930)], 30)
+worn([(286, 560), (400, 640), (520, 700)], 28)
+
 # ------------------------------------------------------------------ the rug (between the slings): lmp_rug.py
 # M9 round 1b (Aaron: "more of this style of rug"): a worn tribal/Persian-style rug, navy field, rust and cream.
 import lmp_rug
@@ -102,6 +116,32 @@ for row in range(0, 30):
 cr.restore()
 
 exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lmp_floor_upper.py')).read())
+
+# ------------------------------------------------------------------ M9 v37: lamplight and rainy window light
+# Warm pools from the wall sconces (modelled in lmp_bake_table.py) on the side bookcases, and the cool light of the
+# rainy night falling in through the window in the right-hand bookcase, with the glazing bars' shadow and rain streaks.
+for side, sy in L.SHOP_SCONCES:
+    px = L.LEFT_X + 26 if side == 'L' else L.RIGHT_X - 26
+    for rr_, aa_ in ((100, 0.12), (62, 0.18), (32, 0.16)):
+        g = cairo.RadialGradient(px, sy - 8, 0, px, sy - 8, rr_)
+        g.add_color_stop_rgba(0, 1.0, 0.74, 0.38, aa_); g.add_color_stop_rgba(1, 1.0, 0.74, 0.38, 0.0)
+        cr.set_source(g); cr.paint()
+wy0, wy1 = L.SHOP_WINDOW_Y0 + 6, L.SHOP_WINDOW_Y1 - 6
+def wpool(grow):
+    cr.move_to(L.RIGHT_X + 4, wy0 - grow); cr.line_to(L.RIGHT_X + 4, wy1 + grow)
+    cr.line_to(452 - grow, wy1 - 52 + grow); cr.line_to(470 - grow, wy0 - 70 - grow); cr.close_path()
+for grow, a in ((8, 0.05), (4, 0.06), (0, 0.10)):
+    wpool(grow); cr.set_source_rgba(0.68, 0.78, 1.0, a); cr.fill()
+cr.save(); wpool(0); cr.clip()
+cr.set_source_rgba(0.04, 0.06, 0.12, 0.20); cr.set_line_width(3.2)          # glazing bars: a cross, slanting with the light
+ym = (wy0 + wy1) / 2
+cr.move_to(L.RIGHT_X + 4, ym); cr.line_to(455, ym - 62); cr.stroke()
+cr.move_to((L.RIGHT_X + 470) / 2 + 6, wy0 - 34); cr.line_to((L.RIGHT_X + 452) / 2 + 6, wy1 - 26); cr.stroke()
+for i in range(60):                                                            # rain running down the panes
+    rx_, ry_ = rnd.uniform(455, 580), rnd.uniform(wy0 - 70, wy1)
+    cr.set_source_rgba(0.10, 0.14, 0.24, rnd.uniform(0.10, 0.25)); cr.set_line_width(0.7)
+    cr.move_to(rx_, ry_); cr.line_to(rx_ - 3, ry_ - rnd.uniform(5, 10)); cr.stroke()
+cr.restore()
 
 # ------------------------------------------------------------------ aprons: lacquered green with gold pinstripes
 GREEN, GREEN_DARK, GOLD = (0.09, 0.22, 0.17), (0.05, 0.13, 0.10), (0.86, 0.66, 0.30)

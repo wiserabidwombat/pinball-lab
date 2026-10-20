@@ -321,3 +321,7 @@ def ramp_height(p):
         return LOFT_HEIGHT
     along = (p[0] - RAMP_MOUTH[0]) * math.cos(RAMP_HEADING) + (p[1] - RAMP_MOUTH[1]) * math.sin(RAMP_HEADING)
     return LOFT_HEIGHT * min(max(along / RAMP_STRAIGHT_LEN, 0), 1)
+
+# M9 v37 (bookstore round 3): wall sconces on the shop's side bookcases (side, y) and the rainy window in the right one
+SHOP_SCONCES = [('L', 330), ('L', 700), ('R', 620), ('R', 930)]
+SHOP_WINDOW_Y0, SHOP_WINDOW_Y1 = 352, 468

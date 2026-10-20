@@ -367,7 +367,9 @@ def _arch_x_left(y):
 _ri = 0
 _y = Y0 + 1.0
 while _y < Y0 + RH + 2:
-    spans = [(X0 + 5, 6.0), (594.0, X0 + RW - 5)]
+    spans = [(X0 + 5, 6.0)]
+    if not (L.SHOP_WINDOW_Y0 - ROW < _y < L.SHOP_WINDOW_Y1):                  # M9 v37: the window in the right case
+        spans.append((594.0, X0 + RW - 5))
     if _y >= L.TOP_Y + 4:
         spans.append((15.0, 585.0))
     elif _y >= L.ARCH_START_Y:
@@ -947,6 +949,73 @@ for _o in [o for o in sc.objects if o.name not in _before_counter and o.type in 
     _ax, _ay = min(_spots, key=lambda p: (p[0] - _ccx) ** 2 + (p[1] - _ccy) ** 2)
     _o.matrix_world = (_Mx.Translation((_ax, _ay, 3)) @ _Mx.Scale(1.5, 4) @ _Mx.Translation((-_ax, -_ay, -3))
                        @ _o.matrix_world)
+
+# ------------------------------------------------------------------ M9 v37 (bookstore round 3): sconces and the window
+# Brass wall sconces with glowing amber tulip shades on the side bookcases' inner tops, reaching over the side walls
+# (their warm pools are painted on the floor), and a window in the right-hand bookcase: a stone sill, a walnut frame
+# with glazing bars, the rainy night outside, a candle and a little fern on the sill.
+M_SHOP_SCONCE = principled('shopSconce', (0.85, 0.50, 0.20), emit=(1.0, 0.55, 0.20), emit_strength=0.9)
+for _side, _sy in L.SHOP_SCONCES:
+    _wx, _ax = (9.5, 20.0) if _side == 'L' else (590.5, 580.0)
+    cylinder(f'shopSconcePlate{_side}{_sy}', _wx, _sy, 3.6, 24, 36, M_BRASS, verts=16)
+    tube3d(f'shopSconceArm{_side}{_sy}', [(_wx, _sy, 31), ((_wx + _ax) / 2, _sy, 34), (_ax, _sy, 35)], 1.0, M_BRASS)
+    bpy.ops.mesh.primitive_cone_add(vertices=24, radius1=2.6, radius2=5.6, depth=7.0, location=(_ax, _sy, 39))
+    bpy.context.object.data.materials.append(M_SHOP_SCONCE)
+    torus(f'shopSconceRim{_side}{_sy}', _ax, _sy, 42.4, 5.5, 0.5, M_BRASS)
+_wy0, _wy1 = L.SHOP_WINDOW_Y0, L.SHOP_WINDOW_Y1
+
+
+def _night_png(path):
+    import cairo as _c
+    W_, H_ = 120, 360
+    sf = _c.ImageSurface(_c.FORMAT_RGB24, W_, H_); c = _c.Context(sf)
+    g = _c.LinearGradient(0, 0, 0, H_); g.add_color_stop_rgb(0, 0.10, 0.16, 0.30); g.add_color_stop_rgb(1, 0.05, 0.08, 0.18)
+    c.set_source(g); c.paint()
+    rr = random.Random(37)
+    for _ in range(14):                                         # far street lamps blurred by the rain
+        x, y = rr.uniform(0, W_), rr.uniform(0, H_)
+        gg = _c.RadialGradient(x, y, 0, x, y, rr.uniform(8, 18))
+        gg.add_color_stop_rgba(0, 1.0, 0.8, 0.45, 0.55); gg.add_color_stop_rgba(1, 1.0, 0.8, 0.45, 0.0)
+        c.set_source(gg); c.paint()
+    for _ in range(140):                                        # raindrops and runs on the glass
+        x, y = rr.uniform(0, W_), rr.uniform(0, H_)
+        c.set_source_rgba(0.75, 0.85, 1.0, rr.uniform(0.25, 0.6)); c.set_line_width(rr.uniform(0.8, 1.6))
+        c.move_to(x, y); c.line_to(x + rr.uniform(-1, 1), y + rr.uniform(6, 22)); c.stroke()
+    sf.write_to_png(path)
+
+
+_night = os.path.join(os.path.dirname(os.path.abspath(OUT)), '_lmp_night.png'); _night_png(_night)
+M_NIGHT = principled('nightGlass', (1, 1, 1), rough=0.05, coat=1.0, image=_night)
+_nn = M_NIGHT.node_tree.nodes; _nb = _nn['Principled BSDF']
+_tex = [n for n in _nn if n.type == 'TEX_IMAGE'][0]
+M_NIGHT.node_tree.links.new(_tex.outputs['Color'], _nb.inputs['Emission Color'])
+_nb.inputs['Emission Strength'].default_value = 0.9
+_gx0, _gx1 = 604.0, X0 + RW - 6
+_bm = bmesh.new(); _uvl = _bm.loops.layers.uv.new('UV')
+_vs = [_bm.verts.new(v) for v in ((_gx0, _wy0 + 4, 12), (_gx1, _wy0 + 4, 12), (_gx1, _wy1 - 4, 12), (_gx0, _wy1 - 4, 12))]
+_f = _bm.faces.new(_vs)
+for _lp, _uvv in zip(_f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))): _lp[_uvl].uv = _uvv
+_me = bpy.data.meshes.new('windowGlass'); _bm.to_mesh(_me); _bm.free(); _me.materials.append(M_NIGHT)
+link(bpy.data.objects.new('windowGlass', _me))
+prism('windowSill', [(594, _wy0), (_gx0, _wy0), (_gx0, _wy1), (594, _wy1)], 0, 12, M_HEARTHSTONE)
+for _yy in (_wy0, _wy1 - 4):                                                   # the bay's walnut ends
+    prism(f'windowEnd{_yy}', [(593, _yy), (X0 + RW - 4, _yy), (X0 + RW - 4, _yy + 4), (593, _yy + 4)], 0, 30, M_WALNUT)
+_fr = [(_gx0, _wy0 + 4, 13), (_gx1, _wy0 + 4, 13), (_gx1, _wy1 - 4, 13), (_gx0, _wy1 - 4, 13), (_gx0, _wy0 + 4, 13)]
+tube3d('windowFrame', _fr, 1.4, M_WALNUT)
+_ym = (_wy0 + _wy1) / 2
+tube3d('windowBarH', [(_gx0, _ym, 13), (_gx1, _ym, 13)], 0.9, M_WALNUT)
+tube3d('windowBarV', [((_gx0 + _gx1) / 2, _wy0 + 4, 13), ((_gx0 + _gx1) / 2, _wy1 - 4, 13)], 0.9, M_WALNUT)
+cylinder('sillCandle', 599, _wy0 + 18, 1.8, 12, 20, M_KEYCAP, verts=16)
+cylinder('sillCandleDish', 599, _wy0 + 18, 3.0, 12, 12.8, M_BRASS, verts=16)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, location=(599, _wy0 + 18, 21.4), segments=12, ring_count=8)
+_o = bpy.context.object; _o.name = 'candleFlame'; _o.scale = (0.7, 0.7, 1.5)
+_o.data.materials.append(principled('flame', (1.0, 0.8, 0.4), emit=(1.0, 0.7, 0.3), emit_strength=8.0))
+cylinder('sillPot', 599, _wy1 - 20, 2.8, 12, 17, principled('terracotta', (0.55, 0.25, 0.14), rough=0.8), verts=16)
+_fern = principled('sillFern', (0.12, 0.30, 0.10), rough=0.6)
+for _k in range(7):
+    _a = _k / 7 * 2 * math.pi
+    tube3d(f'sillFrond{_k}', [(599, _wy1 - 20, 17), (599 + 3 * math.cos(_a), _wy1 - 20 + 3 * math.sin(_a), 20),
+                              (599 + 5.5 * math.cos(_a), _wy1 - 20 + 5.5 * math.sin(_a), 18.5)], 0.6, _fern)
 
 # ------------------------------------------------------------------ oblique shear: y += z * K
 bpy.ops.object.select_all(action='DESELECT')

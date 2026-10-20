@@ -132,6 +132,8 @@ final class LmpTableScene: SKScene {
     private var loopCombo = 0
     private var launchGateFlap: SKNode?
     private var launchGateClosedAngle: CGFloat = 0
+    private var topGateFlap: SKNode?                 // T5 M9 v10
+    private var topGateClosedAngle: CGFloat = 0
     private var isBuilt = false
     private let hitHaptic = Haptic(style: .medium)
 
@@ -524,6 +526,7 @@ final class LmpTableScene: SKScene {
         addWall(points: LmpTableLayout.alcoveWall)
         addWall(points: LmpTableLayout.kettleLaneWall)
         addOrbitDeflector()
+        addTopGate()
 
         for (i, c) in LmpTableLayout.bookTargetCenters.enumerated() {
             let t = LmpDropTarget(at: c, book: i)                         // T5 M9 v8: four coloured books
@@ -571,6 +574,40 @@ final class LmpTableScene: SKScene {
         body.collisionBitMask = LmpPhysicsCategory.ball
         node.physicsBody = body
         addChild(node)
+    }
+
+    /// T5 M9 v10: the one-way gate at the top of the right orbit (solid per ball, see updateGates), a brass flap hung
+    /// from the arch like the launch gate's.
+    private func addTopGate() {
+        let low = LmpTableLayout.topGateLow, high = LmpTableLayout.topGateHigh
+        let node = SKNode()
+        let body = SKPhysicsBody(edgeFrom: low, to: high)
+        body.friction = 0.05
+        body.restitution = 0.2
+        body.categoryBitMask = LmpPhysicsCategory.topGate
+        body.collisionBitMask = LmpPhysicsCategory.ball
+        node.physicsBody = body
+        addChild(node)
+
+        let flap = SKNode()
+        flap.position = high
+        flap.zPosition = 2
+        let closed = atan2(low.y - high.y, low.x - high.x) + .pi / 2
+        let length = hypot(low.x - high.x, low.y - high.y)
+        let blade = SKShapeNode(rect: CGRect(x: -2.5, y: -length, width: 5, height: length), cornerRadius: 2)
+        blade.fillColor = SKColor(red: 0.85, green: 0.70, blue: 0.42, alpha: 1)
+        blade.strokeColor = SKColor(white: 0.25, alpha: 1)
+        blade.lineWidth = 1
+        flap.addChild(blade)
+        let pin = SKShapeNode(circleOfRadius: 4)
+        pin.fillColor = SKColor(white: 0.88, alpha: 1)
+        pin.strokeColor = SKColor(white: 0.25, alpha: 1)
+        pin.lineWidth = 1
+        flap.addChild(pin)
+        flap.zRotation = closed
+        addChild(flap)
+        topGateFlap = flap
+        topGateClosedAngle = closed
     }
 
     /// The playfield floor inside the outer wall, and the closed pocket on the left drawn darker.
@@ -747,13 +784,32 @@ final class LmpTableScene: SKScene {
             let p = ball.position
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             ball.setLaunchGateSolid(above && v.dy < 0)
-            let wasAbove = gx * (ball.previousPosition.y - low.y) - gy * (ball.previousPosition.x - low.x) > 0
-            if !wasAbove, above, v.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
+            // T5 M9 v11: previousPosition equals position here (it's set at the end of didSimulatePhysics), so the
+            // flap never swung; the ball now remembers which side it was on at the last gate update.
+            if !ball.aboveLaunchGate, above, v.dy > 0, p.x > low.x - 12, p.x < high.x + 12 { swingLaunchGate() }
+            ball.aboveLaunchGate = above
             // The right orbit's deflector: the same rule.
             let dl = LmpTableLayout.rightDeflectorLow, dh = LmpTableLayout.rightDeflectorHigh
             let dAbove = (dh.x - dl.x) * (p.y - dl.y) - (dh.y - dl.y) * (p.x - dl.x) > 0
             ball.setOrbitDeflectorSolid(dAbove && v.dy < LmpTableLayout.deflectorClimbSpeed)
+            // T5 M9 v10: the top gate: solid for a ball west of it unless it's moving left (over from the right lane).
+            let tl = LmpTableLayout.topGateLow, th = LmpTableLayout.topGateHigh
+            let tWest = (th.x - tl.x) * (p.y - tl.y) - (th.y - tl.y) * (p.x - tl.x) > 0
+            ball.setTopGateSolid(tWest && v.dx > -LmpTableLayout.topGatePassSpeed)
+            if tWest, !ball.westOfTopGate, v.dx < 0, p.y > tl.y - 10, p.x > th.x - 30 { swingTopGate() }
+            ball.westOfTopGate = tWest
         }
+    }
+
+    private func swingTopGate() {
+        guard let flap = topGateFlap else { return }
+        sfx(.gate)
+        let closed = topGateClosedAngle
+        flap.removeAction(forKey: "swing")
+        let open = SKAction.rotate(toAngle: closed + 1.2, duration: 0.07, shortestUnitArc: true)
+        let back = SKAction.rotate(toAngle: closed, duration: 0.55, shortestUnitArc: true)
+        back.timingMode = .easeIn
+        flap.run(.sequence([open, back]), withKey: "swing")
     }
 
     private func swingLaunchGate() {
@@ -771,7 +827,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v8")
+        let label = SKLabelNode(text: "T5 M9 v11")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -817,7 +873,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v8 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v11 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

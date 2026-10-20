@@ -243,6 +243,14 @@ enum LmpTableLayout {
     static let rightDeflectorHigh = CGPoint(x: 543, y: 770)
     /// Solid for a ball above it that isn't climbing faster than this (a ball resting on it has dy ≈ 0).
     static let deflectorClimbSpeed: CGFloat = 20
+    /// T5 M9 v10 (Aaron: the teacups are hard to reach; a ball up the left loop went all the way round and back down
+    /// the right): a one-way gate across the top of the right orbit, from the end of its inner wall up to the arch.
+    /// A ball coming over the top from the left (the left loop) hits it and drops straight down onto the teacups;
+    /// a ball going up the right lane (the right loop, a plunge) passes through it and swings it.
+    static let topGateLow = CGPoint(x: 380, y: orbitTopInnerY)
+    static let topGateHigh = CGPoint(x: 340, y: topY)
+    /// Solid for a ball west of it unless it's moving left faster than this (coming over from the right lane).
+    static let topGatePassSpeed: CGFloat = 20
     /// Crossed over the top of the arch: a loop. Forward = right to left.
     static let loopSwitch = LmpSwitch(a: CGPoint(x: 284, y: orbitTopInnerY - 4), b: CGPoint(x: 284, y: topY + 4),
                                       forward: CGVector(dx: -1, dy: 0))

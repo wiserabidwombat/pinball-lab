@@ -26,6 +26,12 @@ final class LmpBall: SKNode {
     private(set) var launchGateSolid = false
     /// T5 M2: whether the one-way deflector across the right orbit's mouth is solid for this ball (same rule).
     private(set) var orbitDeflectorSolid = false
+    /// T5 M9 v10: whether the one-way gate at the top of the right orbit is solid for this ball.
+    private(set) var topGateSolid = false
+    /// Which side of the top gate the ball was on when the gates were last updated (to swing the flap on a crossing).
+    var westOfTopGate = false
+    /// T5 M9 v11: whether the ball was above the launch gate when the gates were last updated (to swing its flap).
+    var aboveLaunchGate = false
     /// T5 M2: the hole holding this ball, if any, and when it lets go. A ball in a hole sits sunk in it: no lift,
     /// no shadow (T3 M4 v2).
     var heldIn: LmpScoop? {
@@ -139,6 +145,12 @@ final class LmpBall: SKNode {
         updateCollisionMask()
     }
 
+    func setTopGateSolid(_ solid: Bool) {
+        guard solid != topGateSolid else { return }
+        topGateSolid = solid
+        updateCollisionMask()
+    }
+
     private func updateCollisionMask() {
         guard let body = physicsBody else { return }
         var mask: UInt32
@@ -152,6 +164,7 @@ final class LmpBall: SKNode {
                 | LmpPhysicsCategory.toy
             if launchGateSolid { mask |= LmpPhysicsCategory.launchGate }
             if orbitDeflectorSolid { mask |= LmpPhysicsCategory.orbitDeflector }
+            if topGateSolid { mask |= LmpPhysicsCategory.topGate }
         }
         let old = body.collisionBitMask
         guard old != mask else { return }

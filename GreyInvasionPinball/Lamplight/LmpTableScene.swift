@@ -451,6 +451,14 @@ final class LmpTableScene: SKScene {
         let right = LmpTableLayout.rampRail(side: -LmpTableLayout.rampHalfWidth)
         // T5 M9 v3: drawn climbing from the floor at its mouth to the raised loft (each point lifted by its height);
         // the physics rails stay flat underneath, undrawn, and these lifted lines stand in for them.
+        // T5 M9 v6: with the table art, the rendered brass wire ramp (lmp_ramp) replaces the strip and the lines.
+        let rampArt = hasTableArt ? LmpTableLayout.artSprite("lmp_ramp", box: CGRect(origin: .zero,
+                                                             size: LmpTableLayout.rampArtRect.size)) : nil
+        if let rampArt {
+            rampArt.position = LmpTableLayout.rampArtRect.origin
+            rampArt.zPosition = 16
+            addChild(rampArt)
+        }
         func lifted(_ pts: [CGPoint]) -> [CGPoint] {
             pts.map { CGPoint(x: $0.x, y: $0.y + LmpTableLayout.upperHeight(at: $0) * LmpTableLayout.oblique) }
         }
@@ -461,8 +469,8 @@ final class LmpTableScene: SKScene {
         strip.fillColor = SKColor(red: 0.55, green: 0.80, blue: 0.85, alpha: 0.22)
         strip.strokeColor = .clear
         strip.zPosition = 16
-        addChild(strip)
-        for rail in [left, right] {
+        if rampArt == nil { addChild(strip) }
+        for rail in [left, right] where rampArt == nil {
             let railPath = CGMutablePath()
             railPath.addLines(between: lifted(rail))
             let line = SKShapeNode(path: railPath)
@@ -763,7 +771,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v4")
+        let label = SKLabelNode(text: "T5 M9 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -809,7 +817,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v4 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v6 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

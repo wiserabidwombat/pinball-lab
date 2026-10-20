@@ -44,6 +44,8 @@ enum LmpTableLayout {
     /// T5 M9 round 2: the fixed table baked in Blender (tools/lmp_bake_table.py, cut by tools/lmp_split_table.py) at
     /// 3 px/pt: lmp_lower.png covers this rect, lmp_upper.png the one above it (Table 03's split at y 525).
     static let lowerArtRect = CGRect(x: -40, y: -75, width: 680, height: 600)
+    /// T5 M9 v6: the loft ramp rendered alone as a brass wire ramp (tools/lmp_bake_ramp.py), drawn at z 16 over the art.
+    static let rampArtRect = CGRect(x: 232, y: 800, width: 272, height: 372)
     static let upperArtRect = CGRect(x: -40, y: 525, width: 680, height: 805)
 
     /// A sprite placed by its art box (size + anchor), or nil when the image isn't in the app (grey box then).

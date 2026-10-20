@@ -261,3 +261,60 @@ def arch():
     mid = WORLD_W / 2
     return [(LEFT_X, ARCH_START_Y)] + quad((LEFT_X, ARCH_START_Y), (LEFT_X, TOP_Y), (mid, TOP_Y), 32) + \
         quad((mid, TOP_Y), (RIGHT_X, TOP_Y), (RIGHT_X, ARCH_START_Y), 32)
+
+
+# ---- M9 v6: the loft ramp (LmpTableLayout.rampCenterline / rampRail / upperHeight), for its rendered sprite
+RAMP_HALF_W, RAMP_HEADING, RAMP_FLARE_LEN, RAMP_STRAIGHT_LEN, RAMP_TURN_R = 16, math.radians(75), 82, 209, 70
+RAMP_ART_RECT = (232, 800, 272, 372)          # LmpTableLayout.rampArtRect
+
+
+def ramp_centerline():
+    u = (math.cos(RAMP_HEADING), math.sin(RAMP_HEADING))
+    end = (RAMP_MOUTH[0] + u[0] * RAMP_STRAIGHT_LEN, RAMP_MOUTH[1] + u[1] * RAMP_STRAIGHT_LEN)
+    c = (end[0] - u[1] * RAMP_TURN_R, end[1] + u[0] * RAMP_TURN_R)
+    pts = [RAMP_MOUTH, end]
+    a0 = RAMP_HEADING - math.pi / 2
+    for i in range(1, 15):
+        a = a0 + i / 14 * (math.pi / 2 - a0)
+        pts.append((c[0] + RAMP_TURN_R * math.cos(a), c[1] + RAMP_TURN_R * math.sin(a)))
+    pts.append((LOFT_RIGHT_X, pts[-1][1]))
+    return pts
+
+
+def ramp_offset(side, pts=None):
+    """The centreline offset by `side` (+ = left of travel), without the mouth's flare."""
+    cl = pts or ramp_centerline()
+    out = []
+    for i in range(len(cl)):
+        a, b = cl[max(i - 1, 0)], cl[min(i + 1, len(cl) - 1)]
+        dx, dy = b[0] - a[0], b[1] - a[1]; ln = max(math.hypot(dx, dy), 1e-3)
+        out.append((cl[i][0] - dy / ln * side, cl[i][1] + dx / ln * side))
+    return out
+
+
+def ramp_rail(side):
+    """LmpTableLayout.rampRail: the physics rail, with the mouth's flare."""
+    cl = ramp_centerline(); u = (math.cos(RAMP_HEADING), math.sin(RAMP_HEADING))
+    out = [(ALCOVE_RIGHT_X if side > 0 else RAMP_MOUTH_RIGHT_X, RAMP_MOUTH[1]),
+           (RAMP_MOUTH[0] + u[0] * RAMP_FLARE_LEN - u[1] * side, RAMP_MOUTH[1] + u[1] * RAMP_FLARE_LEN + u[0] * side)]
+    for i in range(1, len(cl)):
+        a, b = cl[i - 1], cl[min(i + 1, len(cl) - 1)]
+        dx, dy = b[0] - a[0], b[1] - a[1]; ln = max(math.hypot(dx, dy), 1e-3)
+        out.append((cl[i][0] - dy / ln * side, cl[i][1] + dx / ln * side))
+    return out
+
+
+def densify(pts, step=4.0):
+    out = [pts[0]]
+    for a, b in zip(pts, pts[1:]):
+        n = max(1, int(math.hypot(b[0] - a[0], b[1] - a[1]) / step))
+        out += [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n) for k in range(1, n + 1)]
+    return out
+
+
+def ramp_height(p):
+    """LmpTableLayout.upperHeight on the ramp: climbs along the first straight, level from the turn to the loft."""
+    if p[0] <= LOFT_RIGHT_X + 4:
+        return LOFT_HEIGHT
+    along = (p[0] - RAMP_MOUTH[0]) * math.cos(RAMP_HEADING) + (p[1] - RAMP_MOUTH[1]) * math.sin(RAMP_HEADING)
+    return LOFT_HEIGHT * min(max(along / RAMP_STRAIGHT_LEN, 0), 1)

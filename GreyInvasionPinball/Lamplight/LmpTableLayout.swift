@@ -590,6 +590,19 @@ enum LmpTableLayout {
     /// T5 M9 v24: wider to the right and up, so her head's shadow and the sitting ears aren't cut by the box edge.
     static let catArtBox = CGRect(x: -36, y: -26, width: 82, height: 70)
     static let catShelfY: CGFloat = 1175
+    /// T5 M9 v25: the season's touches (tools/lmp_bake_seasons.py): a decoration draped along the fireplace's gabled
+    /// mantel (box round the mantel's anchor), and the loft window's light recoloured (a floor-plane rect, lifted by
+    /// loftLift like the loft).
+    static let seasonMantelAnchor = CGPoint(x: 284, y: 850)
+    static let seasonMantelArtBox = CGRect(x: -70, y: -12, width: 140, height: 56)
+    static let seasonWindowRect = CGRect(x: 55, y: 1070, width: 140, height: 120)
+    /// T5 M9 v26: Festival Night's string lights, strung across the shop while the festival runs: each strand hangs from
+    /// a to b and sags by `sag` in the middle, with a bulb about every festivalBulbSpacing points.
+    static let festivalStrands: [(a: CGPoint, b: CGPoint, sag: CGFloat)] = [
+        (CGPoint(x: 26, y: 1015), CGPoint(x: 574, y: 1065), 70),
+        (CGPoint(x: 26, y: 655), CGPoint(x: 574, y: 615), 60),
+    ]
+    static let festivalBulbSpacing: CGFloat = 24
     /// T5 M9 v20: her shelf as a rendered walnut bookshelf (tools/lmp_bake_bookshelf.py): the plank round her home, and one
     /// section per genre (LmpShop.genres order, left to right) that fills with spines as that genre's books are found.
     static let shelfArtBox = CGRect(x: -107, y: -14, width: 214, height: 40)

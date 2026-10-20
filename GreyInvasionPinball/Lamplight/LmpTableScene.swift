@@ -113,6 +113,22 @@ final class LmpTableScene: SKScene {
     /// T5 M9 v20: the bookshelf's genre sections and how many spines each shows.
     private var shelfSections: [SKNode] = []
     private var shelfShown: [Int] = []
+    /// T5 M9 v25: tonight's season on the mantel and in the loft window's light.
+    private var seasonMantel: SKNode?
+    private var seasonWindow: SKNode?
+    /// T5 M9 v26: Festival Night's string lights (nil when the festival isn't on).
+    private var festivalLights: SKNode?
+    private lazy var bulbGlow: SKTexture = {
+        let size = CGSize(width: 32, height: 32)
+        let image = UIGraphicsImageRenderer(size: size).image { ctx in
+            let colors = [UIColor(white: 1, alpha: 0.9).cgColor, UIColor(white: 1, alpha: 0).cgColor] as CFArray
+            if let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+                ctx.cgContext.drawRadialGradient(g, startCenter: CGPoint(x: 16, y: 16), startRadius: 0,
+                                                 endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
+            }
+        }
+        return SKTexture(image: image)
+    }()
     /// T5 M9 round 2: the fixed table is the baked art (lmp_lower / lmp_upper); the grey-box floor and walls hide under it.
     private var hasTableArt = false
     #if DEBUG
@@ -868,7 +884,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v24")
+        let label = SKLabelNode(text: "T5 M9 v26")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -914,7 +930,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v24 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v26 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1013,6 +1029,7 @@ final class LmpTableScene: SKScene {
         // M8 round 5: the season's festival, if it's lit (on the LED strip instead of the season).
         festivalLit = LmpShop.shared.festivalLit
         festivalActive = false
+        setFestivalLights(false)                                  // T5 M9 v26
         visitorDue = false
         game.festivalLine = LmpShop.shared.festivalLine
         if festivalLit { game.status = "Festival Night · the \(LmpShop.shared.season.festival) · shoot the fireplace" }
@@ -1512,12 +1529,36 @@ final class LmpTableScene: SKScene {
             }
         }
         refreshShelf()                                            // T5 M9 v20
+        refreshSeasonArt()                                        // T5 M9 v25
         for (i, spot) in cozyPieceNodes.enumerated() {           // T5 M9 v19: tonight's pieces on the hearth
             spot.removeAllChildren()
             if i < cozySlots.count,
                let art = LmpTableLayout.artSprite("lmp_cozy_\(cozySlots[i].rawValue)", box: LmpTableLayout.cozyArtBox) {
                 spot.addChild(art)
             }
+        }
+    }
+
+    /// T5 M9 v25: the season's decoration on the mantel (under the balls and the cat) and its light in the loft window.
+    private func refreshSeasonArt() {
+        let season = "\(LmpShop.shared.season)"
+        seasonMantel?.removeFromParent(); seasonMantel = nil
+        seasonWindow?.removeFromParent(); seasonWindow = nil
+        if let m = LmpTableLayout.artSprite("lmp_season_mantel_\(season)", box: LmpTableLayout.seasonMantelArtBox) {
+            m.position = LmpTableLayout.seasonMantelAnchor
+            m.zPosition = 9
+            addChild(m)
+            seasonMantel = m
+        }
+        let r = LmpTableLayout.seasonWindowRect
+        if UIImage(named: "lmp_season_window_\(season)") != nil {
+            let w = SKSpriteNode(imageNamed: "lmp_season_window_\(season)")
+            w.anchorPoint = .zero
+            w.size = r.size
+            w.position = CGPoint(x: r.minX, y: r.minY + LmpTableLayout.loftLift)
+            w.zPosition = -18
+            addChild(w)
+            seasonWindow = w
         }
     }
 
@@ -1593,6 +1634,7 @@ final class LmpTableScene: SKScene {
         rushSaveUntil = 0
         if festivalActive {
             festivalActive = false
+            setFestivalLights(false)                              // T5 M9 v26
             showBanner("WHAT A NIGHT · FESTIVAL NIGHT IS OVER")
         } else {
             showBanner("THE RUSH IS OVER")
@@ -1609,6 +1651,7 @@ final class LmpTableScene: SKScene {
         festivalActive = true
         rushActive = true
         let season = LmpShop.shared.season
+        setFestivalLights(true)                                   // T5 M9 v26
         LmpShop.shared.holdFestival()
         game.festivalTonight = season.festival
         game.festivalLine = LmpShop.shared.festivalLine
@@ -1624,6 +1667,72 @@ final class LmpTableScene: SKScene {
         game.status = statusText(request)
         lamps.play(.sweep, at: gameTime)
         sfx(.jackpot)
+    }
+
+    /// T5 M9 v26: Festival Night's string lights: strands across the shop above everything on the table (over the
+    /// evening's dimming too), bulbs in the season's colours twinkling out of step; they fade in and out with the festival.
+    private func setFestivalLights(_ on: Bool) {
+        if !on {
+            guard let lights = festivalLights else { return }
+            festivalLights = nil
+            lights.run(.sequence([.fadeOut(withDuration: 0.8), .removeFromParent()]))
+            return
+        }
+        guard festivalLights == nil else { return }
+        let colors: [SKColor]
+        var bulbRadius: CGFloat = 2.6
+        switch LmpShop.shared.season {
+        case .spring: colors = [SKColor(red: 1.0, green: 0.62, blue: 0.78, alpha: 1), SKColor(white: 1, alpha: 1),
+                                SKColor(red: 0.75, green: 0.95, blue: 0.65, alpha: 1)]
+        case .summer: colors = [SKColor(red: 1.0, green: 0.55, blue: 0.20, alpha: 1), SKColor(red: 0.95, green: 0.25, blue: 0.20, alpha: 1),
+                                SKColor(red: 1.0, green: 0.85, blue: 0.30, alpha: 1)]
+            bulbRadius = 3.6                                      // paper lanterns for Midsummer
+        case .autumn: colors = [SKColor(red: 1.0, green: 0.70, blue: 0.25, alpha: 1), SKColor(red: 1.0, green: 0.50, blue: 0.12, alpha: 1),
+                                SKColor(red: 1.0, green: 0.86, blue: 0.50, alpha: 1)]
+        case .winter: colors = [SKColor(white: 1, alpha: 1), SKColor(red: 1.0, green: 0.25, blue: 0.25, alpha: 1),
+                                SKColor(red: 0.35, green: 0.90, blue: 0.45, alpha: 1), SKColor(red: 0.45, green: 0.65, blue: 1.0, alpha: 1)]
+        }
+        let node = SKNode()
+        node.zPosition = 41                                       // over the dimming (40)
+        node.alpha = 0
+        var k = 0
+        for strand in LmpTableLayout.festivalStrands {
+            let a = strand.a, b = strand.b
+            let c = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 2 * strand.sag)
+            let path = CGMutablePath()
+            path.move(to: a)
+            path.addQuadCurve(to: b, control: c)
+            let wire = SKShapeNode(path: path)
+            wire.strokeColor = SKColor(white: 0.10, alpha: 0.9)
+            wire.lineWidth = 1.2
+            node.addChild(wire)
+            let n = max(2, Int(hypot(b.x - a.x, b.y - a.y) / LmpTableLayout.festivalBulbSpacing))
+            for i in 1..<n {
+                let t = CGFloat(i) / CGFloat(n), u = 1 - t
+                let p = CGPoint(x: u * u * a.x + 2 * u * t * c.x + t * t * b.x,
+                                y: u * u * a.y + 2 * u * t * c.y + t * t * b.y - bulbRadius)
+                let color = colors[k % colors.count]
+                k += 1
+                let glow = SKSpriteNode(texture: bulbGlow, size: CGSize(width: bulbRadius * 7, height: bulbRadius * 7))
+                glow.color = color
+                glow.colorBlendFactor = 1
+                glow.blendMode = .add
+                glow.position = p
+                node.addChild(glow)
+                let bulb = SKShapeNode(circleOfRadius: bulbRadius)
+                bulb.fillColor = color
+                bulb.strokeColor = SKColor(white: 0.15, alpha: 0.8)
+                bulb.lineWidth = 0.6
+                bulb.position = p
+                node.addChild(bulb)
+                let low = SKAction.fadeAlpha(to: 0.35, duration: Double.random(in: 0.5...1.1))
+                let high = SKAction.fadeAlpha(to: 1.0, duration: Double.random(in: 0.5...1.1))
+                glow.run(.sequence([.wait(forDuration: Double.random(in: 0...1.2)), .repeatForever(.sequence([low, high]))]))
+            }
+        }
+        addChild(node)
+        node.run(.fadeIn(withDuration: 0.6))
+        festivalLights = node
     }
 
     /// During the festival every lit shot pays a little extra.

@@ -1017,6 +1017,97 @@ for _k in range(7):
     tube3d(f'sillFrond{_k}', [(599, _wy1 - 20, 17), (599 + 3 * math.cos(_a), _wy1 - 20 + 3 * math.sin(_a), 20),
                               (599 + 5.5 * math.cos(_a), _wy1 - 20 + 5.5 * math.sin(_a), 18.5)], 0.6, _fern)
 
+# ------------------------------------------------------------------ M9 v39 (bookstore round 5): book stacks in dead corners
+# Piles of books lying flat (two cloth covers and a spine round a cream page block, each book turned a little) where no
+# ball goes: up the closed left pocket above tonight's cozy pieces, and on the counter beside the drain, one with a
+# pair of reading glasses on top; and an open book face up on the right-hand counter.
+_stack_rnd = random.Random(39)
+_stack_mats = [principled(f'stackCloth{i}', c, rough=0.6, coat=0.15) for i, c in enumerate(CLOTHS[:10])]
+
+
+def book_flat(name, cx, cy, z, w, d, t, ang, mat):
+    ca, sa = math.cos(ang), math.sin(ang)
+    def rect(x0, x1, y0, y1):
+        return [(cx + x * ca - y * sa, cy + x * sa + y * ca) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+    cv = 0.45                                                        # cover thickness
+    prism(name + 'Bot', rect(-w / 2, w / 2, -d / 2, d / 2), z, z + cv, mat)
+    prism(name + 'Top', rect(-w / 2, w / 2, -d / 2, d / 2), z + t - cv, z + t, mat)
+    prism(name + 'Spine', rect(-w / 2, -w / 2 + 0.7, -d / 2, d / 2), z, z + t, mat)
+    prism(name + 'Pages', rect(-w / 2 + 0.6, w / 2 - 0.5, -d / 2 + 0.5, d / 2 - 0.5), z + cv, z + t - cv, M_PAGES)
+    return z + t
+
+
+def book_stack(tag, cx, cy, z, n, wmax=22.0):
+    for k in range(n):
+        w = _stack_rnd.uniform(wmax * 0.7, wmax); d = w * _stack_rnd.uniform(0.62, 0.75)
+        t = _stack_rnd.uniform(2.4, 3.6); ang = math.radians(_stack_rnd.uniform(-14, 14))
+        if _stack_rnd.random() < 0.5: ang += math.pi
+        z = book_flat(f'{tag}{k}', cx + _stack_rnd.uniform(-1.2, 1.2), cy + _stack_rnd.uniform(-1.0, 1.0), z, w, d, t, ang,
+                      _stack_rnd.choice(_stack_mats))
+    return z
+
+
+book_stack('pocketStackA', 37, 398, 0, 7, wmax=24)
+book_stack('pocketStackB', 36, 456, 0, 4, wmax=20)
+_ztop = book_stack('counterStackL', 222, 22, 3, 5, wmax=30)
+book_stack('counterStackR', 352, -38, 3, 3, wmax=30)
+# reading glasses on the left counter stack
+M_SPECS = principled('specs', (0.35, 0.22, 0.10), metal=0.6, rough=0.3)
+for _gx in (-3.6, 3.6):
+    torus(f'specLens{_gx}', 222 + _gx, 21, _ztop + 0.6, 2.9, 0.45, M_SPECS)
+tube3d('specBridge', [(222 - 0.9, 21.5, _ztop + 0.7), (222, 22.3, _ztop + 1.1), (222 + 0.9, 21.5, _ztop + 0.7)], 0.35, M_SPECS)
+for _sx in (-1, 1):
+    tube3d(f'specArm{_sx}', [(222 + _sx * 6.4, 21.4, _ztop + 0.6), (222 + _sx * 6.8, 31, _ztop + 0.6)], 0.3, M_SPECS)
+
+
+def _spread_png(path):
+    import cairo as _c
+    W_, H_ = 360, 240
+    sf = _c.ImageSurface(_c.FORMAT_RGB24, W_, H_); c = _c.Context(sf)
+    c.set_source_rgb(0.93, 0.89, 0.79); c.paint()
+    g = _c.LinearGradient(W_ / 2 - 30, 0, W_ / 2 + 30, 0)                # the gutter's shade
+    g.add_color_stop_rgba(0, 0, 0, 0, 0); g.add_color_stop_rgba(0.5, 0.25, 0.18, 0.1, 0.35); g.add_color_stop_rgba(1, 0, 0, 0, 0)
+    c.set_source(g); c.paint()
+    rr = random.Random(391)
+    c.set_source_rgba(0.25, 0.20, 0.15, 0.75)
+    for px0 in (24, W_ / 2 + 22):
+        y = 28
+        while y < H_ - 22:
+            if px0 > W_ / 2 and 60 < y < 140:                          # an engraving of a lamp on the right page
+                y = 150; continue
+            ln = rr.uniform(0.75, 1.0) * (W_ / 2 - 46)
+            c.rectangle(px0, y, ln, 3.2); c.fill(); y += 9
+    c.set_line_width(2.5); c.set_source_rgba(0.25, 0.20, 0.15, 0.85)
+    c.arc(W_ * 0.75, 96, 22, 3.14, 6.28); c.stroke()
+    c.move_to(W_ * 0.75 - 22, 96); c.line_to(W_ * 0.75 + 22, 96); c.stroke()
+    c.move_to(W_ * 0.75, 96); c.line_to(W_ * 0.75, 136); c.stroke()
+    c.move_to(W_ * 0.75 - 14, 136); c.line_to(W_ * 0.75 + 14, 136); c.stroke()
+    sf.write_to_png(path)
+
+
+_spread = os.path.join(os.path.dirname(os.path.abspath(OUT)), '_lmp_spread.png'); _spread_png(_spread)
+M_SPREAD = principled('openBook', (1, 1, 1), rough=0.8, image=_spread)
+_ox, _oy, _oz, _ow, _od, _oang = 420.0, -32.0, 3.0, 48.0, 32.0, math.radians(-8)
+_ca, _sa = math.cos(_oang), math.sin(_oang)
+def _rot(x, y): return (_ox + x * _ca - y * _sa, _oy + x * _sa + y * _ca)
+prism('openBookCover', [_rot(-_ow / 2 - 1, -_od / 2 - 1), _rot(_ow / 2 + 1, -_od / 2 - 1), _rot(_ow / 2 + 1, _od / 2 + 1),
+                        _rot(-_ow / 2 - 1, _od / 2 + 1)], _oz, _oz + 0.6, _stack_mats[0])
+_bm = bmesh.new(); _uvl = _bm.loops.layers.uv.new('UV')
+_cols = 12
+_grid = []
+for _i in range(_cols + 1):                                           # the pages bow up from the gutter
+    _u = _i / _cols; _x = -_ow / 2 + _ow * _u
+    _h = 2.6 * math.sin(math.pi * (abs(_u - 0.5) * 2)) ** 0.7 * (1 - abs(_u - 0.5) * 0.6) + 0.8
+    _grid.append([(_bm.verts.new((*_rot(_x, y_), _oz + 0.6 + _h)), _u, v_) for y_, v_ in ((-_od / 2, 0.0), (_od / 2, 1.0))])
+for _i in range(_cols):
+    (a0, ua, va0), (a1, _, va1) = _grid[_i]; (b0, ub, vb0), (b1, _, vb1) = _grid[_i + 1]
+    _f = _bm.faces.new([a0, b0, b1, a1])
+    for _lp, _uvv in zip(_f.loops, ((ua, 0), (ub, 0), (ub, 1), (ua, 1))): _lp[_uvl].uv = _uvv
+_me = bpy.data.meshes.new('openBookPages'); _bm.to_mesh(_me); _bm.free(); _me.materials.append(M_SPREAD)
+link(bpy.data.objects.new('openBookPages', _me)); SMOOTH.add('openBookPages')
+tube3d('openBookRibbon', [(*_rot(2, _od / 2 - 2), _oz + 1.6), (*_rot(3, -_od / 2 + 2), _oz + 1.2), (*_rot(5, -_od / 2 - 5), _oz + 0.7)],
+       0.5, principled('ribbon', (0.50, 0.07, 0.10), rough=0.5))
+
 # ------------------------------------------------------------------ oblique shear: y += z * K
 bpy.ops.object.select_all(action='DESELECT')
 for o in list(sc.objects):

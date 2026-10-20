@@ -46,8 +46,10 @@ def wood(name, dark, light):
     return m
 
 
-M_WALNUT = wood('walnut', (0.10, 0.045, 0.018), (0.34, 0.17, 0.07))
-M_RUBBER = principled('rubber', (0.97, 0.94, 0.86), rough=0.5, spec=0.35)
+# M9 v16 (Aaron: the flippers blend into the floor; walnut on oak measured 2.1 : 1, 1.15 : 1 by the slate hearth): an
+# ivory enamel arm with an oxblood rubber, like a real flipper's white plastic, reads on any part of the floor.
+M_WALNUT = principled('ivory', (0.93, 0.89, 0.80), rough=0.3, coat=0.6, spec=0.5)
+M_RUBBER = principled('rubber', (0.42, 0.06, 0.05), rough=0.55, spec=0.3)
 M_BRASS = principled('brass', (0.88, 0.66, 0.32), metal=1.0, rough=0.22)
 
 

@@ -88,6 +88,7 @@ _cb = M_WALNUT_CAP.node_tree.nodes['Principled BSDF']
 _cb.inputs['Roughness'].default_value = 0.7; _cb.inputs['Coat Weight'].default_value = 0.06
 _cb.inputs['Specular IOR Level'].default_value = 0.15
 _cb.inputs['Coat Roughness'].default_value = 0.4
+M_GREEN = principled('greenlacquer', (0.05, 0.16, 0.11), rough=0.25, coat=0.8, coat_rough=0.05)
 M_BRICK = principled('brick', (0.42, 0.17, 0.10), rough=0.8)
 M_SLATE = principled('slate', (0.13, 0.13, 0.15), rough=0.7)
 M_STEEL = principled('steel', (0.72, 0.72, 0.74), metal=1.0, rough=0.3)
@@ -252,9 +253,12 @@ for side, s in (('L', L.SLING_L), ('R', L.sling_right())):
     post('slingTip' + side, *tip, L.SLING_TIP_POST_R)
     post('slingCorner' + side, *corner, L.SLING_CORNER_POST_R)
     tri = ccw([top, corner, tip])
-    tube('band' + side, offset_loop(tri, 3.5), 7, 2.4, M_RUBBER, closed=True)
-    prism('plastic' + side, offset_loop(tri, 5), 20, 23, M_WALNUT_CAP)        # round 1c: walnut caps (Aaron)
-    tube('plasticRim' + side, offset_loop(tri, 4.2), 23.2, 0.9, M_BRASS, closed=True)
+    tube('band' + side, offset_loop(tri, 3.5), 7, 3.0, M_RUBBER, closed=True)
+    # M9 v16 (Aaron: the slingshots blend in; walnut on oak measured 1.45 : 1): green lacquer caps like the aprons,
+    # inset so the cream rubber band shows all round them, with a brass rim and a gold pinstripe.
+    prism('plastic' + side, offset_loop(tri, -1.5), 20, 23, M_GREEN)
+    tube('plasticRim' + side, offset_loop(tri, -2.2), 23.2, 0.9, M_BRASS, closed=True)
+    tube('plasticStripe' + side, offset_loop(tri, -6.0), 23.1, 0.45, M_BRASS, closed=True)
     for i, (px, py) in enumerate((top, tip, corner)):
         cylinder(f'screw{side}{i}', px, py, 2.6, 23, 24.8, M_BRASS)
 

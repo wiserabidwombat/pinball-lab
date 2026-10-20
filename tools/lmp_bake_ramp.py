@@ -125,6 +125,35 @@ me = bpy.data.meshes.new('plate'); bm.to_mesh(me); bm.free(); me.materials.appen
 link(bpy.data.objects.new('plate', me))
 tube3d('plateLip', [(*lr[0], 0.6), (*rr[0], 0.6)], 0.8, M_BRASS)
 
+# M9 v27 (Aaron: balls looked like they fell through the ramp): the low part of the climb, where the ramp is lower than
+# a ball (and a bit more), is a closed entry: a satin brass floor under the carry wires and walnut side skirts down to
+# the table, so nothing looks like it passes under it. Above ENTRY_H the ramp is open wire, high enough to pass under.
+ENTRY_H = 24.0
+sat = bpy.data.materials.get('satin')
+walnut_skirt = bpy.data.materials.new('skirt'); walnut_skirt.use_nodes = True
+_b = walnut_skirt.node_tree.nodes['Principled BSDF']
+_b.inputs['Base Color'].default_value = (0.16, 0.08, 0.04, 1); _b.inputs['Roughness'].default_value = 0.4
+_b.inputs['Coat Weight'].default_value = 0.4
+idx = [i for i in range(len(cl)) if L.ramp_height(cl[i]) <= ENTRY_H]
+bm = bmesh.new()
+fl_l = [bm.verts.new((*left_side[i], L.ramp_height(cl[i]) + BOTTOM_Z - 1.6)) for i in idx]
+fl_r = [bm.verts.new((*right_side[i], L.ramp_height(cl[i]) + BOTTOM_Z - 1.6)) for i in idx]
+for k in range(len(idx) - 1):
+    bm.faces.new([fl_l[k], fl_r[k], fl_r[k + 1], fl_l[k + 1]])
+me = bpy.data.meshes.new('entryFloor'); bm.to_mesh(me); bm.free(); me.materials.append(sat)
+link(bpy.data.objects.new('entryFloor', me))
+for s, side in ((1, left_side), (-1, right_side)):
+    bm = bmesh.new()
+    lo = [bm.verts.new((*side[i], 0.0)) for i in idx]
+    hi = [bm.verts.new((*side[i], L.ramp_height(cl[i]) + SIDE_ZS[0])) for i in idx]
+    for k in range(len(idx) - 1):
+        bm.faces.new([lo[k], lo[k + 1], hi[k + 1], hi[k]])
+    end = idx[-1]
+    me = bpy.data.meshes.new(f'skirt{s}'); bm.to_mesh(me); bm.free(); me.materials.append(walnut_skirt)
+    link(bpy.data.objects.new(f'skirt{s}', me))
+    x, y = side[end]
+    cylinder(f'entryPost{s}', x, y, 1.6, 0, L.ramp_height(cl[end]) + SIDE_ZS[0], M_BRASS, verts=16)
+
 # ------------------------------------------------------------------ oblique shear
 bpy.ops.object.select_all(action='DESELECT')
 for o in list(sc.objects):

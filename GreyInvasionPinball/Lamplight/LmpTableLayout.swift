@@ -45,7 +45,7 @@ enum LmpTableLayout {
     /// 3 px/pt: lmp_lower.png covers this rect, lmp_upper.png the one above it (Table 03's split at y 525).
     static let lowerArtRect = CGRect(x: -40, y: -75, width: 680, height: 600)
     /// T5 M9 v6: the loft ramp rendered alone as a brass wire ramp (tools/lmp_bake_ramp.py), drawn at z 16 over the art.
-    static let rampArtRect = CGRect(x: 232, y: 800, width: 272, height: 372)
+    static let rampArtRect = CGRect(x: 232, y: 800, width: 272, height: 400)        // T5 M9 v27: taller ramp
     static let upperArtRect = CGRect(x: -40, y: 525, width: 680, height: 805)
 
     /// A sprite placed by its art box (size + anchor), or nil when the image isn't in the app (grey box then).
@@ -423,7 +423,9 @@ enum LmpTableLayout {
     /// platform, so everything drawn on it (the ball, the loft flipper, the window seat, its lamp, the cat on the
     /// cushion) draws loftLift higher than its physics, and the chute and the ramp slope between the floor and it.
     /// Physics is unchanged: this is how high the surface under an upper-layer ball is, for drawing only.
-    static let loftHeight: CGFloat = 20
+    /// T5 M9 v27 (Aaron: balls looked like they fell through the ramp): 20 → 40, two balls tall, so a floor ball can
+    /// pass under the ramp's upper half; the low part of the climb is drawn as a closed entry. Drawing only.
+    static let loftHeight: CGFloat = 40
     static var loftLift: CGFloat { loftHeight * oblique }
     private static let loftFloorPath: CGPath = {
         let p = CGMutablePath(); p.addLines(between: loftFloor); p.closeSubpath(); return p

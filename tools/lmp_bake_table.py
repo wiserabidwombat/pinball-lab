@@ -331,7 +331,7 @@ for _p in _kw[1:]:
         _runs.append((_low, _cur)); _cur = [_p]; _low = _u
 _runs.append((_low, _cur))
 for _i, (_low, _pts) in enumerate(_runs):
-    if len(_pts) > 1: rail(f'kettle{_i}', _pts, h=3.5 if _low else 12, thick=5)
+    if len(_pts) > 1: rail(f'kettle{_i}', _pts, h=9 if _low else 12, thick=5)    # v27: the chute is twice as high
 
 # M9 v3 (Aaron: "the loft doesn't really feel like a loft"): the loft stands LOFT_H up on a walnut platform (its
 # floor painting on top, a brass nosing along its front edge, two turned posts under it), its rails stand on it,

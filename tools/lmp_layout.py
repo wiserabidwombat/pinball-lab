@@ -131,7 +131,8 @@ BUMPER_R = 22
 BUMPER_CENTERS = [(285, 930), (350, 930), (318, 1000)]
 
 LOFT_RIGHT_X, LOFT_BOTTOM_Y = 255, 975
-LOFT_HEIGHT = 20          # M9 v3: the loft's platform (LmpTableLayout.loftHeight)
+LOFT_HEIGHT = 40          # M9 v3: the loft's platform (LmpTableLayout.loftHeight); M9 v27: 20 → 40, so the ramp is
+                          # tall enough (two balls) for a floor ball to pass under its upper half
 CHUTE_LOW_X = 46          # the chute's low end (LmpTableLayout.chuteLowX)
 LOFT_DOOR_BOTTOM, LOFT_DOOR_TOP = 1104, 1136
 LOFT_SLOPE = [(72, 1030), (162, 962)]
@@ -266,7 +267,7 @@ def arch():
 
 # ---- M9 v6: the loft ramp (LmpTableLayout.rampCenterline / rampRail / upperHeight), for its rendered sprite
 RAMP_HALF_W, RAMP_HEADING, RAMP_FLARE_LEN, RAMP_STRAIGHT_LEN, RAMP_TURN_R = 16, math.radians(75), 82, 209, 70
-RAMP_ART_RECT = (232, 800, 272, 372)          # LmpTableLayout.rampArtRect
+RAMP_ART_RECT = (232, 800, 272, 400)          # LmpTableLayout.rampArtRect (M9 v27: 372 → 400 for the taller ramp)
 
 
 def ramp_centerline():

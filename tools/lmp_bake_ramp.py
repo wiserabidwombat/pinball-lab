@@ -65,6 +65,19 @@ def cylinder(name, x, y, r, z0, z1, mat, verts=24):
     return o
 
 
+# M9 v28 (Aaron: the ramp's left edge sat on top of the fireplace): the physics rail starts on the alcove's right wall
+# (x 344), inside the brick surround (to x ~348.5) and the mantel (to ~351.5). The drawn left wire and the entry plate
+# start just clear of the brick instead, at a small brass post; the physics is unchanged.
+ART_LEFT_START = (356.0, 832.0)
+
+
+def art_rail(side):
+    pts = list(L.ramp_rail(side))
+    if side > 0:
+        pts[0] = ART_LEFT_START
+    return pts
+
+
 def lifted(pts, dz):
     return [(x, y, L.ramp_height((x, y)) + dz) for x, y in pts]
 
@@ -73,7 +86,7 @@ def lifted(pts, dz):
 cl = L.densify(L.ramp_centerline(), 3.0)
 for s in (1, -1):
     tube3d(f'carry{s}', lifted(L.ramp_offset(s * BOTTOM_OFF, cl), BOTTOM_Z), 1.3, M_BRASS)
-    rail = L.densify(L.ramp_rail(s * L.RAMP_HALF_W), 3.0)
+    rail = L.densify(art_rail(s * L.RAMP_HALF_W), 3.0)
     for k, dz in enumerate(SIDE_ZS):
         tube3d(f'side{s}{k}', lifted(rail, dz), 1.15, M_BRASS)
 
@@ -107,7 +120,8 @@ for _, i in post_at:
         cylinder(f'foot{i}{s}', x, y, 3.6, 0, 1.6, M_WALNUT)
 
 # the entry plate: a thin brass sheet on the floor in the mouth's flare, its far edge rising onto the carry wires
-lr, rr = L.ramp_rail(L.RAMP_HALF_W), L.ramp_rail(-L.RAMP_HALF_W)
+lr, rr = art_rail(L.RAMP_HALF_W), art_rail(-L.RAMP_HALF_W)
+cylinder('leftStartPost', *ART_LEFT_START, 2.2, 0, 16, M_BRASS, verts=16)
 plate = [lr[0], rr[0], rr[1], lr[1]]
 bm = bmesh.new()
 top = [bm.verts.new((x, y, 0.3 + L.ramp_height((x, y)) * 0.5)) for x, y in plate]

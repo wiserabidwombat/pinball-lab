@@ -884,7 +884,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v27")
+        let label = SKLabelNode(text: "T5 M9 v29")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -930,7 +930,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v27 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v29 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1906,15 +1906,15 @@ final class LmpTableScene: SKScene {
             && p.y < LmpTableLayout.alcoveTopY + LmpTableLayout.alcoveRoofPeak
     }
 
-    /// T5 M8 v11: the cat flap carries a ball out of the right outlane and drops it into the right inlane.
+    /// T5 M9 v29: the cat flap is a real kickback: it fires a ball draining down the right outlane straight back up the
+    /// lane (was a scripted ride into the right inlane, T5 M8 v11).
     private func catFlapSave(_ ball: LmpBall) {
         guard ball.ride == nil, let body = ball.physicsBody else { return }
         catFlapLit = false
         ball.inRightOutlane = false
-        ball.ride = (from: ball.position, to: LmpTableLayout.catFlapExit, start: gameTime,
-                     duration: LmpTableLayout.catFlapSeconds, exit: LmpTableLayout.catFlapExitVelocity)
-        body.affectedByGravity = false
-        body.velocity = .zero
+        ball.position.x = LmpTableLayout.catFlapKickX
+        body.angularVelocity = 0
+        body.velocity = CGVector(dx: 0, dy: LmpTableLayout.catFlapKickSpeed)
         showBanner("CAT FLAP · SAVED")
         sfx(.upKick)
     }

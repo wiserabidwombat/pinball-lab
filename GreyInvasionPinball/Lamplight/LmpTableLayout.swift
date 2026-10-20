@@ -192,9 +192,12 @@ enum LmpTableLayout {
     /// outlane while it's lit is carried back up (no collisions, like the dumbwaiter) and dropped into the right inlane
     /// above the sling's top post (gap 487–514 at y 505), once per ball. Play Lab: the right outlane was the biggest
     /// single drain (4–6 of 11–17 per run).
-    static let catFlapExit = CGPoint(x: 498, y: 505)
-    static let catFlapSeconds: TimeInterval = 0.45
-    static let catFlapExitVelocity = CGVector(dx: -15, dy: -120)
+    /// T5 M9 v29 (Aaron: it didn't behave like a real kickback): the cat flap is now a real kickback. A lit flap fires a
+    /// ball draining down the right outlane straight back up it (Grey Invasion's 1,500 pt/s), under normal physics;
+    /// the right wall's bulge (from y 540) turns it back into the table. Was a scripted ride into the right inlane.
+    static let catFlapKickSpeed: CGFloat = 1500
+    /// The lane's centre line (between the lane guide at x 514 and the wall at 548): the kick starts from it.
+    static let catFlapKickX: CGFloat = 531
     static let catFlapLamp = CGPoint(x: 531, y: 300)
 
     // MARK: Upper table (milestone 2, grey box). Shot lines checked in tools/lmp_render_m2.py.

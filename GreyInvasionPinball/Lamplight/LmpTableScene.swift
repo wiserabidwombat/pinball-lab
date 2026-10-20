@@ -110,6 +110,9 @@ final class LmpTableScene: SKScene {
     private var cozyIcons: [SKSpriteNode] = []
     /// T5 M9 v19: where each cozy spot's piece stands on the hearth (its rendered sprite is the child).
     private var cozyPieceNodes: [SKNode] = []
+    /// T5 M9 v20: the bookshelf's genre sections and how many spines each shows.
+    private var shelfSections: [SKNode] = []
+    private var shelfShown: [Int] = []
     /// T5 M9 round 2: the fixed table is the baked art (lmp_lower / lmp_upper); the grey-box floor and walls hide under it.
     private var hasTableArt = false
     #if DEBUG
@@ -410,6 +413,22 @@ final class LmpTableScene: SKScene {
         shelf.strokeColor = .clear
         shelf.zPosition = 11
         addChild(shelf)
+        // T5 M9 v20: the rendered bookshelf replaces the drawn plank; its books sit under the balls (z 10) and the cat (12).
+        if let art = LmpTableLayout.artSprite("lmp_shelf", box: LmpTableLayout.shelfArtBox) {
+            shelf.isHidden = true
+            art.position = CGPoint(x: LmpTableLayout.catHomeX, y: LmpTableLayout.catShelfY)
+            art.zPosition = 8.9
+            addChild(art)
+            for g in LmpShop.genres.indices {
+                let section = SKNode()
+                section.position = CGPoint(x: LmpTableLayout.shelfSectionX0 + LmpTableLayout.shelfSectionWidth * CGFloat(g),
+                                           y: LmpTableLayout.catShelfY)
+                section.zPosition = 9
+                addChild(section)
+                shelfSections.append(section)
+                shelfShown.append(-1)
+            }
+        }
         let c = LmpCat(at: LmpTableLayout.catHomeX)
         addChild(c)
         cat = c
@@ -824,7 +843,7 @@ final class LmpTableScene: SKScene {
         sfx(.gate)
         let closed = topGateClosedAngle
         flap.removeAction(forKey: "swing")
-        let open = SKAction.rotate(toAngle: closed + 1.2, duration: 0.07, shortestUnitArc: true)
+        let open = SKAction.rotate(toAngle: closed - 1.2, duration: 0.07, shortestUnitArc: true)   // v21: swings west
         let back = SKAction.rotate(toAngle: closed, duration: 0.55, shortestUnitArc: true)
         back.timingMode = .easeIn
         flap.run(.sequence([open, back]), withKey: "swing")
@@ -845,7 +864,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v19")
+        let label = SKLabelNode(text: "T5 M9 v21")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -891,7 +910,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v19 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v21 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1347,7 +1366,7 @@ final class LmpTableScene: SKScene {
         game.findsTonight += 1
         ballFinds += 1
         labObjective("find")
-        if find.isNew { game.newTonight += 1 }
+        if find.isNew { game.newTonight += 1; refreshShelf() }
         game.findToast = find
         findToastClearAt = gameTime + LmpTableLayout.findToastSeconds
         sfx(find.book.rarity >= .rare ? .jackpot : .lane)
@@ -1488,11 +1507,32 @@ final class LmpTableScene: SKScene {
                 icon.isHidden = true
             }
         }
+        refreshShelf()                                            // T5 M9 v20
         for (i, spot) in cozyPieceNodes.enumerated() {           // T5 M9 v19: tonight's pieces on the hearth
             spot.removeAllChildren()
             if i < cozySlots.count,
                let art = LmpTableLayout.artSprite("lmp_cozy_\(cozySlots[i].rawValue)", box: LmpTableLayout.cozyArtBox) {
                 spot.addChild(art)
+            }
+        }
+    }
+
+    /// T5 M9 v20: each genre's section shows one spine per quarter of its books found (rounded up, so the first book
+    /// shows), and the sixth, gilt-labelled spine when the genre is complete.
+    private func refreshShelf() {
+        let shop = LmpShop.shared
+        let n = LmpTableLayout.shelfSpinesPerSection
+        for (g, section) in shelfSections.enumerated() where g < LmpShop.genres.count {
+            let titles = LmpShop.books.filter { $0.genre == LmpShop.genres[g].name }
+            let owned = titles.filter { shop.owns($0) }.count
+            let spines = owned >= titles.count ? n
+                : Int((Double(owned * (n - 1)) / Double(max(titles.count, 1))).rounded(.up))
+            if shelfShown[g] == spines { continue }
+            shelfShown[g] = spines
+            section.removeAllChildren()
+            if spines > 0,
+               let art = LmpTableLayout.artSprite("lmp_shelf_\(g)_\(spines)", box: LmpTableLayout.shelfSectionArtBox) {
+                section.addChild(art)
             }
         }
     }

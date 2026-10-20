@@ -250,7 +250,10 @@ enum LmpTableLayout {
     /// A ball coming over the top from the left (the left loop) hits it and drops straight down onto the teacups;
     /// a ball going up the right lane (the right loop, a plunge) passes through it and swings it.
     static let topGateLow = CGPoint(x: 380, y: orbitTopInnerY)
-    static let topGateHigh = CGPoint(x: 340, y: topY)
+    /// T5 M9 v21 (Aaron: make it completely vertical to kick the ball into the teacups): straight up from the inner
+    /// wall's end to the arch (the arch is at y ≈ 1263.5 at x 380), so a ball from the left loses its sideways speed
+    /// against it and drops onto the teacups (was angled up-left to (340, topY)).
+    static let topGateHigh = CGPoint(x: 380, y: 1264)
     /// Solid for a ball west of it unless it's moving left faster than this (coming over from the right lane).
     static let topGatePassSpeed: CGFloat = 20
     /// Crossed over the top of the arch: a loop. Forward = right to left.
@@ -586,6 +589,13 @@ enum LmpTableLayout {
     /// T5 M9 v15: the rendered cat's poses (tools/lmp_bake_cat.py), facing right, round her node.
     static let catArtBox = CGRect(x: -34, y: -22, width: 68, height: 62)
     static let catShelfY: CGFloat = 1175
+    /// T5 M9 v20: her shelf as a rendered walnut bookshelf (tools/lmp_bake_bookshelf.py): the plank round her home, and one
+    /// section per genre (LmpShop.genres order, left to right) that fills with spines as that genre's books are found.
+    static let shelfArtBox = CGRect(x: -107, y: -14, width: 214, height: 40)
+    static let shelfSectionArtBox = CGRect(x: -1, y: -14, width: 34, height: 40)
+    static let shelfSectionX0: CGFloat = 274
+    static let shelfSectionWidth: CGFloat = 32
+    static let shelfSpinesPerSection = 6
     static let catMinX: CGFloat = 300
     static let catMaxX: CGFloat = 440
     static let catHomeX: CGFloat = 370

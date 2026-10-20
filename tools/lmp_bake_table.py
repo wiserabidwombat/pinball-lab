@@ -315,7 +315,23 @@ for p in (alc[0], alc[-1]):
     cylinder('hearthPost', p[0], p[1], 5.2, 0, 18, M_BRICK)
 
 # the kettle lane: walnut walls with a brass cap
-rail('kettle', L.kettle_lane_wall(), h=12, thick=5)
+# M9 v21 (Aaron: the kettle lane ran into the loft's chute, "the stairs"): its rounded top end passes under the sloping
+# chute plank, where the chute is only ~7-11 pt up, so the 12 pt walls poked through it. Under the chute (and a few
+# points before it) the walls are 3.5 pt low, so the lane tucks under the plank.
+_k0, _k1 = L.loft_chute()
+def _under_chute(p):
+    cy = _k0[1] + (p[0] - _k0[0]) * (_k1[1] - _k0[1]) / (_k1[0] - _k0[0])
+    return p[1] > cy - 10
+_kw = L.kettle_lane_wall()
+_runs, _cur, _low = [], [_kw[0]], _under_chute(_kw[0])
+for _p in _kw[1:]:
+    _u = _under_chute(_p)
+    _cur.append(_p)
+    if _u != _low:
+        _runs.append((_low, _cur)); _cur = [_p]; _low = _u
+_runs.append((_low, _cur))
+for _i, (_low, _pts) in enumerate(_runs):
+    if len(_pts) > 1: rail(f'kettle{_i}', _pts, h=3.5 if _low else 12, thick=5)
 
 # M9 v3 (Aaron: "the loft doesn't really feel like a loft"): the loft stands LOFT_H up on a walnut platform (its
 # floor painting on top, a brass nosing along its front edge, two turned posts under it), its rails stand on it,

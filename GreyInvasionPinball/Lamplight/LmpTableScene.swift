@@ -108,6 +108,8 @@ final class LmpTableScene: SKScene {
     /// T5 M8 v16: the fireplace has a book waiting (lit by completing the bank; the next fireplace finds it).
     private var fireplaceFindLit = false
     private var cozyIcons: [SKSpriteNode] = []
+    /// T5 M9 v19: where each cozy spot's piece stands on the hearth (its rendered sprite is the child).
+    private var cozyPieceNodes: [SKNode] = []
     /// T5 M9 round 2: the fixed table is the baked art (lmp_lower / lmp_upper); the grey-box floor and walls hide under it.
     private var hasTableArt = false
     #if DEBUG
@@ -327,6 +329,13 @@ final class LmpTableScene: SKScene {
             icon.isHidden = true
             lamp.addChild(icon)
             cozyIcons.append(icon)
+            if i < LmpTableLayout.cozyPieceSpots.count {        // T5 M9 v19: the piece itself, on the hearth
+                let spot = SKNode()
+                spot.position = LmpTableLayout.cozyPieceSpots[i]
+                spot.zPosition = -18                             // over the table art (−19), under everything else
+                addChild(spot)
+                cozyPieceNodes.append(spot)
+            }
         }
         let dim = SKSpriteNode(color: SKColor(red: 0.20, green: 0.09, blue: 0.02, alpha: 1),
                                size: CGSize(width: LmpTableLayout.worldSize.width + 400,
@@ -836,7 +845,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v15")
+        let label = SKLabelNode(text: "T5 M9 v19")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -882,7 +891,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v15 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v19 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1477,6 +1486,13 @@ final class LmpTableScene: SKScene {
                 icon.isHidden = false
             } else {
                 icon.isHidden = true
+            }
+        }
+        for (i, spot) in cozyPieceNodes.enumerated() {           // T5 M9 v19: tonight's pieces on the hearth
+            spot.removeAllChildren()
+            if i < cozySlots.count,
+               let art = LmpTableLayout.artSprite("lmp_cozy_\(cozySlots[i].rawValue)", box: LmpTableLayout.cozyArtBox) {
+                spot.addChild(art)
             }
         }
     }

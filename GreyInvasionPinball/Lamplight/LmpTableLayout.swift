@@ -666,6 +666,10 @@ enum LmpTableLayout {
     /// T5 M9 v4 (Aaron: they sat on the apron's gold pinstripes): 24 pt lower, clear of both lines (was y 148/131/114).
     static let cozyLamps: [CGPoint] = [CGPoint(x: 70, y: 124), CGPoint(x: 118, y: 107), CGPoint(x: 166, y: 90)]
     static let cozyLampRadius: CGFloat = 10
+    /// T5 M9 v19: tonight's cozy pieces stand on the slate hearth in the closed left pocket (no ball reaches it), one
+    /// above each cozy lamp (floor centres; tools/lmp_bake_cozy.py renders lmp_cozy_<piece> in cozyArtBox around each).
+    static let cozyPieceSpots: [CGPoint] = [CGPoint(x: 48, y: 280), CGPoint(x: 100, y: 238), CGPoint(x: 148, y: 198)]
+    static let cozyArtBox = CGRect(x: -32.5, y: -22.5, width: 65, height: 80)
     /// The grandfather clock's ball save at the start of each ball.
     /// T5 M8 v8: 8 (was 3). In two Play Lab runs a 3 s save never fired: a ball almost never drains that soon after a
     /// plunge. 8 s is a real ball save you can feel.

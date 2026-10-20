@@ -583,6 +583,8 @@ enum LmpTableLayout {
     // MARK: The cat (milestone 4). Her shelf runs along the top right, above the ramp's turn and below the gap at
     // the top of the arch; she walks it, naps, and swats balls that come within reach back down the table.
     static let catRadius: CGFloat = 15
+    /// T5 M9 v15: the rendered cat's poses (tools/lmp_bake_cat.py), facing right, round her node.
+    static let catArtBox = CGRect(x: -34, y: -22, width: 68, height: 62)
     static let catShelfY: CGFloat = 1175
     static let catMinX: CGFloat = 300
     static let catMaxX: CGFloat = 440

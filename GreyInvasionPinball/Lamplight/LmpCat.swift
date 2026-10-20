@@ -4,6 +4,7 @@
 // reports the events; she is a toy (category `toy`), so the ball bounces off her and the contact is reported.
 // M6 round 3: she can sit on other perches you own (LmpPerch): there she stays put and dozes off now and then.
 import SpriteKit
+import UIKit
 import CoreGraphics
 import Foundation
 
@@ -32,6 +33,11 @@ final class LmpCat: SKNode {
     private let zzz: SKLabelNode
     /// Everything drawn: flipped and squashed on its own, so the physics body is never scaled.
     private let art = SKNode()
+    /// T5 M9 v15: the rendered cat (walk1 / walk2 / sit / nap / swat, facing right), used instead of the drawn shapes.
+    private var pose: SKSpriteNode?
+    private var poses: [String: SKTexture] = [:]
+    private var walkClock: CGFloat = 0
+    private var moving = false
 
     static let fur = SKColor(red: 0.93, green: 0.62, blue: 0.32, alpha: 1)        // a ginger cat
     static let furDark = SKColor(red: 0.62, green: 0.36, blue: 0.16, alpha: 1)
@@ -86,6 +92,17 @@ final class LmpCat: SKNode {
         zzz.position = CGPoint(x: r * 1.3, y: r * 1.0)
         zzz.isHidden = true
         addChild(zzz)
+        if UIImage(named: "lmp_cat_walk1") != nil {
+            for name in ["walk1", "walk2", "sit", "nap", "swat"] where UIImage(named: "lmp_cat_" + name) != nil {
+                poses[name] = SKTexture(imageNamed: "lmp_cat_" + name)
+            }
+            let box = LmpTableLayout.catArtBox
+            let sprite = SKSpriteNode(texture: poses["walk1"], size: box.size)
+            sprite.anchorPoint = CGPoint(x: -box.minX / box.width, y: -box.minY / box.height)
+            for s in [tail, bodyShape, head, paw] as [SKNode] { s.isHidden = true }
+            art.addChild(sprite)
+            pose = sprite
+        }
 
         let body = SKPhysicsBody(circleOfRadius: r)
         body.isDynamic = false
@@ -105,6 +122,8 @@ final class LmpCat: SKNode {
     /// Walks toward her next spot; on arriving, naps there about half the time.
     func update(dt: CGFloat, now: TimeInterval) {
         lastNow = now
+        moving = false
+        defer { refreshPose(dt: dt) }
         switch mode {
         case .nap:
             if now >= napUntil { wake() }
@@ -127,6 +146,7 @@ final class LmpCat: SKNode {
             } else {
                 position.x += dx > 0 ? step : -step
                 face(dx > 0 ? 1 : -1)
+                moving = true
             }
         }
     }
@@ -139,6 +159,7 @@ final class LmpCat: SKNode {
         mode = .swat
         swatUntil = now + 0.35
         face(p.x >= position.x ? 1 : -1)
+        refreshPose(dt: 0)
         paw.removeAllActions()
         let r = LmpTableLayout.catRadius
         paw.run(.sequence([.move(to: CGPoint(x: r * 1.6, y: -r * 0.2), duration: 0.06),
@@ -190,6 +211,23 @@ final class LmpCat: SKNode {
         zzz.run(.repeatForever(.sequence([.fadeAlpha(to: 0.3, duration: 0.8),
                                           .fadeAlpha(to: 1, duration: 0.8)])), withKey: "zzz")
         head.run(.moveBy(x: 0, y: -LmpTableLayout.catRadius * 0.3, duration: 0.4))
+    }
+
+    /// T5 M9 v15: picks the rendered pose for what she's doing (two walking frames while she walks).
+    private func refreshPose(dt: CGFloat) {
+        guard let pose else { return }
+        let name: String
+        switch mode {
+        case .nap: name = "nap"
+        case .swat: name = "swat"
+        case .walk:
+            if perch != .shelf { name = "sit" }
+            else if moving {
+                walkClock += dt
+                name = Int(walkClock / 0.18) % 2 == 0 ? "walk1" : "walk2"
+            } else { name = "walk1" }
+        }
+        if let t = poses[name], pose.texture !== t { pose.texture = t }
     }
 
     /// Turns her to face right (+1) or left (-1); the z's stay above her head.

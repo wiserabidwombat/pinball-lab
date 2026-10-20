@@ -821,6 +821,133 @@ for _cx, _ly0, _ly1 in ((X0 + 23, 395, 480), (X0 + RW - 23, 705, 790)):
         tube3d(f'ladderRung{_cx}{_k}', [(_cx - 6.5, _ly0 + (_ly1 - _ly0) * _t, 27 + 13 * _t),
                                         (_cx + 6.5, _ly0 + (_ly1 - _ly0) * _t, 27 + 13 * _t)], 0.7, M_OAK_LADDER)
 
+# ------------------------------------------------------------------ M9 v36 (bookstore round 2): the shop counter
+_before_counter = set(o.name for o in sc.objects)
+# On the aprons, clear of the lamps: a stack of brown-paper parcels and a chalkboard easel on the left; a brass till
+# and a cup of tea on the right (the gilt shop sign and the BOOK RETURNS plate are painted in lmp_floor_table.py).
+def _chalk_png(path):
+    import cairo as _c
+    W_, H_ = 320, 260
+    sf = _c.ImageSurface(_c.FORMAT_RGB24, W_, H_); c = _c.Context(sf)
+    c.set_source_rgb(0.10, 0.12, 0.11); c.paint()
+    rr = random.Random(36)
+    for _ in range(260):                                       # old chalk dust
+        c.set_source_rgba(0.85, 0.85, 0.8, rr.uniform(0.02, 0.07))
+        c.arc(rr.uniform(0, W_), rr.uniform(0, H_), rr.uniform(3, 14), 0, 6.29); c.fill()
+    c.set_source_rgba(0.95, 0.95, 0.9, 0.92)
+    c.select_font_face('DejaVu Serif', _c.FONT_SLANT_ITALIC, _c.FONT_WEIGHT_BOLD); c.set_font_size(46)
+    e = c.text_extents("Today's"); c.move_to(W_ / 2 - e.x_advance / 2, 66); c.show_text("Today's")
+    e = c.text_extents('Pick'); c.move_to(W_ / 2 - e.x_advance / 2, 116); c.show_text('Pick')
+    c.set_line_width(4); c.move_to(70, 132); c.curve_to(130, 124, 190, 140, 250, 128); c.stroke()
+    c.set_source_rgba(0.98, 0.80, 0.55, 0.9)                   # a little open book in orange chalk
+    c.set_line_width(5)
+    c.move_to(160, 228); c.curve_to(130, 206, 100, 210, 86, 216); c.line_to(86, 168); c.curve_to(110, 160, 140, 166, 160, 184)
+    c.close_path(); c.stroke()
+    c.move_to(160, 228); c.curve_to(190, 206, 220, 210, 234, 216); c.line_to(234, 168); c.curve_to(210, 160, 180, 166, 160, 184)
+    c.close_path(); c.stroke()
+    c.set_source_rgba(0.7, 0.9, 0.85, 0.8); c.set_line_width(3)
+    for yy in (184, 196, 208):
+        c.move_to(102, yy - 6); c.line_to(146, yy + 4); c.stroke()
+        c.move_to(174, yy + 4); c.line_to(218, yy - 6); c.stroke()
+    sf.write_to_png(path)
+
+
+_chalk = os.path.join(os.path.dirname(os.path.abspath(OUT)), '_lmp_chalkboard.png'); _chalk_png(_chalk)
+M_CHALK = principled('chalkboard', (1, 1, 1), rough=0.9, image=_chalk)
+M_PAPER = principled('brownPaper', (0.56, 0.40, 0.24), rough=0.85)
+M_TWINE = principled('twine', (0.82, 0.73, 0.55), rough=0.9)
+M_WAX = principled('wax', (0.55, 0.05, 0.05), rough=0.35, coat=0.4)
+M_CHINA = principled('china', (0.93, 0.90, 0.84), rough=0.25, coat=0.5)
+M_TEA = principled('tea', (0.22, 0.10, 0.04), rough=0.08, coat=0.8)
+M_KEYCAP = principled('keycap', (0.92, 0.88, 0.78), rough=0.4)
+
+
+def _bx(name, x0, x1, y0, y1, z0, z1, mat, bevel=0.0):
+    o = prism(name, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], z0, z1, mat)
+    if bevel:
+        b = o.modifiers.new('b', 'BEVEL'); b.width = bevel; b.segments = 2
+    return o
+
+
+# parcels: three brown-paper packets tied with twine, a red wax seal on top
+_pz = 3.0
+for _i, (_pcx, _pcy, _pw, _pd, _ph) in enumerate(((72, 26, 30, 20, 8), (70, 27, 23, 15, 7), (74, 26, 15, 11, 6))):
+    _x0, _x1, _y0, _y1 = _pcx - _pw / 2, _pcx + _pw / 2, _pcy - _pd / 2, _pcy + _pd / 2
+    _bx(f'parcel{_i}', _x0, _x1, _y0, _y1, _pz, _pz + _ph, M_PAPER, bevel=0.6)
+    _t = _pz + _ph + 0.25
+    tube3d(f'twineA{_i}', [(_pcx, _y0 - 0.25, _pz), (_pcx, _y0 - 0.25, _t), (_pcx, _y1 + 0.25, _t), (_pcx, _y1 + 0.25, _pz)],
+           0.35, M_TWINE)
+    tube3d(f'twineB{_i}', [(_x0 - 0.25, _pcy, _pz), (_x0 - 0.25, _pcy, _t), (_x1 + 0.25, _pcy, _t), (_x1 + 0.25, _pcy, _pz)],
+           0.35, M_TWINE)
+    _pz += _ph
+cylinder('waxSeal', 74, 26, 1.8, _pz, _pz + 0.8, M_WAX, verts=16)
+tube3d('twineBow', [(74, 26, _pz + 0.6), (70.5, 29, _pz + 0.9), (71, 31, _pz + 0.4)], 0.35, M_TWINE)
+tube3d('twineBow2', [(74, 26, _pz + 0.6), (77.5, 29, _pz + 0.9), (77, 31, _pz + 0.4)], 0.35, M_TWINE)
+
+# the chalkboard easel, leaning back so its face shows in the oblique view
+_cx, _cy0, _tilt, _bw, _bh = 165.0, 10.0, math.radians(40), 32.0, 26.0
+_cy1, _cz0 = _cy0 + _bh * math.sin(_tilt), 4.0
+_cz1 = _cz0 + _bh * math.cos(_tilt)
+_bm = bmesh.new(); _uv = _bm.loops.layers.uv.new('UV')
+_vs = [_bm.verts.new(v) for v in ((_cx - _bw / 2, _cy0, _cz0), (_cx + _bw / 2, _cy0, _cz0),
+                                   (_cx + _bw / 2, _cy1, _cz1), (_cx - _bw / 2, _cy1, _cz1))]
+_f = _bm.faces.new(_vs)
+for _lp, _uvv in zip(_f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))): _lp[_uv].uv = _uvv
+_me = bpy.data.meshes.new('chalkboard'); _bm.to_mesh(_me); _bm.free(); _me.materials.append(M_CHALK)
+link(bpy.data.objects.new('chalkboard', _me))
+_frame = [(_cx - _bw / 2, _cy0, _cz0), (_cx + _bw / 2, _cy0, _cz0), (_cx + _bw / 2, _cy1, _cz1), (_cx - _bw / 2, _cy1, _cz1),
+          (_cx - _bw / 2, _cy0, _cz0)]
+tube3d('chalkFrame', _frame, 1.1, M_WALNUT)
+for _sx in (-1, 1):
+    _lx = _cx + _sx * (_bw / 2 - 1)
+    tube3d(f'easelFront{_sx}', [(_lx, _cy1 + 0.5, _cz1 + 2.5), (_lx, _cy0 - 3, 0)], 0.9, M_WALNUT)
+    tube3d(f'easelBack{_sx}', [(_lx, _cy1 + 0.5, _cz1 + 2.5), (_lx, _cy1 + 14, 0)], 0.9, M_WALNUT)
+tube3d('chalkLedge', [(_cx - _bw / 2, _cy0 - 1.5, _cz0 - 0.5), (_cx + _bw / 2, _cy0 - 1.5, _cz0 - 0.5)], 0.9, M_WALNUT)
+_bx('chalkStick', _cx + 6, _cx + 10, _cy0 - 2.2, _cy0 - 1.2, _cz0 + 0.3, _cz0 + 1.1, M_KEYCAP)
+
+# the brass till: a walnut cash drawer, a brass body, three stepped rows of cream keys, a sale flag window, a crank
+_tx0, _tx1, _ty0 = 458.0, 492.0, -8.0
+_bx('tillDrawer', _tx0, _tx1, _ty0, 20, 3, 9, M_WALNUT, bevel=0.6)
+_bx('tillBody', _tx0 + 2, _tx1 - 2, 4, 20, 9, 25, M_BRASS, bevel=0.8)
+for _r, (_ky, _kz) in enumerate(((-5.0, 10.5), (-1.0, 13.0), (3.0, 15.5))):
+    _bx(f'tillStep{_r}', _tx0 + 2, _tx1 - 2, _ky - 2.2, _ky + 2.2, 9, _kz - 0.6, M_BRASS_DARK, bevel=0.3)
+    for _k in range(6):
+        _kx = _tx0 + 6 + _k * 4.4
+        cylinder(f'tillKey{_r}{_k}', _kx, _ky, 1.5, _kz - 0.6, _kz + 0.7, M_KEYCAP, verts=16)
+_bx('tillFlag', _tx0 + 8, _tx1 - 8, 5, 7, 25, 31, M_KEYCAP)
+tube3d('tillFlagFrame', [(_tx0 + 8, 4.6, 25), (_tx0 + 8, 4.6, 31.2), (_tx1 - 8, 4.6, 31.2), (_tx1 - 8, 4.6, 25)], 0.6, M_BRASS)
+tube3d('tillCrest', [(_tx0 + 3, 12, 25), (_tx0 + 9, 12, 29), (475, 12, 30.5), (_tx1 - 9, 12, 29), (_tx1 - 3, 12, 25)], 1.0,
+       M_BRASS)
+tube3d('tillCrank', [(_tx1 - 2, 12, 15), (_tx1 + 4, 12, 15), (_tx1 + 4, 8, 15)], 0.7, M_BRASS)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=1.4, location=(_tx1 + 4, 7, 15), segments=12, ring_count=8)
+_o = bpy.context.object; _o.name = 'tillKnob'; _o.data.materials.append(M_KEYCAP); SMOOTH.add(_o.name)
+
+# a cup of tea on a gold-rimmed saucer, with a teaspoon and a shortbread biscuit
+_qx, _qy = 368.0, 18.0
+cylinder('saucer', _qx, _qy, 9.0, 3, 4.3, M_CHINA)
+torus('saucerRim', _qx, _qy, 4.3, 8.6, 0.35, M_BRASS)
+bpy.ops.mesh.primitive_cone_add(radius1=4.0, radius2=5.8, depth=6.5, location=(_qx, _qy, 4.3 + 3.25), vertices=32)
+_o = bpy.context.object; _o.name = 'teacup'; _o.data.materials.append(M_CHINA); SMOOTH.add(_o.name)
+cylinder('tea', _qx, _qy, 5.3, 10.5, 10.85, M_TEA)
+torus('cupRim', _qx, _qy, 10.8, 5.6, 0.4, M_BRASS)
+bpy.ops.mesh.primitive_torus_add(location=(_qx + 6.6, _qy, 8.0), rotation=(math.pi / 2, 0, 0), major_radius=1.9,
+                                 minor_radius=0.6, major_segments=24, minor_segments=8)
+_o = bpy.context.object; _o.name = 'cupHandle'; _o.data.materials.append(M_CHINA); SMOOTH.add(_o.name)
+tube3d('teaspoon', [(_qx - 3, _qy - 6.5, 4.6), (_qx + 5, _qy - 4.5, 4.6)], 0.4, M_BRASS)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=1.3, location=(_qx + 5.6, _qy - 4.4, 4.6), segments=12, ring_count=8)
+_o = bpy.context.object; _o.name = 'spoonBowl'; _o.scale = (1.4, 1, 0.35); _o.data.materials.append(M_BRASS); SMOOTH.add(_o.name)
+cylinder('biscuit', _qx - 3.5, _qy + 4.0, 2.4, 4.3, 5.3, principled('shortbread', (0.85, 0.66, 0.38), rough=0.8), verts=20)
+
+# the counter pieces are modelled small; scale each group 1.5x about its spot on the apron so they read on the phone
+from mathutils import Matrix as _Mx
+_spots = [(72, 26), (165, 20), (475, 8), (368, 18)]
+for _o in [o for o in sc.objects if o.name not in _before_counter and o.type in ('MESH', 'CURVE')]:
+    _bb = [_o.matrix_world @ __import__('mathutils').Vector(v) for v in _o.bound_box]
+    _ccx = sum(v.x for v in _bb) / 8; _ccy = sum(v.y for v in _bb) / 8
+    _ax, _ay = min(_spots, key=lambda p: (p[0] - _ccx) ** 2 + (p[1] - _ccy) ** 2)
+    _o.matrix_world = (_Mx.Translation((_ax, _ay, 3)) @ _Mx.Scale(1.5, 4) @ _Mx.Translation((-_ax, -_ay, -3))
+                       @ _o.matrix_world)
+
 # ------------------------------------------------------------------ oblique shear: y += z * K
 bpy.ops.object.select_all(action='DESELECT')
 for o in list(sc.objects):

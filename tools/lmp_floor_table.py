@@ -130,5 +130,57 @@ g = cairo.LinearGradient(0, L.DRAIN_LIP_Y, 0, Y0)
 g.add_color_stop_rgb(0, 0.05, 0.03, 0.02); g.add_color_stop_rgb(1, 0.0, 0.0, 0.0)
 cr.set_source(g); cr.rectangle(L.DRAIN_X, Y0, L.MIRROR - 2 * L.DRAIN_X, L.DRAIN_LIP_Y - Y0); cr.fill()
 
+# ------------------------------------------------------------------ M9 v36 (bookstore round 2): the shop counter
+def gilt_text(text, cx, cy, size, italic=False, bold=True, spacing=0.0):
+    """Gold-leaf sign lettering centred on (cx, cy), world points: a dark drop shadow, a gold gradient and a bright edge."""
+    cr.save()
+    cr.select_font_face('DejaVu Serif', cairo.FONT_SLANT_ITALIC if italic else cairo.FONT_SLANT_NORMAL,
+                        cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL)
+    cr.set_font_size(size)
+    widths = [cr.text_extents(ch).x_advance + spacing for ch in text]
+    tw = sum(widths) - spacing
+    ext = cr.text_extents(text)
+
+    def path(dx, dy):
+        cr.new_path()
+        x = cx - tw / 2 + dx
+        for ch, w in zip(text, widths):
+            cr.save(); cr.translate(x, cy - ext.height / 2 + dy); cr.scale(1, -1)
+            cr.move_to(0, 0); cr.text_path(ch); cr.restore()
+            x += w
+    path(0.5, -0.6); rgb((0.02, 0.05, 0.04), 0.75); cr.fill()                       # shadow, down-right
+    path(0, 0)
+    g = cairo.LinearGradient(0, cy + size * 0.5, 0, cy - size * 0.5)
+    g.add_color_stop_rgb(0, 0.98, 0.86, 0.52); g.add_color_stop_rgb(0.5, 0.86, 0.64, 0.28)
+    g.add_color_stop_rgb(1, 0.62, 0.42, 0.16)
+    cr.set_source(g); cr.fill_preserve()
+    rgb((1.0, 0.92, 0.66), 0.5); cr.set_line_width(0.18); cr.stroke()
+    cr.restore()
+
+
+# the shop's name in gold leaf on the right apron, like a shop window
+gilt_text('The Lamplight', 440, 86, 21, italic=True)
+gilt_text('BOOKS  \u00b7  TEA  \u00b7  EST. 1924', 440, 64, 6.4, spacing=0.5)
+rgb((0.86, 0.66, 0.30), 0.8); cr.set_line_width(0.7)
+for dx in (-1, 1):                                                                   # flourishes either side
+    cr.move_to(440 + dx * 58, 64); cr.curve_to(440 + dx * 66, 70, 440 + dx * 72, 58, 440 + dx * 78, 64); cr.stroke()
+# BOOK RETURNS: a brass plate across the drain with engraved letters
+bx0, bx1, by0, by1 = L.DRAIN_X + 4, L.MIRROR - L.DRAIN_X - 4, -42, -26
+g = cairo.LinearGradient(0, by1, 0, by0)
+g.add_color_stop_rgb(0, 0.92, 0.74, 0.40); g.add_color_stop_rgb(1, 0.58, 0.40, 0.16)
+cr.set_source(g); cr.rectangle(bx0, by0, bx1 - bx0, by1 - by0); cr.fill()
+rgb((0.35, 0.22, 0.08)); cr.set_line_width(0.6); cr.rectangle(bx0 + 1.2, by0 + 1.2, bx1 - bx0 - 2.4, by1 - by0 - 2.4); cr.stroke()
+for sx in (bx0 + 3, bx1 - 3):                                                        # screws
+    for sy in (by0 + 3, by1 - 3):
+        rgb((0.45, 0.30, 0.12)); cr.arc(sx, sy, 0.9, 0, 6.29); cr.fill()
+cr.save()
+cr.select_font_face('DejaVu Serif', cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD); cr.set_font_size(5.2)
+for line, yy in (('BOOK', -31.5), ('RETURNS', -38.5)):
+    e = cr.text_extents(line)
+    cr.save(); cr.translate((bx0 + bx1) / 2 - e.x_advance / 2, yy); cr.scale(1, -1)
+    cr.move_to(0.3, 0.3); rgb((1.0, 0.9, 0.6), 0.6); cr.show_text(line)
+    cr.move_to(0, 0); rgb((0.30, 0.18, 0.06)); cr.show_text(line); cr.restore()
+cr.restore()
+
 surf.write_to_png(OUT)
 print('wrote', OUT, surf.get_width(), surf.get_height())

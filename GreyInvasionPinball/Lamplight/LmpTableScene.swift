@@ -32,7 +32,7 @@ final class LmpTableScene: SKScene {
     private let game: LmpGameState
     private let settings: GameSettings
     private let cameraRig = LmpCameraRig()
-    private let sound = MonSoundPlayer()
+    private let sound = LmpSoundPlayer()          // T5 M9 v41: the Lamplight's own sound set (was Monsoon's)
     private var buildTag: SKLabelNode?
     private var buildTagBack: SKShapeNode?
     private var buildTagAt: TimeInterval = 0
@@ -479,7 +479,7 @@ final class LmpTableScene: SKScene {
             game.add(LmpTableLayout.catSwatPoints)
             showBanner("SWAT!")
             shotEvent("catSwat")
-            sfx(.kickback)
+            sfx(.catSwat)
             hitHaptic.impactOccurred(intensity: 0.6)
             break
         }
@@ -1045,7 +1045,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v40")
+        let label = SKLabelNode(text: "T5 M9 v41")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1091,7 +1091,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v40 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v41 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1212,7 +1212,7 @@ final class LmpTableScene: SKScene {
         bannerClearAt = gameTime + LmpTableLayout.bannerSeconds
     }
 
-    private func sfx(_ s: MonSound) {
+    private func sfx(_ s: LmpSound) {
         if isLabRunning { return }                 // the robot plays silently
         #if DEBUG
         if playLab != nil { return }               // and so do the Play Lab's players
@@ -1416,6 +1416,7 @@ final class LmpTableScene: SKScene {
                 rushBallsToServe += drained.count
                 rushLaunchAt = now + 0.6
                 showBanner("GRANDFATHER CLOCK · BALL SAVED")
+                sfx(.ballSave)                         // T5 M9 v41
             }
             if balls.isEmpty, rushBallsToServe == 0, nextBallAt == nil {
                 cameraRig.shake(strength: 4, duration: 0.3)
@@ -1551,7 +1552,7 @@ final class LmpTableScene: SKScene {
         if find.isNew { game.newTonight += 1; refreshShelf() }
         game.findToast = find
         findToastClearAt = gameTime + LmpTableLayout.findToastSeconds
-        sfx(find.book.rarity >= .rare ? .jackpot : .lane)
+        sfx(find.book.rarity >= .rare ? .rareFind : .find)
     }
 
     // MARK: - Requests (milestone 8)
@@ -1580,7 +1581,7 @@ final class LmpTableScene: SKScene {
         game.status = statusText(r)
         game.visitor = r                                   // their card under the score
         visitorClearAt = now + LmpTableLayout.visitorCardSeconds
-        sfx(.lane)
+        sfx(.regular)
     }
 
     /// A shot was made: if it's the request's next step, move on; the last step finishes it.
@@ -1613,7 +1614,7 @@ final class LmpTableScene: SKScene {
                        + (nowLit ? "FESTIVAL NIGHT IS LIT"
                                  : chairRelit ? "ROCKING CHAIR · CAT FLAP LIT"
                                               : "FRIENDSHIP \(level)" + (rushActive ? " · ×2" : "")))
-            sfx(.lanesComplete)
+            sfx(.thankYou)
             if !rushActive, game.requestsTonight % LmpTableLayout.rushEvery == 0 { startRush() }
             game.status = statusText(nil)
             nextRequestAt = gameTime + (rushActive ? LmpTableLayout.rushRequestDelay
@@ -1621,7 +1622,7 @@ final class LmpTableScene: SKScene {
         } else {
             request = r
             game.status = statusText(r)
-            sfx(.lane)
+            sfx(.regular)
         }
     }
 
@@ -1768,7 +1769,7 @@ final class LmpTableScene: SKScene {
         rushSaveUntil = .infinity                      // the save starts when the Rush ball goes in
         showBanner("THE EVENING RUSH · REQUESTS PAY DOUBLE")
         lamps.play(.sweep, at: gameTime)
-        sfx(.jackpot)
+        sfx(.rush)
     }
 
     /// Plunges the Rush's balls in one at a time (waiting while a ball sits on the plunger).
@@ -1827,7 +1828,7 @@ final class LmpTableScene: SKScene {
         showBanner("THE \(season.festival.uppercased()) · THE WHOLE VILLAGE IS HERE")
         game.status = statusText(request)
         lamps.play(.sweep, at: gameTime)
-        sfx(.jackpot)
+        sfx(.festival)
     }
 
     /// T5 M9 v26: Festival Night's string lights: strands across the shop above everything on the table (over the
@@ -1998,7 +1999,7 @@ final class LmpTableScene: SKScene {
                 labObjective("loft")
                 showBanner("FULL PLUNGE · THE LOFT")
                 requestEvent(.loft)
-                sfx(.skillShot)
+                sfx(.loftPlunge)
                 makeLucky()
             }
             return
@@ -2034,7 +2035,7 @@ final class LmpTableScene: SKScene {
                 labObjective("fireplaceOpen")
                 showBanner(ladderDropped ? "LIBRARY LADDER · FIREPLACE OPEN" : "FIREPLACE OPEN")
                 ladderDropped = false
-                sfx(.lanesComplete)
+                sfx(.fireplaceOpen)
                 fireplaceFindLit = true                // the book behind the bank: the fireplace finds it
                 requestEvent(.bookshelf)
             }
@@ -2077,7 +2078,7 @@ final class LmpTableScene: SKScene {
         body.angularVelocity = 0
         body.velocity = CGVector(dx: 0, dy: LmpTableLayout.catFlapKickSpeed)
         showBanner("CAT FLAP · SAVED")
-        sfx(.upKick)
+        sfx(.catFlap)
     }
 
     private func isInAlcove(_ p: CGPoint) -> Bool {
@@ -2106,7 +2107,7 @@ final class LmpTableScene: SKScene {
                         labObjective("loft")
                         showBanner("DUMBWAITER")
                         requestEvent(.loft)
-                        sfx(.upKick)
+                        sfx(.dumbwaiter)
                         continue
                     }
                     if scoop === kettle { dumbwaiterLit = true }
@@ -2156,7 +2157,7 @@ final class LmpTableScene: SKScene {
                 labObjective(scoop === fireplace ? "fireplace" : scoop === windowSeat ? "windowSeat" : "mail")
             }
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
-            sfx(scoop === fireplace ? .jackpot : .scoopIn)
+            sfx(scoop === fireplace ? .fireplace : .scoopIn)
             if scoop === fireplace { flareFire() }                // T5 M9 v34
             showBanner(scoop === fireplace ? "FIREPLACE" : scoop === kettle ? "KETTLE"
                        : scoop === windowSeat ? "WINDOW SEAT" : "MAIL POSTED")
@@ -2233,7 +2234,7 @@ final class LmpTableScene: SKScene {
                     game.add(LmpTableLayout.catWakePoints)
                     shotEvent("cat")
                     labObjective("cat")
-                    sfx(.captiveKnock)
+                    sfx(.catWake)
                     // T5 M8 v21: sometimes she brings you a gift instead of a book (twice as often with the cat bed).
                     if !isLabRunning, let gift = LmpShop.shared.catGift(bed: has(.catBed)) {
                         labObjective("catGift")
@@ -2241,7 +2242,7 @@ final class LmpTableScene: SKScene {
                         game.findToast = gift
                         findToastClearAt = gameTime + LmpTableLayout.findToastSeconds
                         showBanner(gift.isNew ? "MRRP! · A GIFT FROM THE CAT" : "MRRP! · ANOTHER GIFT")
-                        if gift.isNew { sfx(.jackpot) }
+                        if gift.isNew { sfx(.catGift) }
                     } else {
                         showBanner("MRRP?!")
                         awardFind(from: .cat)
@@ -2250,7 +2251,7 @@ final class LmpTableScene: SKScene {
                     game.add(LmpTableLayout.catPetPoints)
                     shotEvent("cat")
                     showBanner("PURR")
-                    sfx(.captiveKnock)
+                    sfx(.catPet)
                 case .none:
                     break
                 }
@@ -2261,7 +2262,7 @@ final class LmpTableScene: SKScene {
                 game.add(LmpTableLayout.bookTargetPoints)
                 shotEvent("bookTarget")
                 hitHaptic.impactOccurred(intensity: 0.6)
-                sfx(.standup)
+                sfx(.screenPanel)
             }
         case LmpPhysicsCategory.bumper:
             if let bumper = node as? LmpBumper {
@@ -2269,7 +2270,7 @@ final class LmpTableScene: SKScene {
                     game.add(LmpTableLayout.bumperPoints)
                     shotEvent("bumper")
                     hitHaptic.impactOccurred(intensity: 0.7)
-                    sfx(.bumper)
+                    sfx(.teacup)
                 }
             } else if node === centerPost {
                 kickOffCenterPost(ballNode, body: ballBody)      // T5 M8 v24: steep drops only
@@ -2278,7 +2279,7 @@ final class LmpTableScene: SKScene {
                     game.add(LmpTableLayout.centerPostPoints)
                     shotEvent("post")
                     hitHaptic.impactOccurred(intensity: 0.5)
-                    sfx(.standup)
+                    sfx(.post)
                     centerPost?.run(.sequence([.scale(to: 1.25, duration: 0.04), .scale(to: 1, duration: 0.12)]))
                 }
             }

@@ -381,6 +381,10 @@ struct LabCreditsView: View {
                 Section("Table 05 · The Lamplight") {
                     credit("Table art (the shop floor, rug, fireplace, loft, cabinet and rails)",
                            "Painted and rendered in Blender for this table", "Original")
+                    credit("The shop door's bell, teacups, the till, pages, the fire, chimes and the cat",
+                           "Synthesized for this table", "Original")
+                    credit("Impact Sounds (flippers, slings, targets, holes, gates)", "Kenney · kenney.nl",
+                           "CC0 1.0 (public domain), edited and levelled for the table")
                 }
                 Section {
                     Text("Thanks to Kenney for the free game assets.")

@@ -49,3 +49,5 @@ Pinball Lab by Aaron Tilley, built with Claude, in Swift, SwiftUI and SpriteKit.
 | Asset | File | Source | License |
 |---|---|---|---|
 | Table art (floor painting with the rug, fireplace, loft and kettle lane; cabinet, rails, guides, slings) | Assets.xcassets/LmpArt/lmp_lower, lmp_upper | Painted and rendered in Blender for this table (tools/lmp_floor_table.py, lmp_floor_upper.py, lmp_rug.py, lmp_bake_table.py, lmp_split_table.py); the rug is an original design in the style of a reference photo Aaron shared | Original, no license needed |
+| Sound effects: the shop door's bell, teacup clinks, the till, pages, the fire, chimes, the cat's meow, purr and swat | LmpSounds/lmp_sfx_*.wav | Synthesized for this table (tools/lmp_make_sfx.py) | Original, no license needed |
+| Sound effects: flippers, slings, the post, gates, spinner, holes, plunger, fire-screen clank, cat flap, dumbwaiter (mixed into some) | LmpSounds/lmp_sfx_*.wav | Kenney (kenney.nl): Impact Sounds; converted, trimmed and levelled by tools/lmp_make_sfx.py | CC0 1.0 (public domain) |

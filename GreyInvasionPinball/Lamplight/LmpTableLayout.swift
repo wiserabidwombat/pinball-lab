@@ -615,6 +615,9 @@ enum LmpTableLayout {
     static let dustMoteSpots: [CGPoint] = [CGPoint(x: 46, y: 322), CGPoint(x: 46, y: 692), CGPoint(x: 554, y: 612),
                                            CGPoint(x: 554, y: 922)]
     static let sillCandleFlame = CGPoint(x: 599, y: 379)
+    /// T5 M9 v42 (juice round 2): the ambience beds' volumes (× the sound slider): the fire crackling, rain on the window.
+    static let fireLoopGain: Float = 0.30
+    static let rainLoopGain: Float = 0.18
     /// T5 M9 v26: Festival Night's string lights, strung across the shop while the festival runs: each strand hangs from
     /// a to b and sags by `sag` in the middle, with a bulb about every festivalBulbSpacing points.
     static let festivalStrands: [(a: CGPoint, b: CGPoint, sag: CGFloat)] = [

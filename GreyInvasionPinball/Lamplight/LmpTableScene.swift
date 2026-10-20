@@ -193,6 +193,7 @@ final class LmpTableScene: SKScene {
             physicsWorld.speed = isAttractMode ? 0 : 1
             if isAttractMode {
                 releaseAllControls()
+                sound.stopLoops()                      // T5 M9 v42: no fire or rain on the menu
                 lamps.play(.attract, at: gameTime)     // M7: the menu's light chase
                 eveningDim?.alpha = 0
             }
@@ -207,6 +208,7 @@ final class LmpTableScene: SKScene {
     var isGamePaused = false {
         didSet {
             if isGamePaused { releaseAllControls() } else { padAArmed = false }
+            sound.holdLoops(isGamePaused)              // T5 M9 v42: the fire and the rain pause with the game
             isPaused = isGamePaused
             lastRealTime = nil
         }
@@ -1045,7 +1047,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v41")
+        let label = SKLabelNode(text: "T5 M9 v43")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1091,7 +1093,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v41 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v43 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1210,6 +1212,19 @@ final class LmpTableScene: SKScene {
         #endif
         game.banner = text
         bannerClearAt = gameTime + LmpTableLayout.bannerSeconds
+    }
+
+    /// T5 M9 v42 (juice round 2): the fire crackles and the rain taps the window under the whole evening, at the sound
+    /// slider's volume × their gains; silent for robots and the labs.
+    private func updateAmbience(_ dt: Float) {
+        var quiet = isLabRunning
+        #if DEBUG
+        if playLab != nil { quiet = true }
+        #endif
+        let v = quiet ? 0 : Float(settings.soundVolume)
+        sound.setLoop(.fire, target: v * LmpTableLayout.fireLoopGain)
+        sound.setLoop(.rain, target: v * LmpTableLayout.rainLoopGain)
+        sound.stepLoops(dt: dt)
     }
 
     private func sfx(_ s: LmpSound) {
@@ -1358,6 +1373,7 @@ final class LmpTableScene: SKScene {
         let now = gameTime
         #if DEBUG
         if shotLab != nil {                        // Shot Lab: the robot's frame instead of a game frame
+            sound.stopLoops()                      // T5 M9 v42: no ambience under the Shot Lab
             updateShotLab(CGFloat(step))
             return
         }
@@ -1369,6 +1385,7 @@ final class LmpTableScene: SKScene {
 
         let dt = CGFloat(step)
         lastStep = dt
+        updateAmbience(Float(step))
         updateGamepad()
         #if DEBUG
         updatePlayLab(now)
@@ -2063,9 +2080,16 @@ final class LmpTableScene: SKScene {
     /// T5 M8 v11: inside the alcove above the bank's line (only reachable through a dropped book or the open bank).
     private func isDeepInAlcove(_ p: CGPoint) -> Bool {
         let r = LmpTableLayout.ballRadius
-        return p.x > LmpTableLayout.alcoveLeftX + r && p.x < LmpTableLayout.alcoveRightX - r
-            && p.y > LmpTableLayout.alcoveCatchBottomY
-            && p.y < LmpTableLayout.alcoveTopY + LmpTableLayout.alcoveRoofPeak
+        guard p.x > LmpTableLayout.alcoveLeftX + r, p.x < LmpTableLayout.alcoveRightX - r,
+              p.y > LmpTableLayout.alcoveCatchBottomY else { return false }
+        // T5 M9 v43 (Aaron: balls bouncing off the teacups dropped into the fireplace): under the gabled roof, not just
+        // under its peak. The old test was the box up to the peak (y 872), which took in the two triangles OUTSIDE the
+        // roof's slopes, so a ball rolling down the outside of the roof was caught by the fireplace.
+        let cx = (LmpTableLayout.alcoveLeftX + LmpTableLayout.alcoveRightX) / 2
+        let half = (LmpTableLayout.alcoveRightX - LmpTableLayout.alcoveLeftX) / 2
+        let roofY = LmpTableLayout.alcoveTopY + LmpTableLayout.alcoveRoofPeak * (1 - abs(p.x - cx) / half)
+        let slope = LmpTableLayout.alcoveRoofPeak / half
+        return p.y < roofY - r * (1 + slope * slope).squareRoot()      // the ball's edge under the roof line
     }
 
     /// T5 M9 v29: the cat flap is a real kickback: it fires a ball draining down the right outlane straight back up the

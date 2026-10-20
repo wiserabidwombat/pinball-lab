@@ -304,3 +304,42 @@ write('catWake', mix(meow(0.55), at(kenney('impactSoft_medium_002', 0.15) * 0.3,
 write('catPet', purr(1.2), -7)
 write('catSwat', mix(swat(0.3), at(meow(0.3, 600, 820, 700) * 0.5, 0.05, 0.4)), -5)
 write('catGift', mix(meow(0.5, 560, 800, 520), at(chime(A5, 0.9), 0.35, 1.3), at(chime(C6, 0.9), 0.45, 1.4)), -5)
+
+
+# ------------------------------------------------------------------ juice round 2 (T5 M9 v42): ambience loops
+# Two quiet beds under the whole evening, each a seamless 8 s loop (9 s rendered, the extra second cross-faded back
+# into the start): the fire crackling in the fireplace, and rain on the window in the right-hand bookcase.
+def seamless(x, xf=1.0):
+    n = int(xf * SR); body = x[:-n].copy(); tail = x[-n:]
+    w = np.linspace(0, 1, n)
+    body[:n] = body[:n] * w + tail * (1 - w)
+    return body
+
+
+def write_loop(name, x, level_db):
+    x = np.asarray(x, float); x = x - np.mean(x)
+    pk = np.max(np.abs(x)) or 1
+    x = x / pk * 10 ** (level_db / 20)
+    with wave.open(os.path.join(OUT, f'lmp_loop_{name}.wav'), 'w') as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR)
+        w.writeframes((np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes())
+    print(f'loop {name:9s} {len(x) / SR:5.2f}s  peak {level_db} dB')
+
+
+_fire = crackle(9.0, rate=26, lo=700, hi=4500) * 0.8
+_t9 = t_(9.0)
+_fire += lp(noise(9.0), 220) * 1.6 * (0.8 + 0.2 * np.sin(2 * np.pi * 0.23 * _t9))     # the slow breathing roar
+for _ in range(5):                                                                     # a few bigger pops and settles
+    s = rng.uniform(0.3, 8.0); _fire += at(bp(noise(0.06), 600, 3000) * env(0.06, a=0.001, curve=6) * 3, s, 9.0)
+write_loop('fire', seamless(_fire), -12)
+
+_rain = bp(noise(9.0), 1200, 7000) * 0.5 + bp(noise(9.0), 300, 1200) * 0.35            # the steady hiss on the glass
+_rain *= 0.85 + 0.15 * np.sin(2 * np.pi * 0.11 * _t9 + 1.0)                              # gusts
+_drops = np.zeros(int(9.0 * SR))
+for _ in range(int(9.0 * 60)):                                                         # drops tapping the pane
+    i = int(rng.uniform(0, len(_drops) - 600)); w = int(rng.uniform(60, 220))
+    _drops[i:i + w] += np.hanning(w) * rng.uniform(0.2, 1.0)
+_rain += bp(_drops, 2000, 6000) * 1.4
+for _ in range(6):                                                                     # a drip from the frame now and then
+    s = rng.uniform(0.2, 8.4); _rain += at(np.sin(2 * np.pi * rng.uniform(1100, 1600) * t_(0.08)) * env(0.08, a=0.002, curve=8) * 0.6, s, 9.0)
+write_loop('rain', seamless(_rain), -16)

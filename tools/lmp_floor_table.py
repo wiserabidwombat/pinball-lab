@@ -35,23 +35,25 @@ def rgb(c, a=1.0):
 
 # ------------------------------------------------------------------ floorboards
 PLANK = 26.0
-OAKS = [(0.62, 0.40, 0.20), (0.68, 0.45, 0.23), (0.57, 0.36, 0.18), (0.72, 0.49, 0.26), (0.64, 0.42, 0.22)]
+# M9 v18 (contrast review: the oak was busy, its seams and grain as strong as the parts on it): planks closer in tone,
+# softer seams and grain, fewer knots, a shade darker so the ivory flippers, the ball and the cat's white read.
+OAKS = [(0.58, 0.38, 0.20), (0.61, 0.40, 0.21), (0.56, 0.37, 0.19), (0.63, 0.42, 0.22), (0.59, 0.39, 0.20)]
 x = X0 - rnd.uniform(0, PLANK)
 while x < X0 + W:
     y = Y0 - rnd.uniform(0, 200)
     while y < Y0 + H:
         ln = rnd.uniform(140, 300)
         base = rnd.choice(OAKS)
-        j = rnd.uniform(-0.04, 0.04)
+        j = rnd.uniform(-0.015, 0.015)
         col = tuple(max(0, min(1, c + j)) for c in base)
         rgb(col); cr.rectangle(x, y, PLANK, ln); cr.fill()
         # grain: long wavy darker strokes, a few lighter ones
         cr.save(); cr.rectangle(x, y, PLANK, ln); cr.clip()
-        for g in range(9):
+        for g in range(6):
             gx = x + rnd.uniform(1, PLANK - 1)
             amp, per, ph = rnd.uniform(0.3, 1.6), rnd.uniform(40, 120), rnd.uniform(0, 6.3)
             dark = rnd.random() < 0.75
-            rgb(tuple(c * (0.78 if dark else 1.12) for c in col), rnd.uniform(0.25, 0.55))
+            rgb(tuple(c * (0.86 if dark else 1.06) for c in col), rnd.uniform(0.12, 0.26))
             cr.set_line_width(rnd.uniform(0.25, 0.8))
             yy = y
             cr.move_to(gx + amp * math.sin(ph), yy)
@@ -60,18 +62,18 @@ while x < X0 + W:
                 cr.line_to(gx + amp * math.sin(ph + yy / per * 6.28), yy)
             cr.stroke()
         # the odd knot
-        if rnd.random() < 0.18:
+        if rnd.random() < 0.06:
             kx, ky = x + rnd.uniform(5, PLANK - 5), y + rnd.uniform(20, ln - 20)
             for r_, a in ((3.2, 0.25), (2.0, 0.35), (1.0, 0.5)):
-                rgb((0.30, 0.16, 0.07), a); cr.save(); cr.translate(kx, ky); cr.scale(1, 2.2)
+                rgb((0.30, 0.16, 0.07), a * 0.6); cr.save(); cr.translate(kx, ky); cr.scale(1, 2.2)
                 cr.arc(0, 0, r_, 0, 6.29); cr.restore(); cr.fill()
         cr.restore()
         # end joint
-        rgb((0.16, 0.08, 0.03), 0.9); cr.set_line_width(0.7)
+        rgb((0.25, 0.13, 0.06), 0.45); cr.set_line_width(0.6)
         cr.move_to(x, y); cr.line_to(x + PLANK, y); cr.stroke()
         y += ln
     # long seam between planks
-    rgb((0.14, 0.07, 0.03), 0.95); cr.set_line_width(0.9)
+    rgb((0.25, 0.13, 0.06), 0.55); cr.set_line_width(0.7)
     cr.move_to(x, Y0); cr.line_to(x, Y0 + H); cr.stroke()
     x += PLANK
 

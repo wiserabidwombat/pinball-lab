@@ -16,15 +16,19 @@ final class LmpDropTarget: SKNode {
     private let upTexture: SKTexture?
     private let downTexture: SKTexture?
 
-    init(at center: CGPoint) {
+    /// T5 M9 v8: `book` picks that book's own render (lmp_target_<book> / lmp_target_<book>_down, the four coloured
+    /// books of the bookshelf bank); without it, or if those images are missing, the shared lmp_target art is used.
+    init(at center: CGPoint, book: Int? = nil) {
         let size = LmpTableLayout.dropTargetSize
         plate = SKShapeNode(rectOf: size, cornerRadius: 2)
         plate.fillColor = SKColor(red: 1.0, green: 0.55, blue: 0.25, alpha: 1)
         plate.strokeColor = .clear
-        let sprite = LmpTableLayout.artSprite("lmp_target", box: LmpTableLayout.targetArtBox)
+        var name = "lmp_target"
+        if let book, UIImage(named: "lmp_target_\(book)") != nil { name = "lmp_target_\(book)" }
+        let sprite = LmpTableLayout.artSprite(name, box: LmpTableLayout.targetArtBox)
         art = sprite
         upTexture = sprite?.texture
-        downTexture = UIImage(named: "lmp_target_down") != nil ? SKTexture(imageNamed: "lmp_target_down") : nil
+        downTexture = UIImage(named: name + "_down") != nil ? SKTexture(imageNamed: name + "_down") : nil
         super.init()
         position = center
         // T3 M8 v6: targets lower down the bank (nearer the player) draw in front of the ones above them.

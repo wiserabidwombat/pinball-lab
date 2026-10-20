@@ -525,8 +525,8 @@ final class LmpTableScene: SKScene {
         addWall(points: LmpTableLayout.kettleLaneWall)
         addOrbitDeflector()
 
-        for c in LmpTableLayout.bookTargetCenters {
-            let t = LmpDropTarget(at: c)
+        for (i, c) in LmpTableLayout.bookTargetCenters.enumerated() {
+            let t = LmpDropTarget(at: c, book: i)                         // T5 M9 v8: four coloured books
             addChild(t)
             bookTargets.append(t)
         }
@@ -771,7 +771,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v6")
+        let label = SKLabelNode(text: "T5 M9 v8")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -817,7 +817,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v6 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v8 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

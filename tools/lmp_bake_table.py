@@ -205,11 +205,16 @@ tube('lipR', L.right_apron(), 4.5, 2.2, M_BRASS)
 
 # cabinet: walnut side boards and front board with a brass rail on each inner edge
 CAB_H = 34
-prism('cabL', [(X0, Y0), (12, Y0), (12, TOP), (X0, TOP)], 0, CAB_H, M_WALNUT)
-prism('cabR', [(588, Y0), (X0 + RW, Y0), (X0 + RW, TOP), (588, TOP)], 0, CAB_H, M_WALNUT)
+# M9 v35 (bookstore round 1): the cabinet sides are bookcases now (built with the arch corners further down); this
+# is their carcass base, the books stand on it at CASE_BASE
+CASE_BASE = 10.0
+prism('cabL', [(X0, Y0), (12, Y0), (12, TOP), (X0, TOP)], 0, CASE_BASE, M_WALNUT)
+prism('cabR', [(588, Y0), (X0 + RW, Y0), (X0 + RW, TOP), (588, TOP)], 0, CASE_BASE, M_WALNUT)
+for _x0, _x1 in ((X0, X0 + 4), (7, 12), (588, 593), (X0 + RW - 4, X0 + RW)):     # the cases' outer and inner sides
+    prism(f'caseSide{_x0}', [(_x0, Y0 - 12), (_x1, Y0 - 12), (_x1, TOP), (_x0, TOP)], 0, 30, M_WALNUT)
 prism('cabFront', [(X0, Y0 - 40), (X0 + RW, Y0 - 40), (X0 + RW, Y0 - 12), (X0, Y0 - 12)], 0, CAB_H, M_WALNUT)
-tube('railL', [(10, Y0 - 12), (10, TOP)], CAB_H + 1.5, 3.2, M_BRASS)
-tube('railR', [(590, Y0 - 12), (590, TOP)], CAB_H + 1.5, 3.2, M_BRASS)
+tube('railL', [(9.5, Y0 - 12), (9.5, TOP)], 31.2, 2.4, M_BRASS)
+tube('railR', [(590.5, Y0 - 12), (590.5, TOP)], 31.2, 2.4, M_BRASS)
 
 # playfield side walls between floor and cabinet: dark walnut with a brass top
 prism('sideL', [(12, L.APRON_TOP_Y), (L.LEFT_X, L.APRON_TOP_Y), (L.LEFT_X, TOP), (12, TOP)], 0, 18, M_WALNUT_SIDE)
@@ -265,8 +270,122 @@ for side, s in (('L', L.SLING_L), ('R', L.sling_right())):
 # ------------------------------------------------------------------ M9 round 2: the upper table
 # the arch: walnut fill between the outer wall and the cabinet corners, with a brass cap along the wall
 arch = L.arch()
-prism('archFill', ccw(arch + [(588, L.ARCH_START_Y), (588, TOP), (12, TOP), (12, L.ARCH_START_Y)]), 0, 18, M_WALNUT_SIDE)
-tube('archCap', arch, 18.5, 2.0, M_BRASS_DARK)
+prism('archFill', ccw(arch + [(588, L.ARCH_START_Y), (588, TOP), (12, TOP), (12, L.ARCH_START_Y)]), 0, CASE_BASE,
+      M_WALNUT_SIDE)
+# M9 v35: the arch is a walnut wall in front of the corner bookcases, with its brass cap
+_arch_out = []
+for _x, _y in arch:
+    _dx, _dy = _x - 300, _y - L.ARCH_START_Y + 40
+    _n = math.hypot(_dx, _dy) or 1
+    _arch_out.append((_x + 3 * _dx / _n, _y + 3 * _dy / _n))
+wall_strip('archWall', _arch_out, 6, 24, M_WALNUT_SIDE)
+tube('archCap', _arch_out, 24.5, 2.0, M_BRASS_DARK)
+
+# ------------------------------------------------------------------ M9 v35: bookcases round the shop
+# Aaron: "make the rest of the table feel more like a cozy book store". The cabinet sides and the corners outside the
+# arch are bookcases: rows of books standing on walnut shelves, spines toward the player (in the oblique view each row
+# shows its spines as a band with the tops behind), a brass genre plate every few shelves, now and then a leaning
+# book, a lying stack or a gap, and a rolling library ladder on each side. All outside the playfield. The books are a
+# few big meshes (per-corner colour attribute) so thousands of them stay quick.
+def _book_material():
+    m = bpy.data.materials.new('bookCloth'); m.use_nodes = True
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    at = nt.nodes.new('ShaderNodeAttribute'); at.attribute_name = 'bookCol'; at.attribute_type = 'GEOMETRY'
+    nt.links.new(at.outputs['Color'], b.inputs['Base Color'])
+    b.inputs['Roughness'].default_value = 0.62; b.inputs['Coat Weight'].default_value = 0.12
+    return m
+
+
+M_BOOKCLOTH = _book_material()
+M_PAGES = principled('pages', (0.50, 0.43, 0.32), rough=0.85)
+M_GILT = principled('gilt', (0.88, 0.68, 0.32), metal=1.0, rough=0.32)
+M_OAK_LADDER = principled('ladderOak', (0.42, 0.25, 0.12), rough=0.5, coat=0.2)
+CLOTHS = [(0.36, 0.06, 0.05), (0.06, 0.10, 0.24), (0.07, 0.20, 0.12), (0.55, 0.38, 0.08), (0.30, 0.16, 0.07),
+          (0.24, 0.09, 0.26), (0.08, 0.26, 0.26), (0.40, 0.33, 0.22), (0.12, 0.08, 0.06), (0.50, 0.14, 0.10),
+          (0.20, 0.24, 0.30), (0.42, 0.30, 0.20)]
+ROW, BOOK_D = 21.0, 11.0
+_br = random.Random(35)
+_books = bmesh.new(); _bcol = _books.loops.layers.float_color.new('bookCol')
+_pages = bmesh.new(); _gilt = bmesh.new(); _lips = bmesh.new()
+
+
+def _box(bm, x0, x1, y0, y1, z0, z1, lean=0.0, col=None):
+    vs = [bm.verts.new(v) for v in ((x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
+                                     (x0 + lean, y0, z1), (x1 + lean, y0, z1), (x1 + lean, y1, z1), (x0 + lean, y1, z1))]
+    fs = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    for f in fs:
+        face = bm.faces.new([vs[i] for i in f])
+        if col is not None:
+            for lp in face.loops: lp[_bcol] = (*col, 1.0)
+
+
+def _cloth():
+    c = _br.choice(CLOTHS); k = _br.uniform(0.7, 1.05)
+    return tuple(max(0.0, min(1.0, v * k)) for v in c)
+
+
+def _row(x0, x1, y, plate):
+    z = CASE_BASE
+    _box(_lips, x0 - 0.5, x1 + 0.5, y - 1.6, y + 0.6, z - 0.5, z + 2.4)          # the shelf's front lip
+    if plate and x1 - x0 > 20:
+        cx = (x0 + x1) / 2
+        _box(_gilt, cx - 4.5, cx + 4.5, y - 1.9, y - 1.5, z - 0.1, z + 2.1)    # a brass genre plate
+    by0, by1 = y + 1.2, y + 1.2 + BOOK_D
+    x = x0 + _br.uniform(0, 1.5)
+    while x < x1 - 3:
+        r = _br.random()
+        if r < 0.04:                                                            # a gap
+            x += _br.uniform(4, 8); continue
+        if r < 0.10 and x1 - x > 14:                                            # a stack lying flat
+            w = _br.uniform(10, 13); zz = z
+            for k in range(_br.randint(2, 4)):
+                j = _br.uniform(-0.8, 0.8); hh = _br.uniform(2.0, 2.8)
+                _box(_books, x + j, x + w + j, by0 + 0.5, by1 - 1.0, zz, zz + hh, col=_cloth())
+                _box(_pages, x + j + 0.4, x + w + j - 0.4, by0 + 1.5, by1 - 0.4, zz + 0.4, zz + hh - 0.4)
+                zz += hh
+            x += w + 1.2; continue
+        w = _br.uniform(3.4, 5.4); h = _br.uniform(11.5, 16.5)
+        if x + w > x1: break
+        lean = _br.uniform(2.5, 4.5) if r < 0.15 and x + w + 4 < x1 else 0.0
+        col = _cloth()
+        _box(_books, x, x + w, by0, by1 - _br.uniform(0, 1.5), z, z + h, lean=lean, col=col)
+        if not lean:
+            _box(_pages, x + 0.6, x + w - 0.6, by0 + 1.2, by1 - 1.8, z + h - 0.2, z + h + 0.12)
+            for zb in ((2.0, h - 2.8) if _br.random() < 0.6 else (h - 2.8,)):
+                _box(_gilt, x + 0.35, x + w - 0.35, by0 - 0.18, by0 + 0.2, z + zb, z + zb + 0.5)
+        x += w + (lean if lean else 0) + _br.uniform(0.15, 0.5)
+
+
+def _arch_x_left(y):
+    pts = [p for p in arch if p[0] <= 300]
+    for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
+        if ya <= y <= yb:
+            return xa + (xb - xa) * (y - ya) / ((yb - ya) or 1)
+    return 300.0
+
+
+_ri = 0
+_y = Y0 + 1.0
+while _y < Y0 + RH + 2:
+    spans = [(X0 + 5, 6.0), (594.0, X0 + RW - 5)]
+    if _y >= L.TOP_Y + 4:
+        spans.append((15.0, 585.0))
+    elif _y >= L.ARCH_START_Y:
+        xl = _arch_x_left(_y) - 7
+        if xl - 15 > 10:
+            spans += [(15.0, xl), (600 - xl, 585.0)]
+    for a_, b_ in spans:
+        _row(a_, b_, _y, plate=(_ri % 5 == 2))
+    _y += ROW; _ri += 1
+
+for _bm, _name, _m in ((_books, 'caseBooks', M_BOOKCLOTH), (_pages, 'casePages', M_PAGES), (_gilt, 'caseGilt', M_GILT),
+                       (_lips, 'caseLips', M_WALNUT)):
+    _me = bpy.data.meshes.new(_name); _bm.to_mesh(_me); _bm.free(); _me.materials.append(_m)
+    _o = link(bpy.data.objects.new(_name, _me))
+    if _name == 'caseBooks':
+        _bv = _o.modifiers.new('b', 'BEVEL'); _bv.width = 0.25; _bv.segments = 1
+print('bookcases: rows', _ri)
+
 
 def rail(name, pts, h=14, thick=6, mat=None, z0=0):
     """A walnut rail with a brass cap: the orbit walls, the kettle lane, the loft (z0: standing on the loft)."""
@@ -688,6 +807,19 @@ for k, (y0, y1) in enumerate(((L.LOFT_BOTTOM_Y + 3, L.LOFT_DOOR_BOTTOM - 2), (L.
         prism(f'wallBook{k}_{yy:.1f}', ccw([(xs0 + 1.4, yy), (xs0 + 1.4 + w_, yy), (xs0 + 1.4 + w_, yy + d_ - 0.25),
                                              (xs0 + 1.4, yy + d_ - 0.25)]), LOFT_H + 1.5, LOFT_H + h_, rnd_s.choice(mats_s))
         yy += d_
+
+# a rolling library ladder on each side, resting on the books, brass hooks at the top and brass wheels at the foot
+for _cx, _ly0, _ly1 in ((X0 + 23, 395, 480), (X0 + RW - 23, 705, 790)):
+    for _sx in (-6.5, 6.5):
+        tube3d(f'ladderRail{_cx}{_sx}', [(_cx + _sx, _ly0, 27), (_cx + _sx, _ly1, 40)], 1.1, M_OAK_LADDER)
+        tube3d(f'ladderHook{_cx}{_sx}', [(_cx + _sx, _ly1, 40), (_cx + _sx, _ly1 + 3, 41.5), (_cx + _sx, _ly1 + 4, 39)],
+               0.6, M_BRASS)
+        cylinder(f'ladderWheel{_cx}{_sx}', _cx + _sx, _ly0 - 1, 1.6, 25.4, 27.2, M_BRASS, verts=12)
+    _n = 11
+    for _k in range(1, _n):
+        _t = _k / _n
+        tube3d(f'ladderRung{_cx}{_k}', [(_cx - 6.5, _ly0 + (_ly1 - _ly0) * _t, 27 + 13 * _t),
+                                        (_cx + 6.5, _ly0 + (_ly1 - _ly0) * _t, 27 + 13 * _t)], 0.7, M_OAK_LADDER)
 
 # ------------------------------------------------------------------ oblique shear: y += z * K
 bpy.ops.object.select_all(action='DESELECT')

@@ -1,4 +1,6 @@
-"""Table 05 (The Lamplight) M9 v15: the shop cat, a ginger tabby modelled from metaballs and rendered in the table's
+"""Table 05 (The Lamplight) M9 v15: the shop cat, modelled from metaballs (M9 v17: a black-and-white bookshop cat,
+black with a white bib, muzzle and socks and green eyes, so she reads against the oak and the sage rug; she was a
+ginger tabby, 1.01 : 1 on the loft rug) and rendered in the table's
 oblique view and light, facing right (LmpCat mirrors her for left). Poses: walk1 / walk2 (legs swapped), sit (on a
 perch), nap (curled up, eyes shut, tail round her nose), swat (a front paw out). Each is lmp_cat_<pose>.png in
 LmpTableLayout.catArtBox (x -34…34, y -22…40 around the cat's node, whose physics circle is r 15 at the origin).
@@ -36,7 +38,7 @@ def pose(name):
                  ((18, 0, 20), 9.0, E), ((23, 0, 18), 4.6, E)]
         balls.append(((11 - s, -4, 5.5), 3.3, (1, 1, 2.0)) if name != 'swat' else ((20, -5, 13), 3.2, (1.6, 1, 1)))
         if name == 'swat':
-            balls.append(((26, -6, 14.5), 3.0, E))
+            balls.append(((20, -5, 13.5), 3.2, E)); balls.append(((23.5, -5.5, 14), 3.0, E)); balls.append(((27, -6, 14.5), 3.0, E))
         balls += [(c, r, E) for c, r in tail_chain([(-17, 0, 13), (-23, 0, 17), (-25, 0, 25), (-22, 0, 30)], 3.0, 2.2)]
         return balls, (18, 0, 20), True
     if name == 'sit':
@@ -53,6 +55,11 @@ def pose(name):
     raise ValueError(name)
 
 
+# where her white bib and muzzle start (x) and their heights (z0, z1), per pose
+BIB = {'walk1': (11.0, 5.0, 18.5), 'walk2': (11.0, 5.0, 18.5), 'swat': (11.0, 5.0, 18.5),
+       'sit': (5.5, 6.0, 24.5), 'nap': (13.0, 0.0, 11.0)}
+
+
 def render(name):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
@@ -62,22 +69,39 @@ def render(name):
     sc.render.film_transparent = True
     sc.view_settings.view_transform = 'Standard'; sc.view_settings.look = 'None'
 
+    # black fur with white socks (low z) and a white bib and muzzle (in front of BIB[name]'s x, between its heights)
+    bx, bz0, bz1 = BIB[name]
     fur = bpy.data.materials.new('fur'); fur.use_nodes = True
     nt = fur.node_tree; b = nt.nodes['Principled BSDF']
-    tc = nt.nodes.new('ShaderNodeTexCoord')
-    wave = nt.nodes.new('ShaderNodeTexWave'); wave.wave_type = 'BANDS'; wave.bands_direction = 'X'
-    wave.inputs['Scale'].default_value = 0.11; wave.inputs['Distortion'].default_value = 9.0
-    wave.inputs['Detail'].default_value = 2
-    nt.links.new(tc.outputs['Object'], wave.inputs['Vector'])
-    ramp = nt.nodes.new('ShaderNodeValToRGB')
-    ramp.color_ramp.elements[0].position = 0.35; ramp.color_ramp.elements[0].color = (0.70, 0.36, 0.13, 1)
-    ramp.color_ramp.elements[1].position = 0.70; ramp.color_ramp.elements[1].color = (0.93, 0.58, 0.28, 1)
-    nt.links.new(wave.outputs['Fac'], ramp.inputs['Fac']); nt.links.new(ramp.outputs['Color'], b.inputs['Base Color'])
-    b.inputs['Roughness'].default_value = 0.85
-    b.inputs['Sheen Weight'].default_value = 0.6; b.inputs['Sheen Roughness'].default_value = 0.4
+    tc = nt.nodes.new('ShaderNodeTexCoord'); sep = nt.nodes.new('ShaderNodeSeparateXYZ')
+    nt.links.new(tc.outputs['Object'], sep.inputs[0])
+    def op(kind, a, bval):
+        n = nt.nodes.new('ShaderNodeMath'); n.operation = kind
+        if isinstance(a, float): n.inputs[0].default_value = a
+        else: nt.links.new(a, n.inputs[0])
+        if isinstance(bval, float): n.inputs[1].default_value = bval
+        else: nt.links.new(bval, n.inputs[1])
+        return n.outputs[0]
+    socks = op('LESS_THAN', sep.outputs['Z'], 2.4)
+    bib = op('MULTIPLY', op('MULTIPLY', op('GREATER_THAN', sep.outputs['X'], float(bx)),
+                                       op('GREATER_THAN', sep.outputs['Z'], float(bz0))),
+             op('LESS_THAN', sep.outputs['Z'], float(bz1)))
+    white = op('MAXIMUM', socks, bib)
+    mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'
+    mix.inputs['A'].default_value = (0.022, 0.022, 0.028, 1); mix.inputs['B'].default_value = (0.90, 0.89, 0.86, 1)
+    nt.links.new(white, mix.inputs['Factor']); nt.links.new(mix.outputs['Result'], b.inputs['Base Color'])
+    b.inputs['Roughness'].default_value = 0.6
+    b.inputs['Sheen Weight'].default_value = 0.5; b.inputs['Sheen Roughness'].default_value = 0.4
+    b.inputs['Sheen Tint'].default_value = (0.55, 0.57, 0.65, 1)
     dark = bpy.data.materials.new('eye'); dark.use_nodes = True
     db = dark.node_tree.nodes['Principled BSDF']
     db.inputs['Base Color'].default_value = (0.03, 0.03, 0.02, 1); db.inputs['Roughness'].default_value = 0.1
+    green = bpy.data.materials.new('iris'); green.use_nodes = True                 # green eyes that catch the light
+    gb = green.node_tree.nodes['Principled BSDF']
+    gb.inputs['Base Color'].default_value = (0.45, 0.78, 0.22, 1); gb.inputs['Roughness'].default_value = 0.1
+    gb.inputs['Emission Color'].default_value = (0.45, 0.8, 0.2, 1); gb.inputs['Emission Strength'].default_value = 0.6
+    shut = bpy.data.materials.new('shut'); shut.use_nodes = True
+    shut.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.40, 0.40, 0.42, 1)
     pink = bpy.data.materials.new('nose'); pink.use_nodes = True
     pink.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.85, 0.45, 0.45, 1)
 
@@ -92,7 +116,8 @@ def render(name):
     hx, hy, hz = hc
     plain = bpy.data.materials.new('ear'); plain.use_nodes = True
     pb = plain.node_tree.nodes['Principled BSDF']
-    pb.inputs['Base Color'].default_value = (0.86, 0.50, 0.22, 1); pb.inputs['Roughness'].default_value = 0.85
+    pb.inputs['Base Color'].default_value = (0.03, 0.03, 0.035, 1); pb.inputs['Roughness'].default_value = 0.6
+    pb.inputs['Sheen Weight'].default_value = 0.0
     # the body as a mesh first, so the face can be put on its actual surface (ray casts)
     bpy.ops.object.select_all(action='DESELECT'); mo.select_set(True); bpy.context.view_layer.objects.active = mo
     bpy.ops.object.convert(target='MESH')
@@ -106,9 +131,14 @@ def render(name):
     for sgn in (1, -1):                                              # eyes on the front of the head
         loc, nrm = surface((hx + 30, hy + sgn * 3.2, hz + 2.2), (-1, 0, 0))
         if loc is None: continue
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=1.35, location=loc - nrm * 0.5, segments=16, ring_count=8)
-        e = bpy.context.object; e.data.materials.append(dark)
-        if not eyes_open: e.scale = (0.4, 1.3, 0.3)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=1.6, location=loc - nrm * 0.6, segments=16, ring_count=8)
+        e = bpy.context.object
+        if eyes_open:
+            e.data.materials.append(green)
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=0.75, location=loc + nrm * 0.75, segments=12, ring_count=6)
+            p_ = bpy.context.object; p_.scale = (0.6, 0.6, 1.3); p_.data.materials.append(dark)
+        else:
+            e.data.materials.append(shut); e.scale = (0.4, 1.3, 0.3)
     loc, nrm = surface((hx + 30, hy, hz - 1.2), (-1, 0, 0))          # nose on the muzzle
     if loc is not None:
         bpy.ops.mesh.primitive_uv_sphere_add(radius=1.1, location=loc - nrm * 0.3, segments=16, ring_count=8)
@@ -116,10 +146,9 @@ def render(name):
     for sgn in (1, -1):                                              # ears standing on the top of the head
         loc, nrm = surface((hx - 0.5, hy + sgn * 2.9, hz + 30), (0, 0, -1))
         if loc is None: continue
-        bpy.ops.mesh.primitive_cone_add(vertices=16, radius1=2.9, radius2=0.25, depth=6.0,
-                                        location=(loc.x, loc.y + sgn * 0.4, loc.z + 2.0),
-                                        rotation=(-sgn * math.radians(8), 0, 0))
-        bpy.context.object.data.materials.append(plain)
+        bpy.ops.mesh.primitive_cone_add(vertices=16, radius1=2.6, radius2=0.25, depth=5.5,
+                                        location=(loc.x - 0.5, loc.y, loc.z + 2.0), rotation=(0, 0, 0))
+        bpy.context.object.scale = (0.45, 1.0, 1.0); bpy.context.object.data.materials.append(plain)
 
     # turn everything into a mesh and lean it (y += z K)
     bpy.ops.object.select_all(action='DESELECT')

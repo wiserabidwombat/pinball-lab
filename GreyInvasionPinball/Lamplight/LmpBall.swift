@@ -11,6 +11,8 @@ final class LmpBall: SKNode {
     let visual: SKSpriteNode
     private let shadow: SKSpriteNode
     private let shadowOffset = CGVector(dx: 4, dy: -4)
+    /// T5 M9 v30: how much bigger a ball is drawn at the loft's height.
+    private static let heightGrow: CGFloat = 0.12
     /// In the oblique view the ball's centre (9 pt above the floor) draws this far up the table.
     private static let lift = LmpTableLayout.ballRadius * LmpTableLayout.oblique
     private let trail = Effects.ballTrail()
@@ -69,7 +71,7 @@ final class LmpBall: SKNode {
         isUpper = up
         if !up { windowSeatCatches = 0 }
         zPosition = up ? 30 : 10
-        visual.setScale(up ? 1.1 : 1)
+        // T5 M9 v30: the size now follows the drawn height in updateLook (was a jump to 1.1 on the upper layer).
         physicsBody?.categoryBitMask = up ? LmpPhysicsCategory.rampBall : LmpPhysicsCategory.ball
         updateCollisionMask()
     }
@@ -121,6 +123,10 @@ final class LmpBall: SKNode {
         visual.zRotation = a
         shownHeight += (height - shownHeight) * 0.35
         let raised = shownHeight * LmpTableLayout.oblique
+        // T5 M9 v30: a ball up high is drawn a little bigger, as if nearer the camera: up to 12% on the loft, growing
+        // as it climbs the ramp (or rides the hatch / dumbwaiter) and shrinking as it comes down the stairs.
+        let grow = 1 + Self.heightGrow * min(max(shownHeight / LmpTableLayout.loftHeight, 0), 1)
+        if abs(visual.xScale - grow) > 0.002 { visual.setScale(grow) }
         let lift = (heldIn == nil ? Self.lift : 0) + raised
         visual.position = CGPoint(x: -lift * sin(a), y: lift * cos(a))
         shadow.zRotation = a

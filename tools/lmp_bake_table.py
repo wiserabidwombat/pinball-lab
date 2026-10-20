@@ -368,12 +368,55 @@ def chute_y(x):
     return c0[1] + (x - c0[0]) * (c1[1] - c0[1]) / (c1[0] - c0[0])
 plank = ccw([(L.LOFT_RIGHT_X, L.LOFT_BOTTOM_Y)] + list(reversed(front[:-1])) +
             [(L.LEFT_ORBIT_INNER_X, L.LEFT_ORBIT_MOUTH_Y), (L.CHUTE_LOW_X, chute_y(L.CHUTE_LOW_X))])
-slope_slab('chutePlank', plank, chute_z, 2.0, M_OAK)
-xs = [L.LOFT_RIGHT_X - i * (L.LOFT_RIGHT_X - c1[0]) / 24 for i in range(25)]
-tube3d('chute', [(x, chute_y(x), chute_z(x) + 8) for x in xs], 2.0, M_BRASS)
-tube3d('chuteLow', [(x, chute_y(x), chute_z(x) + 3) for x in xs], 1.5, M_BRASS)
-for x in (240, 170, 100):
-    cylinder(f'chuteStay{x}', x, chute_y(x), 1.6, chute_z(x), chute_z(x) + 8, M_BRASS)
+# M9 v30 (Aaron: make the loft feel more like a loft; the chute already read as "the stairs"): the chute is a real
+# oak staircase: N_STEPS treads (each a slab of the plank's footprint between two x's, its top at the step's height),
+# brass nosings, a stringer along the open (front) side, turned balusters, a walnut handrail and two newel posts.
+# Open underneath (the kettle lane runs under it). The ball still rolls down the physics slope; only the drawing steps.
+def clip_x(poly, a, b):
+    def clip(pts, keep, xc):
+        out = []
+        for i in range(len(pts)):
+            p, q = pts[i], pts[(i + 1) % len(pts)]
+            if keep(p): out.append(p)
+            if keep(p) != keep(q):
+                out.append((xc, p[1] + (q[1] - p[1]) * (xc - p[0]) / (q[0] - p[0])))
+        return out
+    pts = clip(poly, lambda p: p[0] >= a, a)
+    pts = clip(pts, lambda p: p[0] <= b, b) if len(pts) >= 3 else []
+    return pts if len(pts) >= 3 else []
+N_STEPS = 11
+M_RISER = principled('riserShadow', (0.10, 0.05, 0.02), rough=0.9)
+step_x = [L.CHUTE_LOW_X + (L.LOFT_RIGHT_X - L.CHUTE_LOW_X) * i / N_STEPS for i in range(N_STEPS + 1)]
+for i in range(N_STEPS):
+    a, b = step_x[i], step_x[i + 1]
+    piece = clip_x(plank, a - (0 if i == 0 else 0.2), b)
+    if not piece: continue
+    zt = LOFT_H * (i + 1) / N_STEPS
+    prism(f'tread{i}', ccw(piece), zt - 2.6, zt, M_OAK)
+    lo_y, hi_y = chute_y(a) + 0.5, max(p[1] for p in piece if abs(p[0] - min(q[0] for q in piece)) < 0.01)
+    tube3d(f'nosing{i}', [(a + 0.6, lo_y, zt + 0.1), (a + 0.6, hi_y - 0.5, zt + 0.1)], 0.6, M_BRASS)
+    if i < N_STEPS - 1:                                         # the shadow of the next step's riser on this tread
+        sh = clip_x(piece, b - 3.2, b)
+        if sh: prism(f'riserShadow{i}', ccw(sh), zt, zt + 0.15, M_RISER)
+# the stringer: a board along the open side, under the treads' front ends
+bm = bmesh.new()
+sx_ = [L.CHUTE_LOW_X + (L.LOFT_RIGHT_X - L.CHUTE_LOW_X) * i / 40 for i in range(41)]
+top_ = [bm.verts.new((x, chute_y(x) - 0.5, chute_z(x) + 1.0)) for x in sx_]
+bot_ = [bm.verts.new((x, chute_y(x) - 0.5, max(chute_z(x) - 7.0, 0.0))) for x in sx_]
+for i in range(40):
+    bm.faces.new([bot_[i], bot_[i + 1], top_[i + 1], top_[i]])
+me = bpy.data.meshes.new('stringer'); bm.to_mesh(me); bm.free(); me.materials.append(M_WALNUT)
+link(bpy.data.objects.new('stringer', me))
+for i in range(N_STEPS):                                       # a baluster on each tread, the handrail along their tops
+    x = (step_x[i] + step_x[i + 1]) / 2
+    zt = LOFT_H * (i + 1) / N_STEPS
+    cylinder(f'baluster{i}', x, chute_y(x) + 2.0, 0.9, zt, zt + 13.0, M_WALNUT_CAP, verts=10)
+hx = [L.CHUTE_LOW_X + 3 + (L.LOFT_RIGHT_X - 6 - L.CHUTE_LOW_X) * i / 30 for i in range(31)]
+tube3d('handrail', [(x, chute_y(x) + 2.0, chute_z(x) + 14.5) for x in hx], 1.7, M_WALNUT_CAP)
+tube3d('handrailCap', [(x, chute_y(x) + 2.0, chute_z(x) + 16.0) for x in hx], 0.6, M_BRASS)
+for x, zb in ((L.CHUTE_LOW_X + 3, 0.0), (L.LOFT_RIGHT_X - 3, LOFT_H)):
+    cylinder(f'newel{x}', x, chute_y(x) + 2.0, 2.4, zb, chute_z(x) + 17.5, M_WALNUT, verts=16)
+    torus(f'newelCap{x}', x, chute_y(x) + 2.0, chute_z(x) + 17.8, 1.6, 1.0, M_BRASS)
 
 # the right orbit's one-way deflector (a brass wire), the ramp's mouth post
 tube('deflector', list(L.RIGHT_DEFLECTOR), 7, 1.8, M_BRASS); tube('deflectorLow', list(L.RIGHT_DEFLECTOR), 3, 1.3, M_BRASS)
@@ -387,9 +430,41 @@ post('rampPostTop', mx_, L.RAMP_MOUTH[1] - 24, 5.5, h=16)
 # window seat (up on the loft); the game's scoops are artBaked now and only flash a ring of light when a ball drops in
 M_IRON = principled('iron', (0.10, 0.09, 0.085), metal=1.0, rough=0.45)
 for (cx, cy), r, z, m in ((L.FIREPLACE_CENTER, L.SCOOP_R, 0.6, M_IRON), (L.KETTLE_CENTER, L.SCOOP_R, 0.6, M_IRON),
-                          (L.MAIL_SLOT_CENTER, L.SCOOP_R * 0.8, 0.6, M_BRASS),
-                          (L.WINDOW_SEAT_CENTER, L.SCOOP_R, L.LOFT_HEIGHT + 0.6, M_BRASS)):
+                          (L.MAIL_SLOT_CENTER, L.SCOOP_R * 0.8, 0.6, M_BRASS)):
     torus(f'scoopRing{cx}', cx, cy, z, r + 1.0, 1.7, m)
+
+# M9 v30 (Aaron: with the hole in the middle of the bench it didn't read as a bench): the window seat's hole is a wicker
+# book basket on the loft floor (a woven rim, a few spines poking up at the back), and the bench stands along the loft's
+# wall just above it, a walnut base with a red cushion, gold piping and two pillows. Drawing only.
+M_WICKER = wood('wicker', (0.40, 0.26, 0.11), (0.70, 0.52, 0.26), scale=14.0, direction='X')
+wx, wy = L.WINDOW_SEAT_CENTER
+torus('basketRim', wx, wy, LOFT_H + 2.0, L.SCOOP_R + 1.8, 2.4, M_WICKER)
+torus('basketRim2', wx, wy, LOFT_H + 0.6, L.SCOOP_R + 2.4, 1.6, M_WICKER)
+for k, (dx, w_, h_, col) in enumerate(((-7, 3.4, 7.5, (0.40, 0.08, 0.06)), (-3, 3.0, 9.0, (0.08, 0.20, 0.12)),
+                                       (1, 3.8, 8.0, (0.10, 0.12, 0.32)), (5.5, 3.0, 6.5, (0.62, 0.44, 0.10)))):
+    m_ = principled(f'basketBook{k}', col, rough=0.6)
+    bx_, by_ = wx + dx, wy + L.SCOOP_R - 3.0
+    prism(f'basketBook{k}', ccw([(bx_, by_), (bx_ + w_, by_), (bx_ + w_, by_ + 5), (bx_, by_ + 5)]),
+          LOFT_H + 1, LOFT_H + h_, m_)
+out_ = L.loft_outline()
+arc_ = [p for p in out_ if 1142 <= p[1] <= 1184]
+def _inward(i, d):
+    p = arc_[i]; q = arc_[min(i + 1, len(arc_) - 1)]; o = arc_[max(i - 1, 0)]
+    tx, ty = q[0] - o[0], q[1] - o[1]; ln = math.hypot(tx, ty) or 1
+    nx, ny = ty / ln, -tx / ln                                  # rotate the tangent: points into the loft
+    return (p[0] + nx * d, p[1] + ny * d)
+seat_poly = ccw([_inward(i, 5.0) for i in range(len(arc_))] + [_inward(i, 17.0) for i in reversed(range(len(arc_)))])
+cush_poly = ccw([_inward(i, 6.0) for i in range(1, len(arc_) - 1)] + [_inward(i, 16.0) for i in reversed(range(1, len(arc_) - 1))])
+M_CUSHION = principled('cushion', (0.55, 0.16, 0.12), rough=0.7)
+prism('benchBase', seat_poly, LOFT_H, LOFT_H + 5.0, M_WALNUT)
+prism('benchCushion', cush_poly, LOFT_H + 5.0, LOFT_H + 8.0, M_CUSHION)
+tube('benchPiping', [_inward(i, 11.0) for i in range(1, len(arc_) - 1)], LOFT_H + 8.1, 0.45, M_BRASS)
+for t in (0.3, 0.75):
+    px_, py_ = _inward(int(t * (len(arc_) - 1)), 8.5)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=4.2, location=(px_, py_, LOFT_H + 11.0), segments=20, ring_count=10)
+    o_ = bpy.context.object; o_.scale = (1.0, 0.7, 0.55); o_.data.materials.append(
+        principled(f'pillow{t}', (0.86, 0.70, 0.30) if t < 0.5 else (0.12, 0.28, 0.20), rough=0.7))
+    for pp in o_.data.polygons: pp.use_smooth = True
 
 # ------------------------------------------------------------------ oblique shear: y += z * K
 bpy.ops.object.select_all(action='DESELECT')

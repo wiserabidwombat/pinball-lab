@@ -175,12 +175,8 @@ def cushion(hw, hh, r, dx=0, dy=0):
     cr.arc(hw - r, hh - r, r, 0, math.pi / 2); cr.arc(-hw + r, hh - r, r, math.pi / 2, math.pi)
     cr.arc(-hw + r, -hh + r, r, math.pi, 1.5 * math.pi); cr.arc(hw - r, -hh + r, r, 1.5 * math.pi, 2 * math.pi)
     cr.close_path(); cr.restore()
-cushion(30, 13, 8, 1.5, -2); rgb((0.10, 0.05, 0.02), 0.3); cr.fill()              # its shadow
-cushion(28, 11, 7); rgb((0.55, 0.16, 0.12)); cr.fill()
-cushion(25, 8.5, 5); rgb((0.86, 0.66, 0.30), 0.8); cr.set_line_width(0.9); cr.stroke()   # gold piping
-for k in (-14, 0, 14):                                                           # tufting buttons
-    bx, by = cx_ + wall[0] * k, cy_ + wall[1] * k
-    rgb((0.30, 0.07, 0.05)); cr.arc(bx, by, 1.4, 0, 6.29); cr.fill()
+# M9 v30: no painted cushion under the hole any more: it's a wicker book basket now, and the bench is modelled along the
+# wall above it (lmp_bake_table.py).
 
 # ---- M9 v13: the four scoop holes, painted as real pits (the bake adds a ring round each). In the oblique view the
 # far (upper) inside wall of a hole shows, so it gets a lit crescent; the near side falls into shadow.
@@ -197,6 +193,6 @@ def hole(cx, cy, r, wall_col):
 hole(*L.FIREPLACE_CENTER, L.SCOOP_R, (0.30, 0.12, 0.06))       # sooty brick inside
 hole(*L.KETTLE_CENTER, L.SCOOP_R, (0.22, 0.20, 0.19))          # iron
 hole(*L.MAIL_SLOT_CENTER, L.SCOOP_R * 0.8, (0.45, 0.33, 0.14))  # brass-lined
-hole(*L.WINDOW_SEAT_CENTER, L.SCOOP_R, (0.40, 0.11, 0.08))     # into the cushion
+hole(*L.WINDOW_SEAT_CENTER, L.SCOOP_R, (0.55, 0.38, 0.18))     # M9 v30: into the wicker basket
 
 # ---- the shooter lane above the gate area and the dark corners outside the arch are covered by the cabinet

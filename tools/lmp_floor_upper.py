@@ -175,6 +175,11 @@ def cushion(hw, hh, r, dx=0, dy=0):
     cr.arc(hw - r, hh - r, r, 0, math.pi / 2); cr.arc(-hw + r, hh - r, r, math.pi / 2, math.pi)
     cr.arc(-hw + r, -hh + r, r, math.pi, 1.5 * math.pi); cr.arc(hw - r, -hh + r, r, 1.5 * math.pi, 2 * math.pi)
     cr.close_path(); cr.restore()
+# M9 v31 (loft round 2): the shade the raised loft throws on the shop floor beside it: a soft dark band down its
+# right-hand side (the only floor next to it that isn't under the stairs).
+g = cairo.LinearGradient(L.LOFT_RIGHT_X, 0, L.LOFT_RIGHT_X + 24, 0)
+g.add_color_stop_rgba(0, 0.06, 0.03, 0.01, 0.55); g.add_color_stop_rgba(1, 0.06, 0.03, 0.01, 0.0)
+cr.set_source(g); cr.rectangle(L.LOFT_RIGHT_X, L.LOFT_BOTTOM_Y, 24, 1226 - L.LOFT_BOTTOM_Y); cr.fill()
 # M9 v30: no painted cushion under the hole any more: it's a wicker book basket now, and the bench is modelled along the
 # wall above it (lmp_bake_table.py).
 

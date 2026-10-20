@@ -358,6 +358,41 @@ for i in range(n_sp + 1):
     cylinder(f'spindle{i}', sx, sy, 1.3 if 0 < i < n_sp else 2.4, LOFT_H, LOFT_H + 11, M_WALNUT_CAP, verts=12)
 tube('balRail', bal, LOFT_H + 11.5, 2.0, M_WALNUT_CAP)
 tube('balRailCap', bal, LOFT_H + 13.2, 0.9, M_BRASS)
+# M9 v31 (loft round 2): what holds the loft up. A heavy dark beam along the platform's front edge with the ends of the
+# floor joists showing under it, diagonal braces from the two posts up to the beam, and a balustrade (balusters and a
+# handrail) on top of the loft's right-hand wall, either side of the ramp's door. Drawing only.
+M_JOIST = principled('joist', (0.34, 0.19, 0.08), rough=0.6)
+for k, (a, b) in enumerate(zip(front, front[1:])):
+    dx, dy = b[0] - a[0], b[1] - a[1]; ln = math.hypot(dx, dy)
+    ux, uy = dx / ln, dy / ln
+    nx, ny = uy, -ux                                            # outward: toward the player (south)
+    quad = [(a[0], a[1]), (b[0], b[1]), (b[0] + nx * 2.4, b[1] + ny * 2.4), (a[0] + nx * 2.4, a[1] + ny * 2.4)]
+    prism(f'loftBeam{k}', ccw(quad), LOFT_H - 7.0, LOFT_H - 0.6, M_WALNUT_CAP)
+    n_j = int(ln // 14)
+    for j in range(1, n_j):
+        t = j / n_j
+        cx_, cy_ = a[0] + dx * t, a[1] + dy * t
+        q = [(cx_ - ux * 1.6, cy_ - uy * 1.6), (cx_ + ux * 1.6, cy_ + uy * 1.6),
+             (cx_ + ux * 1.6 + nx * 3.8, cy_ + uy * 1.6 + ny * 3.8), (cx_ - ux * 1.6 + nx * 3.8, cy_ - uy * 1.6 + ny * 3.8)]
+        prism(f'joist{k}_{j}', ccw(q), LOFT_H - 11.0, LOFT_H - 7.0, M_JOIST)
+def _front_y(x):
+    for a, b in zip(front, front[1:]):
+        if a[0] <= x <= b[0]:
+            return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
+    return front[0][1]
+for i, (px, py) in enumerate(((L.LEFT_ORBIT_INNER_X + 5, L.LOFT_BOTTOM_Y - 4), (150, 960))):
+    for side in (-1, 1):
+        tx = px + side * 10
+        if tx < front[0][0] + 2: continue
+        tube3d(f'brace{i}{side}', [(px, py, LOFT_H * 0.55), (tx, _front_y(tx) - 1.0, LOFT_H - 7.2)], 1.2, M_WALNUT)
+for k, (y0, y1) in enumerate(((L.LOFT_BOTTOM_Y + 4, L.LOFT_DOOR_BOTTOM - 2), (L.LOFT_DOOR_TOP + 2, 1214))):
+    n_b = max(2, int((y1 - y0) // 10))
+    for j in range(n_b + 1):
+        y = y0 + (y1 - y0) * j / n_b
+        cylinder(f'rbal{k}_{j}', L.LOFT_RIGHT_X, y, 1.3 if 0 < j < n_b else 2.4, LOFT_H + 12, LOFT_H + 22,
+                 M_WALNUT_CAP, verts=10)
+    tube(f'rbalRail{k}', [(L.LOFT_RIGHT_X, y0), (L.LOFT_RIGHT_X, y1)], LOFT_H + 22.5, 2.3, M_WALNUT_CAP)
+    tube(f'rbalCap{k}', [(L.LOFT_RIGHT_X, y0), (L.LOFT_RIGHT_X, y1)], LOFT_H + 24.6, 0.9, M_BRASS)
 M_OAK = wood('oak', (0.22, 0.11, 0.04), (0.48, 0.28, 0.12), scale=5.0, direction='X')
 _w = next(nd for nd in M_OAK.node_tree.nodes if nd.type == 'TEX_WAVE')
 _w.inputs['Distortion'].default_value = 1.2; _w.inputs['Scale'].default_value = 9.0     # straight boards

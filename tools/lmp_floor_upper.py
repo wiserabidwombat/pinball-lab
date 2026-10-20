@@ -182,4 +182,21 @@ for k in (-14, 0, 14):                                                          
     bx, by = cx_ + wall[0] * k, cy_ + wall[1] * k
     rgb((0.30, 0.07, 0.05)); cr.arc(bx, by, 1.4, 0, 6.29); cr.fill()
 
+# ---- M9 v13: the four scoop holes, painted as real pits (the bake adds a ring round each). In the oblique view the
+# far (upper) inside wall of a hole shows, so it gets a lit crescent; the near side falls into shadow.
+def hole(cx, cy, r, wall_col):
+    cr.save(); cr.arc(cx, cy, r, 0, 6.29); cr.clip()
+    rgb((0.02, 0.015, 0.01)); cr.paint()
+    g = cairo.LinearGradient(0, cy + r, 0, cy - r * 0.2)                          # the far wall, lit from above
+    g.add_color_stop_rgba(0, *wall_col, 0.95); g.add_color_stop_rgba(1, *wall_col, 0.0)
+    cr.set_source(g); cr.arc(cx, cy + r * 0.55, r * 0.95, 0, 6.29); cr.fill()
+    g = cairo.RadialGradient(cx, cy - r * 0.25, 0, cx, cy - r * 0.25, r * 0.7)      # the dark bottom of the pit
+    g.add_color_stop_rgba(0, 0, 0, 0, 0.9); g.add_color_stop_rgba(1, 0, 0, 0, 0.0)
+    cr.set_source(g); cr.paint()
+    cr.restore()
+hole(*L.FIREPLACE_CENTER, L.SCOOP_R, (0.30, 0.12, 0.06))       # sooty brick inside
+hole(*L.KETTLE_CENTER, L.SCOOP_R, (0.22, 0.20, 0.19))          # iron
+hole(*L.MAIL_SLOT_CENTER, L.SCOOP_R * 0.8, (0.45, 0.33, 0.14))  # brass-lined
+hole(*L.WINDOW_SEAT_CENTER, L.SCOOP_R, (0.40, 0.11, 0.08))     # into the cushion
+
 # ---- the shooter lane above the gate area and the dark corners outside the arch are covered by the cabinet

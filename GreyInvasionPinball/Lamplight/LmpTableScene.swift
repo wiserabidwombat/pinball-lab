@@ -508,7 +508,8 @@ final class LmpTableScene: SKScene {
         loftFlipper.physicsBody?.collisionBitMask = LmpPhysicsCategory.rampBall
 
         windowSeat = LmpScoop(at: LmpTableLayout.windowSeatCenter, ejectVelocity: LmpTableLayout.windowSeatEject,
-                              points: LmpTableLayout.windowSeatPoints, captureRadius: LmpTableLayout.windowSeatCapture)
+                              points: LmpTableLayout.windowSeatPoints, captureRadius: LmpTableLayout.windowSeatCapture,
+                              artBaked: hasTableArt)
         windowSeat.zPosition = 18
         // T5 M9 v3: drawn on the raised loft; the node (which catches by distance from its position) stays put.
         for child in windowSeat.children { child.position.y += LmpTableLayout.loftLift }
@@ -537,11 +538,12 @@ final class LmpTableScene: SKScene {
         }
 
         fireplace = LmpScoop(at: LmpTableLayout.fireplaceCenter, ejectVelocity: LmpTableLayout.fireplaceEject,
-                             points: LmpTableLayout.fireplacePoints)
+                             points: LmpTableLayout.fireplacePoints, artBaked: hasTableArt)
         kettle = LmpScoop(at: LmpTableLayout.kettleCenter, ejectVelocity: LmpTableLayout.kettleEject,
-                          points: LmpTableLayout.kettlePoints)
+                          points: LmpTableLayout.kettlePoints, artBaked: hasTableArt)
         mailSlot = LmpScoop(at: LmpTableLayout.mailSlotCenter, ejectVelocity: LmpTableLayout.mailEject,
-                            points: LmpTableLayout.mailPoints, captureRadius: LmpTableLayout.mailCaptureRadius)
+                            points: LmpTableLayout.mailPoints, captureRadius: LmpTableLayout.mailCaptureRadius,
+                            artBaked: hasTableArt)                 // T5 M9 v13: the holes are in the baked art
         mailSlot.setScale(0.8)
         scoops = [fireplace, kettle, mailSlot]
         scoops.forEach { addChild($0) }
@@ -829,7 +831,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v12")
+        let label = SKLabelNode(text: "T5 M9 v13")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -875,7 +877,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v12 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v13 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

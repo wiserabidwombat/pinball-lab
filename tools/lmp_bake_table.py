@@ -363,6 +363,14 @@ mx_ = L.RAMP_MOUTH_RIGHT_X
 wall_strip('rampPost', [(mx_, L.RAMP_MOUTH[1]), (mx_, L.RAMP_MOUTH[1] - 24)], 6, 14, M_WALNUT_SIDE)
 post('rampPostTop', mx_, L.RAMP_MOUTH[1] - 24, 5.5, h=16)
 
+# M9 v13: a ring round each scoop hole: iron for the fireplace and the kettle's stove, brass for the mail slot and the
+# window seat (up on the loft); the game's scoops are artBaked now and only flash a ring of light when a ball drops in
+M_IRON = principled('iron', (0.10, 0.09, 0.085), metal=1.0, rough=0.45)
+for (cx, cy), r, z, m in ((L.FIREPLACE_CENTER, L.SCOOP_R, 0.6, M_IRON), (L.KETTLE_CENTER, L.SCOOP_R, 0.6, M_IRON),
+                          (L.MAIL_SLOT_CENTER, L.SCOOP_R * 0.8, 0.6, M_BRASS),
+                          (L.WINDOW_SEAT_CENTER, L.SCOOP_R, L.LOFT_HEIGHT + 0.6, M_BRASS)):
+    torus(f'scoopRing{cx}', cx, cy, z, r + 1.0, 1.7, m)
+
 # ------------------------------------------------------------------ oblique shear: y += z * K
 bpy.ops.object.select_all(action='DESELECT')
 for o in list(sc.objects):

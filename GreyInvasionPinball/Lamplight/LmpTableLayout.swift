@@ -481,6 +481,12 @@ enum LmpTableLayout {
     static let windowSeatDownEject = CGVector(dx: 207, dy: -293)
 
     /// A drained loft ball rolling left down the chute crosses this line inside the left lane and drops to the floor.
+    /// T5 M9 v12 (Play Lab runs 13, 22 and 24: floor balls found just past the left wall at y 816–877, beside the
+    /// chute's low end): the left wall again, on the upper layer, beside the chute and the left lane. A ball coming off
+    /// the chute is switched from the upper layer to the floor right next to the left wall, and the physics engine can
+    /// keep using the ball's old layer for a pair it's already tracking, so for a moment neither wall held it. With the
+    /// wall on both layers the ball meets a wall whichever layer the engine still thinks it's on.
+    static let leftWallUpperGuard = [CGPoint(x: leftWallX, y: 760), CGPoint(x: leftWallX, y: archStartY)]
     static let loftExitSwitch = LmpSwitch(a: CGPoint(x: 46, y: 850), b: CGPoint(x: 46, y: 960),
                                           forward: CGVector(dx: -1, dy: 0))
 

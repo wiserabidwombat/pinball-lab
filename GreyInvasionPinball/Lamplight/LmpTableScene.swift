@@ -494,6 +494,8 @@ final class LmpTableScene: SKScene {
         for wall in LmpTableLayout.loftWalls {
             addWall(points: wall, category: LmpPhysicsCategory.rampWall, z: 17, drawn: !hasTableArt)   // baked rails
         }
+        // T5 M9 v12: the left wall on the upper layer too, beside the chute (see leftWallUpperGuard). Not drawn.
+        addWall(points: LmpTableLayout.leftWallUpperGuard, category: LmpPhysicsCategory.rampWall, z: 17, drawn: false)
 
         loftFlipper = LmpFlipper(side: .right, pivot: LmpTableLayout.loftFlipperPivot,
                                  length: LmpTableLayout.loftFlipperLength,
@@ -827,7 +829,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v11")
+        let label = SKLabelNode(text: "T5 M9 v12")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -873,7 +875,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v11 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v12 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

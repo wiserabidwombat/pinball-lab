@@ -143,6 +143,84 @@ for i in range(60):                                                            #
     cr.move_to(rx_, ry_); cr.line_to(rx_ - 3, ry_ - rnd.uniform(5, 10)); cr.stroke()
 cr.restore()
 
+# ------------------------------------------------------------------ M9 v38 (bookstore round 4): little things on the floor
+# Flat, painted (the ball rolls over them): a brass compass rose let into the boards left of the fireplace, a coir
+# "MIND THE CAT" doormat right of it, a ribbon bookmark someone dropped, and the cat's dusty paw prints from the hearth.
+def text_at(t, x, y, size, col, a=1.0, bold=True, ang=0.0):
+    cr.save(); cr.translate(x, y); cr.rotate(ang); cr.scale(1, -1)
+    cr.select_font_face('DejaVu Serif', cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL)
+    cr.set_font_size(size); e = cr.text_extents(t)
+    cr.move_to(-e.x_advance / 2, e.height / 2); rgb(col, a); cr.show_text(t); cr.restore()
+
+
+# the compass rose: brass rings and an eight-point star of brass and dark walnut, N to the top of the table
+ccx, ccy = 122, 655
+for r_, w_, c_ in ((29, 2.2, (0.30, 0.16, 0.07)), (28, 1.6, (0.86, 0.66, 0.30)), (23.5, 0.8, (0.86, 0.66, 0.30))):
+    rgb(c_); cr.set_line_width(w_); cr.arc(ccx, ccy, r_, 0, 2 * math.pi); cr.stroke()
+for k in range(8):
+    a = k * math.pi / 4 + math.pi / 2
+    ln_ = 22 if k % 2 == 0 else 13
+    for half, col in ((-1, (0.90, 0.72, 0.36)), (1, (0.25, 0.13, 0.06))):
+        cr.move_to(ccx, ccy)
+        cr.line_to(ccx + ln_ * math.cos(a), ccy + ln_ * math.sin(a))
+        cr.line_to(ccx + 4.2 * math.cos(a + half * math.pi / 4), ccy + 4.2 * math.sin(a + half * math.pi / 4))
+        cr.close_path(); rgb(col if k % 2 == 0 else tuple(c * 0.85 for c in col)); cr.fill()
+rgb((0.86, 0.66, 0.30)); cr.arc(ccx, ccy, 2.0, 0, 2 * math.pi); cr.fill()
+for k in range(32):                                                     # tick marks between the rings
+    a = k * math.pi / 16
+    cr.set_line_width(0.5); rgb((0.86, 0.66, 0.30), 0.8)
+    cr.move_to(ccx + 24 * math.cos(a), ccy + 24 * math.sin(a)); cr.line_to(ccx + 27 * math.cos(a), ccy + 27 * math.sin(a)); cr.stroke()
+text_at('N', ccx, ccy + 34.5, 7, (0.86, 0.66, 0.30))
+
+# the doormat: coir, a dark border, MIND THE CAT stencilled with a paw print
+cr.save(); cr.translate(432, 748); cr.rotate(math.radians(-4))
+mw, mh = 74, 36
+rgb((0.10, 0.05, 0.02), 0.35); cr.rectangle(-mw / 2 + 1.2, -mh / 2 - 1.5, mw, mh); cr.fill()          # its shadow
+rgb((0.60, 0.44, 0.24)); cr.rectangle(-mw / 2, -mh / 2, mw, mh); cr.fill()
+for i in range(900):                                                                                  # coir bristles
+    x_, y_ = rnd.uniform(-mw / 2, mw / 2), rnd.uniform(-mh / 2, mh / 2)
+    sh = rnd.uniform(0.75, 1.2)
+    rgb((0.60 * sh, 0.44 * sh, 0.24 * sh), 0.6); cr.set_line_width(0.45)
+    cr.move_to(x_, y_); cr.line_to(x_ + rnd.uniform(-0.8, 0.8), y_ + rnd.uniform(-1.2, 1.2)); cr.stroke()
+rgb((0.22, 0.12, 0.06), 0.85); cr.set_line_width(2.4); cr.rectangle(-mw / 2 + 2.5, -mh / 2 + 2.5, mw - 5, mh - 5); cr.stroke()
+text_at('MIND THE CAT', 0, 3.6, 6.0, (0.20, 0.10, 0.05), 0.88)
+def paw(x, y, s, ang, col, a):
+    cr.save(); cr.translate(x, y); cr.rotate(ang); cr.scale(s, s); rgb(col, a)
+    cr.save(); cr.scale(1.25, 1.0); cr.arc(0, 0, 1.6, 0, 2 * math.pi); cr.restore(); cr.fill()
+    for tx, ty in ((-1.9, 1.9), (-0.7, 2.9), (0.7, 2.9), (1.9, 1.9)):
+        cr.arc(tx, ty, 0.62, 0, 2 * math.pi); cr.fill()
+    cr.restore()
+paw(0, -8.5, 1.5, 0, (0.20, 0.10, 0.05), 0.85)
+cr.restore()
+
+# a dropped ribbon bookmark with a gold tassel
+cr.save(); cr.translate(476, 545); cr.rotate(math.radians(28)); cr.scale(1.4, 1.4)
+rgb((0.10, 0.05, 0.02), 0.3); cr.rectangle(-17 + 0.8, -2.6 - 1.0, 34, 5.2); cr.fill()
+rgb((0.50, 0.07, 0.10)); cr.rectangle(-17, -2.6, 34, 5.2); cr.fill()
+cr.move_to(-17, -2.6); cr.line_to(-20.5, 0); cr.line_to(-17, 2.6); cr.close_path(); rgb((0.10, 0.05, 0.02), 0); cr.fill()
+rgb((0.86, 0.66, 0.30), 0.9); cr.set_line_width(0.4)
+for yy in (-1.8, 1.8):
+    cr.move_to(-16, yy); cr.line_to(16, yy); cr.stroke()
+for k in range(6):
+    rgb((0.95, 0.80, 0.45), 0.9); cr.arc(-13 + k * 5.2, 0, 0.7, 0, 2 * math.pi); cr.fill()
+rgb((0.86, 0.66, 0.30)); cr.set_line_width(0.6)
+cr.move_to(17, 0); cr.line_to(21, 0); cr.stroke()
+for k in range(9):                                                      # the tassel
+    a = math.radians(-35 + k * 9)
+    cr.move_to(21, 0); cr.line_to(21 + 6 * math.cos(a), 6 * math.sin(a)); cr.stroke()
+cr.arc(21, 0, 1.2, 0, 2 * math.pi); cr.fill()
+cr.restore()
+
+# the cat's dusty paw prints from the hearth, wandering off up-left toward the kettle lane
+trail = [(212, 700), (190, 712), (166, 726), (146, 744), (128, 762), (108, 776), (88, 792)]
+for i in range(len(trail) - 1):
+    (x0_, y0_), (x1_, y1_) = trail[i], trail[i + 1]
+    ang_ = math.atan2(y1_ - y0_, x1_ - x0_) - math.pi / 2
+    nx_, ny_ = -(y1_ - y0_), (x1_ - x0_); nl_ = math.hypot(nx_, ny_)
+    for k, side in ((0.25, 1), (0.75, -1)):
+        px_, py_ = x0_ + (x1_ - x0_) * k + side * 2.6 * nx_ / nl_, y0_ + (y1_ - y0_) * k + side * 2.6 * ny_ / nl_
+        paw(px_, py_, 1.1, ang_, (0.18, 0.10, 0.05), 0.36 * (1 - i / 9))
+
 # ------------------------------------------------------------------ aprons: lacquered green with gold pinstripes
 GREEN, GREEN_DARK, GOLD = (0.09, 0.22, 0.17), (0.05, 0.13, 0.10), (0.86, 0.66, 0.30)
 left_apron = [(X0, L.APRON_TOP_Y + 3), (L.LEFT_X, L.APRON_TOP_Y), (L.DRAIN_X, L.DRAIN_Y), (L.DRAIN_X, Y0), (X0, Y0)]

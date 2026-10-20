@@ -587,7 +587,8 @@ enum LmpTableLayout {
     // the top of the arch; she walks it, naps, and swats balls that come within reach back down the table.
     static let catRadius: CGFloat = 15
     /// T5 M9 v15: the rendered cat's poses (tools/lmp_bake_cat.py), facing right, round her node.
-    static let catArtBox = CGRect(x: -34, y: -22, width: 68, height: 62)
+    /// T5 M9 v24: wider to the right and up, so her head's shadow and the sitting ears aren't cut by the box edge.
+    static let catArtBox = CGRect(x: -36, y: -26, width: 82, height: 70)
     static let catShelfY: CGFloat = 1175
     /// T5 M9 v20: her shelf as a rendered walnut bookshelf (tools/lmp_bake_bookshelf.py): the plank round her home, and one
     /// section per genre (LmpShop.genres order, left to right) that fills with spines as that genre's books are found.

@@ -3,7 +3,7 @@ black with a white bib, muzzle and socks and green eyes, so she reads against th
 ginger tabby, 1.01 : 1 on the loft rug) and rendered in the table's
 oblique view and light, facing right (LmpCat mirrors her for left). Poses: walk1 / walk2 (legs swapped), sit (on a
 perch), nap (curled up, eyes shut, tail round her nose), swat (a front paw out). Each is lmp_cat_<pose>.png in
-LmpTableLayout.catArtBox (x -34…34, y -22…40 around the cat's node, whose physics circle is r 15 at the origin).
+LmpTableLayout.catArtBox (x -36…46, y -26…44 around the cat's node, whose physics circle is r 15 at the origin).
 Usage: python3 lmp_bake_cat.py -- out_dir [samples]"""
 import bpy, bmesh, math, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -13,7 +13,7 @@ argv = sys.argv[sys.argv.index('--') + 1:]
 OUT = os.path.abspath(argv[0])
 SAMPLES = int(argv[1]) if len(argv) > 1 else 64
 K = L.OBLIQUE
-BOX = (-34.0, -22.0, 68.0, 62.0)
+BOX = (-36.0, -26.0, 82.0, 70.0)        # M9 v24: wider right (her head's shadow was cut at x 34) and up (sit ears)
 
 
 def tail_chain(pts, r0, r1, n=18):

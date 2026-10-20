@@ -9,7 +9,7 @@ centre post and the plunger lane, lit warm like a lamp-lit shop at night.
 Oblique view (Tables 03-04): every vertex at height z moves y += z * OBLIQUE before an orthographic top-down render,
 so the floor lines up exactly with the physics and raised parts show their front. 1 Blender unit = 1 world point.
 Usage: python3 lmp_bake_table.py -- floor.png out.png [scale] [samples]"""
-import bpy, bmesh, math, sys, os
+import bpy, random, bmesh, math, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lmp_layout as L
 
@@ -307,12 +307,124 @@ cylinder('orbitLend', *L.left_orbit_wall()[0], 4.2, 0, 16, M_BRASS)
 cylinder('orbitRend', *L.right_orbit_wall()[0], 4.2, 0, 16, M_BRASS)
 
 # the fireplace surround: brick walls round the alcove, a walnut mantel shelf on the roof
+# M9 v34 (Aaron: "make the fireplace look a little more 3d"): real coursed brick (UV-mapped per face, mortar sunk with a
+# bump), stone caps on the cheeks, square brick pillars with stone caps at the mouth, a two-tier walnut mantel, a raised
+# stone hearth, 3D logs with glowing embers on iron andirons, and the fire's own light warming the inside of the brick
+# (light-linked, so it lights only the fireplace; the flames themselves are the animated sprite lmp_fire_<i>).
+def brick_material(name, c1, c2, mortar):
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    uv = nt.nodes.new('ShaderNodeUVMap'); uv.uv_map = 'BrickUV'
+    br = nt.nodes.new('ShaderNodeTexBrick')
+    br.offset = 0.5; br.offset_frequency = 2
+    br.inputs['Color1'].default_value = (*c1, 1); br.inputs['Color2'].default_value = (*c2, 1)
+    br.inputs['Mortar'].default_value = (*mortar, 1)
+    br.inputs['Scale'].default_value = 1.0; br.inputs['Mortar Size'].default_value = 0.4
+    br.inputs['Mortar Smooth'].default_value = 0.2; br.inputs['Bias'].default_value = 0.0
+    br.inputs['Brick Width'].default_value = 10.0; br.inputs['Row Height'].default_value = 3.6
+    nt.links.new(uv.outputs['UV'], br.inputs['Vector'])
+    nt.links.new(br.outputs['Color'], b.inputs['Base Color'])
+    bump = nt.nodes.new('ShaderNodeBump'); bump.invert = True
+    bump.inputs['Strength'].default_value = 0.6; bump.inputs['Distance'].default_value = 0.3
+    nt.links.new(br.outputs['Fac'], bump.inputs['Height'])
+    nt.links.new(bump.outputs['Normal'], b.inputs['Normal'])
+    b.inputs['Roughness'].default_value = 0.85
+    return m
+
+
+def brick_uv(me):
+    """Per-face UVs in pt: tops by (x, y), sides by (distance along the face, height), so courses run level."""
+    uv = me.uv_layers.new(name='BrickUV')
+    for poly in me.polygons:
+        n = poly.normal
+        for li in poly.loop_indices:
+            v = me.vertices[me.loops[li].vertex_index].co
+            if abs(n.z) > 0.5:
+                uv.data[li].uv = (v.x, v.y)
+            else:
+                uv.data[li].uv = (v.x * -n.y + v.y * n.x, v.z)
+
+
+def brick_prism(name, pts, z0, z1, mat):
+    o = prism(name, pts, z0, z1, mat)
+    brick_uv(o.data)
+    FIRE_LIT.append(o.name)
+    return o
+
+
+def brick_strip(name, pts, thick, z0, z1, mat):
+    for i, (a, b) in enumerate(zip(pts, pts[1:])):
+        dx, dy = b[0] - a[0], b[1] - a[1]; ln = math.hypot(dx, dy)
+        nx, ny = -dy / ln * thick / 2, dx / ln * thick / 2
+        tx, ty = dx / ln * thick / 2, dy / ln * thick / 2           # run past the corners so they close
+        quad = [(a[0] + nx - tx, a[1] + ny - ty), (b[0] + nx + tx, b[1] + ny + ty),
+                (b[0] - nx + tx, b[1] - ny + ty), (a[0] - nx - tx, a[1] - ny - ty)]
+        brick_prism(f'{name}{i}', quad, z0, z1, mat)
+
+
+def stone_material(name, base):
+    m = principled(name, base, rough=0.7)
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    nz = nt.nodes.new('ShaderNodeTexNoise'); nz.inputs['Scale'].default_value = 0.35; nz.inputs['Detail'].default_value = 6
+    ramp = nt.nodes.new('ShaderNodeValToRGB')
+    ramp.color_ramp.elements[0].color = (*(c * 0.8 for c in base), 1)
+    ramp.color_ramp.elements[1].color = (*(min(1, c * 1.15) for c in base), 1)
+    nt.links.new(nz.outputs['Fac'], ramp.inputs['Fac'])
+    nt.links.new(ramp.outputs['Color'], b.inputs['Base Color'])
+    return m
+
+
+FIRE_LIT = []
+M_FP_BRICK = brick_material('fpBrick', (0.46, 0.18, 0.10), (0.34, 0.12, 0.07), (0.52, 0.47, 0.41))
+M_HEARTHSTONE = stone_material('hearthStone', (0.31, 0.27, 0.23))
+M_FIRE_IRON = principled('fireIron', (0.06, 0.055, 0.05), metal=0.8, rough=0.5)
+M_LOG = principled('log', (0.11, 0.065, 0.04), rough=0.9)
+_nt = M_LOG.node_tree; _b = _nt.nodes['Principled BSDF']
+_nz = _nt.nodes.new('ShaderNodeTexNoise'); _nz.inputs['Scale'].default_value = 0.6; _nz.inputs['Detail'].default_value = 5
+_rp = _nt.nodes.new('ShaderNodeValToRGB')
+_rp.color_ramp.elements[0].position = 0.60; _rp.color_ramp.elements[0].color = (0, 0, 0, 1)
+_rp.color_ramp.elements[1].position = 0.70; _rp.color_ramp.elements[1].color = (1, 1, 1, 1)
+_mul = _nt.nodes.new('ShaderNodeMath'); _mul.operation = 'MULTIPLY'; _mul.inputs[1].default_value = 3.0
+_nt.links.new(_nz.outputs['Fac'], _rp.inputs['Fac'])
+_nt.links.new(_rp.outputs['Color'], _mul.inputs[0])
+_nt.links.new(_mul.outputs[0], _b.inputs['Emission Strength'])
+_b.inputs['Emission Color'].default_value = (1.0, 0.30, 0.05, 1)
+
 alc = L.alcove_wall()
-wall_strip('alcove', alc, 9, 18, M_BRICK)
-wall_strip('mantel', alc[1:4], 15, 23, M_WALNUT, z0=18)
-tube('mantelEdge', alc[1:4], 23.4, 1.4, M_BRASS_DARK)
-for p in (alc[0], alc[-1]):
-    cylinder('hearthPost', p[0], p[1], 5.2, 0, 18, M_BRICK)
+# taller than before (z 30, was 18): in the oblique view the back wall's face now shows as a band of brick behind the
+# fire, the fireback, and the pillars show their brick fronts (the mantel decoration and the cat's perch move up 5 pt)
+FP_H = 30.0
+brick_strip('alcove', alc, 9, 0, FP_H, M_FP_BRICK)
+wall_strip('mantelBase', alc[1:4], 12, FP_H + 2.5, M_WALNUT, z0=FP_H)    # a two-tier walnut mantel shelf
+wall_strip('mantel', alc[1:4], 17, FP_H + 5.5, M_WALNUT, z0=FP_H + 2.5)
+tube('mantelEdge', alc[1:4], FP_H + 5.8, 1.1, M_BRASS_DARK)
+for p in (alc[0], alc[-1]):                                            # square brick pillars at the mouth
+    brick_prism('hearthPost' + str(p[0]), [(p[0] - 6, p[1] - 6), (p[0] + 6, p[1] - 6), (p[0] + 6, p[1] + 6),
+                                           (p[0] - 6, p[1] + 6)], 0, FP_H + 1, M_FP_BRICK)
+    _c = prism('hearthPostCap' + str(p[0]), [(p[0] - 7.2, p[1] - 7.2), (p[0] + 7.2, p[1] - 7.2),
+                                              (p[0] + 7.2, p[1] + 7.2), (p[0] - 7.2, p[1] + 7.2)], FP_H + 1, FP_H + 3.5,
+               M_HEARTHSTONE)
+    _bv = _c.modifiers.new('b', 'BEVEL'); _bv.width = 0.6; _bv.segments = 2
+# the raised stone hearth in front: flagstones with gaps (the painted hearth shows through the joints)
+_hr = random.Random(34); _x = L.ALCOVE_LEFT_X - 18
+while _x < L.ALCOVE_RIGHT_X + 17:
+    _w = min(_hr.uniform(20, 30), L.ALCOVE_RIGHT_X + 18 - _x)
+    if _w > 4:
+        _st = prism('hearthStone' + str(int(_x)), [(_x + 0.5, L.ALCOVE_BOTTOM_Y - 25.5), (_x + _w - 0.5, L.ALCOVE_BOTTOM_Y - 25.5),
+                                                  (_x + _w - 0.5, L.ALCOVE_BOTTOM_Y - 1.0), (_x + 0.5, L.ALCOVE_BOTTOM_Y - 1.0)],
+                    0, 1.4, M_HEARTHSTONE)
+        _bv = _st.modifiers.new('b', 'BEVEL'); _bv.width = 0.5; _bv.segments = 2
+    _x += _w
+# andirons and the grate, and two logs with embers glowing in their cracks (not fire-lit: the flames sit on them)
+for ax in (252, 316):
+    cylinder('andiron' + str(ax), ax, 755, 1.3, 0, 9, M_FIRE_IRON, verts=16)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=2.0, location=(ax, 755, 9.5), segments=16, ring_count=8)
+    _o = bpy.context.object; _o.name = 'andironKnob' + str(ax); _o.data.materials.append(M_BRASS_DARK); SMOOTH.add(_o.name)
+tube3d('grateFront', [(246, 757, 2.6), (322, 757, 2.6)], 0.9, M_FIRE_IRON)
+for _i, gx_ in enumerate(range(250, 322, 9)):
+    tube3d(f'grateBar{_i}', [(gx_, 757, 2.6), (gx_, 783, 2.6)], 0.7, M_FIRE_IRON)
+tube3d('log0', [(250, 764, 6.0), (318, 776, 6.6)], 3.6, M_LOG)
+tube3d('log1', [(256, 777, 6.4), (314, 764, 10.2)], 3.3, M_LOG)
 
 # the kettle lane: walnut walls with a brass cap
 # M9 v21 (Aaron: the kettle lane ran into the loft's chute, "the stairs"): its rounded top end passes under the sloping
@@ -593,6 +705,16 @@ for o in sc.objects:
 for o in sc.objects:
     if o.type == 'MESH' and o.name in SMOOTH:
         for p in o.data.polygons: p.use_smooth = True
+
+# M9 v34: the fire's light, linked to the fireplace's brick, logs and irons only
+_fl = bpy.data.collections.new('fireLit')
+for o in sc.objects:
+    if o.type == 'MESH' and o.name in FIRE_LIT:
+        _fl.objects.link(o)
+fire_l = bpy.data.lights.new('fireLight', 'POINT'); fire_l.energy = 18000; fire_l.shadow_soft_size = 8
+fire_l.color = (1.0, 0.5, 0.18)
+fire_o = link(bpy.data.objects.new('fireLight', fire_l)); fire_o.location = (284, 790 + 14 * K, 14)
+fire_o.light_linking.receiver_collection = _fl
 
 # ------------------------------------------------------------------ light: a warm lamp-lit shop at night
 sun = bpy.data.lights.new('key', 'SUN'); sun.energy = 3.0; sun.angle = math.radians(12)

@@ -598,9 +598,16 @@ enum LmpTableLayout {
     /// T5 M9 v25: the season's touches (tools/lmp_bake_seasons.py): a decoration draped along the fireplace's gabled
     /// mantel (box round the mantel's anchor), and the loft window's light recoloured (a floor-plane rect, lifted by
     /// loftLift like the loft).
-    static let seasonMantelAnchor = CGPoint(x: 284, y: 850)
+    /// T5 M9 v34: the fireplace surround is taller (z 30, was 18), so the mantel and its decoration draw 5 pt higher.
+    static let seasonMantelAnchor = CGPoint(x: 284, y: 855)
     static let seasonMantelArtBox = CGRect(x: -70, y: -12, width: 140, height: 56)
     static let seasonWindowRect = CGRect(x: 55, y: 1070, width: 140, height: 120)
+    /// T5 M9 v34: the fire, animated (tools/lmp_bake_fire.py): fireFrames looping frames of flame on the baked logs, box
+    /// round fireAnchor (the logs' middle), drawn additively.
+    static let fireAnchor = CGPoint(x: 284, y: 770)
+    static let fireArtBox = CGRect(x: -42, y: -6, width: 84, height: 52)
+    static let fireFrames = 24
+    static let fireFrameSeconds: TimeInterval = 0.055
     /// T5 M9 v26: Festival Night's string lights, strung across the shop while the festival runs: each strand hangs from
     /// a to b and sags by `sag` in the middle, with a bulb about every festivalBulbSpacing points.
     static let festivalStrands: [(a: CGPoint, b: CGPoint, sag: CGFloat)] = [

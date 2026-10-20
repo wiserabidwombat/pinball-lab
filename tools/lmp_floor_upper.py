@@ -57,27 +57,12 @@ g = cairo.RadialGradient(gx, gy, 0, gx, gy, 62)
 g.add_color_stop_rgba(0, 1.0, 0.55, 0.15, 0.85); g.add_color_stop_rgba(0.5, 0.85, 0.25, 0.05, 0.35)
 g.add_color_stop_rgba(1, 0.4, 0.08, 0.0, 0.0)
 cr.set_source(g); cr.paint()
-# an iron grate under the logs
-rgb((0.05, 0.04, 0.04)); cr.set_line_width(2.2)
-cr.move_to(246, 757); cr.line_to(322, 757); cr.stroke()
-for bx in range(250, 322, 9):
-    cr.move_to(bx, 755); cr.line_to(bx, 781); cr.stroke()
-for (lx0, ly0, lx1, ly1) in ((250, 762, 318, 776), (256, 776, 314, 764)):      # two crossed logs on the grate
-    rgb((0.24, 0.13, 0.06)); cr.set_line_width(9); cr.set_line_cap(cairo.LINE_CAP_ROUND)
-    cr.move_to(lx0, ly0); cr.line_to(lx1, ly1); cr.stroke()
-    rgb((1.0, 0.45, 0.12), 0.7); cr.set_line_width(2)
-    cr.move_to(lx0 + 3, ly0 - 3); cr.line_to(lx1 - 3, ly1 - 3); cr.stroke()
-for i in range(70):                                                              # embers
-    ex, ey = rnd.uniform(244, 324), rnd.uniform(752, 788)
-    rgb((1.0, rnd.uniform(0.4, 0.75), 0.1), rnd.uniform(0.5, 1.0)); cr.arc(ex, ey, rnd.uniform(0.6, 1.6), 0, 6.29); cr.fill()
-# a few flame tongues licking up from the logs toward the back
-for fx in (262, 274, 286, 298, 308):
-    h_ = rnd.uniform(14, 24)
-    g = cairo.LinearGradient(0, 772, 0, 772 + h_)
-    g.add_color_stop_rgba(0, 1.0, 0.78, 0.30, 0.9); g.add_color_stop_rgba(1, 1.0, 0.35, 0.05, 0.0)
-    cr.set_source(g)
-    cr.move_to(fx - 5, 772); cr.curve_to(fx - 6, 772 + h_ * 0.5, fx + 2, 772 + h_ * 0.7, fx, 772 + h_)
-    cr.curve_to(fx + 4, 772 + h_ * 0.6, fx + 6, 772 + h_ * 0.4, fx + 5, 772); cr.close_path(); cr.fill()
+# M9 v34: the grate, the logs and the flames are 3D now (the bake) and animated (lmp_fire_<i>); here just the ash bed
+# glowing under them
+for i in range(45):
+    ex, ey = rnd.uniform(248, 320), rnd.uniform(754, 784)
+    rgb((1.0, rnd.uniform(0.35, 0.65), 0.08), rnd.uniform(0.35, 0.8)); cr.arc(ex, ey, rnd.uniform(0.5, 1.3), 0, 6.29); cr.fill()
+for _ in range(130): rnd.random()                                               # keep the rest of the floor's draws as they were
 cr.restore()
 
 # ---- kettle lane: cream and teal kitchen tiles up the lane, an iron stove ring round the hole

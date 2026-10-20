@@ -161,7 +161,7 @@ nonisolated enum LmpPerch: String, CaseIterable, Codable {
     var position: CGPoint {
         switch self {
         case .shelf: return CGPoint(x: 370, y: 1175)
-        case .mantel: return CGPoint(x: 252, y: 877)
+        case .mantel: return CGPoint(x: 252, y: 882)          // T5 M9 v34: the mantel is taller (drawn 5 pt up)
         case .kettle: return CGPoint(x: 134, y: 945)
         case .windowSeat: return CGPoint(x: 165, y: 1140 + LmpTableLayout.loftLift)   // T5 M9 v3: on the raised loft
         }

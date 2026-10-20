@@ -118,6 +118,11 @@ final class LmpTableScene: SKScene {
     private var seasonWindow: SKNode?
     /// T5 M9 v26: Festival Night's string lights (nil when the festival isn't on).
     private var festivalLights: SKNode?
+    /// T5 M9 v34: the fire in the fireplace (nil without the art).
+    private var fireSprite: SKSpriteNode?
+    private var fireGlow: SKSpriteNode?
+    private var fireSparks: SKEmitterNode?
+    private var fireFlareUntil: TimeInterval = 0
     private lazy var bulbGlow: SKTexture = {
         let size = CGSize(width: 32, height: 32)
         let image = UIGraphicsImageRenderer(size: size).image { ctx in
@@ -696,6 +701,80 @@ final class LmpTableScene: SKScene {
             addChild(art)
         }
         hasTableArt = true
+        addFire()                                                 // T5 M9 v34
+    }
+
+    /// T5 M9 v34 (Aaron: "make the fire animated"): the flames are 24 looping frames on the baked logs (additive, over
+    /// the table art, under the fire screen), a warm glow over the firebox and hearth flickers, and a few sparks drift
+    /// up. The fireplace catching a ball makes it flare.
+    private func addFire() {
+        let names = (0..<LmpTableLayout.fireFrames).map { "lmp_fire_\($0)" }
+        guard names.allSatisfy({ UIImage(named: $0) != nil }),
+              let fire = LmpTableLayout.artSprite(names[0], box: LmpTableLayout.fireArtBox) else { return }
+        let frames = names.map { SKTexture(imageNamed: $0) }
+        let anchor = LmpTableLayout.fireAnchor
+        fire.position = anchor
+        fire.zPosition = -17
+        fire.blendMode = .add
+        fire.run(.repeatForever(.animate(with: frames, timePerFrame: LmpTableLayout.fireFrameSeconds)))
+        addChild(fire)
+        fireSprite = fire
+
+        let glow = SKSpriteNode(texture: bulbGlow, size: CGSize(width: 150, height: 120))
+        glow.position = CGPoint(x: anchor.x, y: anchor.y + 4)
+        glow.color = UIColor(red: 1, green: 0.5, blue: 0.15, alpha: 1)
+        glow.colorBlendFactor = 1
+        glow.blendMode = .add
+        glow.alpha = 0.3
+        glow.zPosition = -17.5
+        addChild(glow)
+        fireGlow = glow
+        flickerFireGlow()
+
+        let sparks = SKEmitterNode()
+        sparks.particleTexture = bulbGlow
+        sparks.particleBirthRate = 5
+        sparks.particleLifetime = 1.1
+        sparks.particleLifetimeRange = 0.5
+        sparks.particlePositionRange = CGVector(dx: 50, dy: 6)
+        sparks.emissionAngle = .pi / 2
+        sparks.emissionAngleRange = 0.5
+        sparks.particleSpeed = 34
+        sparks.particleSpeedRange = 16
+        sparks.particleSize = CGSize(width: 4, height: 4)
+        sparks.particleScaleRange = 0.4
+        sparks.particleScaleSpeed = -0.5
+        sparks.particleColor = UIColor(red: 1, green: 0.62, blue: 0.2, alpha: 1)
+        sparks.particleColorBlendFactor = 1
+        sparks.particleAlphaSpeed = -0.8
+        sparks.particleBlendMode = .add
+        sparks.position = CGPoint(x: anchor.x, y: anchor.y + 6)
+        sparks.zPosition = -16.5
+        addChild(sparks)
+        fireSparks = sparks
+    }
+
+    /// The glow's flicker: a new brightness and size every 0.06–0.18 s (brighter while the fire flares).
+    private func flickerFireGlow() {
+        guard let glow = fireGlow else { return }
+        let flaring = CACurrentMediaTime() < fireFlareUntil
+        let a = flaring ? CGFloat.random(in: 0.6...0.85) : CGFloat.random(in: 0.22...0.42)
+        let s = flaring ? CGFloat.random(in: 1.15...1.3) : CGFloat.random(in: 0.94...1.06)
+        let t = TimeInterval.random(in: 0.06...0.18)
+        glow.run(.group([.fadeAlpha(to: a, duration: t), .scale(to: s, duration: t)])) { [weak self] in
+            self?.flickerFireGlow()
+        }
+    }
+
+    /// The fireplace caught a ball: the flames leap, the glow brightens and a shower of sparks goes up.
+    private func flareFire() {
+        guard let fire = fireSprite else { return }
+        fireFlareUntil = CACurrentMediaTime() + 0.9
+        fire.removeAction(forKey: "flare")
+        fire.run(.sequence([.scaleY(to: 1.45, duration: 0.12), .scaleY(to: 1, duration: 0.9)]), withKey: "flare")
+        fireSparks?.particleBirthRate = 60
+        fire.run(.sequence([.wait(forDuration: 0.35), .run { [weak self] in self?.fireSparks?.particleBirthRate = 5 }]),
+                 withKey: "sparks")
     }
 
     private func addWall(points: [CGPoint],
@@ -884,7 +963,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v33")
+        let label = SKLabelNode(text: "T5 M9 v34")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -930,7 +1009,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v33 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v34 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1996,6 +2075,7 @@ final class LmpTableScene: SKScene {
             }
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
             sfx(scoop === fireplace ? .jackpot : .scoopIn)
+            if scoop === fireplace { flareFire() }                // T5 M9 v34
             showBanner(scoop === fireplace ? "FIREPLACE" : scoop === kettle ? "KETTLE"
                        : scoop === windowSeat ? "WINDOW SEAT" : "MAIL POSTED")
             scoop.flash()

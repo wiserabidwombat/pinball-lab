@@ -6,7 +6,7 @@ import Foundation
 
 /// The shots a request asks for.
 nonisolated enum LmpRequestStep: String {
-    case bookshelf      // knock all four books down
+    case bookshelf      // knock all four targets down (T5 M9 v23: drawn as a fire screen, no longer books)
     case loop           // either loop
     case ramp           // make the ramp
     case kettle         // the kettle
@@ -15,7 +15,7 @@ nonisolated enum LmpRequestStep: String {
 
     var label: String {
         switch self {
-        case .bookshelf: return "the bookshelf"
+        case .bookshelf: return "the fire screen"
         case .loop: return "a loop"
         case .ramp: return "the ramp"
         case .kettle: return "the kettle"

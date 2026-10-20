@@ -237,7 +237,11 @@ final class LmpTableScene: SKScene {
         #if DEBUG
         if shotLab != nil { return .topDown }
         #endif
-        return isAttractMode ? .topDown : settings.cameraMode
+        // T5 M9 v22 (Aaron: multiball should go to the top-down view, otherwise you can't see all the balls): with two
+        // or more balls on the table (the Evening Rush, Festival Night) the camera eases out to the whole table, and
+        // back to the player's setting when it's down to one.
+        if isAttractMode || balls.count > 1 { return .topDown }
+        return settings.cameraMode
     }
 
     private var isLabRunning: Bool {
@@ -864,7 +868,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v21")
+        let label = SKLabelNode(text: "T5 M9 v23")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -910,7 +914,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v21 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v23 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2169,7 +2173,7 @@ extension LmpTableScene: PlayLabHost {
     var playLabObjectives: [PlayObjective] {
         [PlayObjective(name: "request", text: "Finish a regular's request (the shots on their card, in order)"),
          PlayObjective(name: "rush", text: "Finish 3 requests in an evening to start the Evening Rush (2 balls, requests ×2)"),
-         PlayObjective(name: "fireplaceOpen", text: "Knock down all four books to open the fireplace"),
+         PlayObjective(name: "fireplaceOpen", text: "Knock down the four fire-screen panels to open the fireplace"),
          PlayObjective(name: "fireplace", text: "Shoot the open fireplace"),
          PlayObjective(name: "find", text: "Find a book (the fireplace after the bank, the window seat once a ball, or waking the cat)"),
          PlayObjective(name: "loft", text: "Reach the loft (the ramp, the dumbwaiter or a full plunge)"),

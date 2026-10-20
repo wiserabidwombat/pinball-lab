@@ -48,7 +48,10 @@ def wood(name, dark, light):
 
 # M9 v16 (Aaron: the flippers blend into the floor; walnut on oak measured 2.1 : 1, 1.15 : 1 by the slate hearth): an
 # ivory enamel arm with an oxblood rubber, like a real flipper's white plastic, reads on any part of the floor.
-M_WALNUT = principled('ivory', (0.93, 0.89, 0.80), rough=0.3, coat=0.6, spec=0.5)
+# M9 v40 (Aaron: make the ivory lighter so the flippers pop): a near-white ivory, and the key light less amber.
+M_WALNUT = principled('ivory', (0.99, 0.97, 0.92), rough=0.3, coat=0.6, spec=0.5)
+_ib = M_WALNUT.node_tree.nodes['Principled BSDF']
+_ib.inputs['Emission Color'].default_value = (1.0, 0.97, 0.90, 1); _ib.inputs['Emission Strength'].default_value = 0.35
 M_RUBBER = principled('rubber', (0.42, 0.06, 0.05), rough=0.55, spec=0.3)
 M_BRASS = principled('brass', (0.88, 0.66, 0.32), metal=1.0, rough=0.22)
 
@@ -96,7 +99,7 @@ for o in sc.objects:
         for p in o.data.polygons: p.use_smooth = True
 
 # soft light from overhead, a little warm, plus warm soft boxes round about for the brass and the coat to catch
-key = bpy.data.lights.new('key', 'AREA'); key.energy = 22000; key.size = 260; key.color = (1.0, 0.9, 0.75)
+key = bpy.data.lights.new('key', 'AREA'); key.energy = 22000; key.size = 260; key.color = (1.0, 0.95, 0.87)
 ko = bpy.data.objects.new('key', key); ko.location = (48, 40, 260); sc.collection.objects.link(ko)
 for i, (x, y) in enumerate(((-150, 60), (250, 60), (48, -150), (48, 200))):
     bpy.ops.mesh.primitive_plane_add(size=1, location=(x, y, 120))

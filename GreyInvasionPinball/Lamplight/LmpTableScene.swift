@@ -702,6 +702,88 @@ final class LmpTableScene: SKScene {
         }
         hasTableArt = true
         addFire()                                                 // T5 M9 v34
+        addAmbience()                                             // T5 M9 v40
+    }
+
+    /// T5 M9 v40 (bookstore round 6): steam curling up from the teacup bumpers and the cup on the counter, dust motes
+    /// in the wall sconces' light, and the window-sill candle's flicker. Particles stay in the world (targetNode) so
+    /// the steam emitters' slow sway draws a curl.
+    private func addAmbience() {
+        for (i, p) in LmpTableLayout.steamSpots.enumerated() {
+            let bumper = i < LmpTableLayout.bumperCenters.count
+            let steam = SKEmitterNode()
+            steam.particleTexture = bulbGlow
+            steam.particleBirthRate = bumper ? 2.2 : 1.6
+            steam.particleLifetime = 2.6
+            steam.particleLifetimeRange = 0.8
+            steam.particlePositionRange = CGVector(dx: bumper ? 16 : 6, dy: 3)
+            steam.emissionAngle = .pi / 2
+            steam.emissionAngleRange = 0.35
+            steam.particleSpeed = 11
+            steam.particleSpeedRange = 4
+            steam.yAcceleration = 2
+            steam.particleSize = CGSize(width: 10, height: 10)
+            steam.particleScale = bumper ? 0.9 : 0.6
+            steam.particleScaleSpeed = 0.45
+            steam.particleColor = .white
+            steam.particleColorBlendFactor = 1
+            steam.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0.0, 0.16, 0.1, 0.0],
+                                                             times: [0, 0.2, 0.6, 1] as [NSNumber])
+            steam.particleBlendMode = .alpha
+            steam.position = p
+            steam.zPosition = bumper ? 13 : -16.8
+            steam.targetNode = self
+            addChild(steam)
+            let sway = CGFloat.random(in: 2.5...4)
+            let t = TimeInterval.random(in: 1.4...2.0)
+            steam.run(.repeatForever(.sequence([.moveBy(x: sway, y: 0, duration: t),
+                                                .moveBy(x: -2 * sway, y: 0, duration: 2 * t),
+                                                .moveBy(x: sway, y: 0, duration: t)])))
+            steam.advanceSimulationTime(3)
+        }
+        for p in LmpTableLayout.dustMoteSpots {
+            let motes = SKEmitterNode()
+            motes.particleTexture = bulbGlow
+            motes.particleBirthRate = 1.4
+            motes.particleLifetime = 6
+            motes.particleLifetimeRange = 2
+            motes.particlePositionRange = CGVector(dx: 70, dy: 70)
+            motes.emissionAngleRange = .pi * 2
+            motes.particleSpeed = 3
+            motes.particleSpeedRange = 3
+            motes.yAcceleration = -0.6
+            motes.particleSize = CGSize(width: 3, height: 3)
+            motes.particleScaleRange = 0.5
+            motes.particleColor = UIColor(red: 1, green: 0.85, blue: 0.55, alpha: 1)
+            motes.particleColorBlendFactor = 1
+            motes.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0.0, 0.55, 0.55, 0.0],
+                                                             times: [0, 0.25, 0.75, 1] as [NSNumber])
+            motes.particleBlendMode = .add
+            motes.position = p
+            motes.zPosition = 14
+            addChild(motes)
+            motes.advanceSimulationTime(6)
+        }
+        let candle = SKSpriteNode(texture: bulbGlow, size: CGSize(width: 26, height: 26))
+        candle.position = LmpTableLayout.sillCandleFlame
+        candle.color = UIColor(red: 1, green: 0.62, blue: 0.25, alpha: 1)
+        candle.colorBlendFactor = 1
+        candle.blendMode = .add
+        candle.alpha = 0.5
+        candle.zPosition = -17
+        addChild(candle)
+        flickerCandle(candle)
+    }
+
+    /// The sill candle: a new brightness and size every 0.05–0.15 s.
+    private func flickerCandle(_ glow: SKSpriteNode) {
+        let a = CGFloat.random(in: 0.35...0.65)
+        let s = CGFloat.random(in: 0.88...1.1)
+        let t = TimeInterval.random(in: 0.05...0.15)
+        glow.run(.group([.fadeAlpha(to: a, duration: t), .scale(to: s, duration: t)])) { [weak self, weak glow] in
+            guard let glow = glow else { return }
+            self?.flickerCandle(glow)
+        }
     }
 
     /// T5 M9 v34 (Aaron: "make the fire animated"): the flames are 24 looping frames on the baked logs (additive, over
@@ -963,7 +1045,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M9 v34")
+        let label = SKLabelNode(text: "T5 M9 v40")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1009,7 +1091,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M9 v34 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v40 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

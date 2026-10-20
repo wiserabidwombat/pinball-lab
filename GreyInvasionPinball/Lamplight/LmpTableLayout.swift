@@ -608,6 +608,13 @@ enum LmpTableLayout {
     static let fireArtBox = CGRect(x: -42, y: -6, width: 84, height: 52)
     static let fireFrames = 24
     static let fireFrameSeconds: TimeInterval = 0.055
+    /// T5 M9 v40 (bookstore round 6): the little animations over the baked art. Steam rises from the tea in the three
+    /// teacup bumpers and in the cup on the counter; dust motes drift in the four wall sconces' pools of light; the
+    /// candle on the rainy window's sill flickers.
+    static let steamSpots: [CGPoint] = bumperCenters.map { CGPoint(x: $0.x, y: $0.y + 8) } + [CGPoint(x: 368, y: 24)]
+    static let dustMoteSpots: [CGPoint] = [CGPoint(x: 46, y: 322), CGPoint(x: 46, y: 692), CGPoint(x: 554, y: 612),
+                                           CGPoint(x: 554, y: 922)]
+    static let sillCandleFlame = CGPoint(x: 599, y: 379)
     /// T5 M9 v26: Festival Night's string lights, strung across the shop while the festival runs: each strand hangs from
     /// a to b and sags by `sag` in the middle, with a bulb about every festivalBulbSpacing points.
     static let festivalStrands: [(a: CGPoint, b: CGPoint, sag: CGFloat)] = [

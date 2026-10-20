@@ -385,14 +385,48 @@ for i, (px, py) in enumerate(((L.LEFT_ORBIT_INNER_X + 5, L.LOFT_BOTTOM_Y - 4), (
         tx = px + side * 10
         if tx < front[0][0] + 2: continue
         tube3d(f'brace{i}{side}', [(px, py, LOFT_H * 0.55), (tx, _front_y(tx) - 1.0, LOFT_H - 7.2)], 1.2, M_WALNUT)
-for k, (y0, y1) in enumerate(((L.LOFT_BOTTOM_Y + 4, L.LOFT_DOOR_BOTTOM - 2), (L.LOFT_DOOR_TOP + 2, 1214))):
-    n_b = max(2, int((y1 - y0) // 10))
-    for j in range(n_b + 1):
-        y = y0 + (y1 - y0) * j / n_b
-        cylinder(f'rbal{k}_{j}', L.LOFT_RIGHT_X, y, 1.3 if 0 < j < n_b else 2.4, LOFT_H + 12, LOFT_H + 22,
-                 M_WALNUT_CAP, verts=10)
-    tube(f'rbalRail{k}', [(L.LOFT_RIGHT_X, y0), (L.LOFT_RIGHT_X, y1)], LOFT_H + 22.5, 2.3, M_WALNUT_CAP)
-    tube(f'rbalCap{k}', [(L.LOFT_RIGHT_X, y0), (L.LOFT_RIGHT_X, y1)], LOFT_H + 24.6, 0.9, M_BRASS)
+# M9 v32 (loft round 3): furniture in the corner under the loft's slope wall, where no ball goes: a low bookcase along
+# the front edge facing the player (two shelves of coloured spines) and a potted fern beside it.
+fx0, fy0 = front[0]; fx1, fy1 = front[1]
+fl = math.hypot(fx1 - fx0, fy1 - fy0); fu = ((fx1 - fx0) / fl, (fy1 - fy0) / fl); fn = (-fu[1], fu[0])   # fn: into the loft
+def _on_front(x, inset):
+    t = (x - fx0) / (fx1 - fx0)
+    return (fx0 + (fx1 - fx0) * t + fn[0] * inset, fy0 + (fy1 - fy0) * t + fn[1] * inset)
+def _quad(xa, xb, d0, d1):
+    a0, b0 = _on_front(xa, d0), _on_front(xb, d0)
+    return ccw([a0, b0, (b0[0] + fn[0] * (d1 - d0), b0[1] + fn[1] * (d1 - d0)),
+                (a0[0] + fn[0] * (d1 - d0), a0[1] + fn[1] * (d1 - d0))])
+BK_X0, BK_X1, BK_D0, BK_D1, BK_H = 92.0, 136.0, 3.0, 10.0, 21.0
+prism('bookcaseBack', _quad(BK_X0, BK_X1, BK_D1 - 1.5, BK_D1), LOFT_H, LOFT_H + BK_H, M_WALNUT)
+prism('bookcaseTop', _quad(BK_X0 - 0.8, BK_X1 + 0.8, BK_D0 - 0.6, BK_D1), LOFT_H + BK_H, LOFT_H + BK_H + 1.4, M_WALNUT_CAP)
+for xx in (BK_X0, BK_X1 - 1.4):
+    prism(f'bookcaseSide{xx}', _quad(xx, xx + 1.4, BK_D0, BK_D1), LOFT_H, LOFT_H + BK_H, M_WALNUT_CAP)
+for zz in (0.0, 10.0):
+    prism(f'bookcaseShelf{zz}', _quad(BK_X0, BK_X1, BK_D0, BK_D1), LOFT_H + zz, LOFT_H + zz + 1.2, M_WALNUT_CAP)
+rnd_b = __import__('random').Random(5)
+cols_b = [(0.40, 0.08, 0.06), (0.08, 0.22, 0.13), (0.09, 0.13, 0.34), (0.62, 0.44, 0.10), (0.30, 0.12, 0.34),
+          (0.55, 0.30, 0.12), (0.80, 0.74, 0.60)]
+mats_b = [principled(f'shelfBook{i}', c, rough=0.6) for i, c in enumerate(cols_b)]
+for zz in (1.2, 11.2):
+    xx = BK_X0 + 1.6
+    while xx < BK_X1 - 3.4:
+        w_ = rnd_b.uniform(1.6, 2.6); h_ = rnd_b.uniform(5.5, 8.2)
+        prism(f'shelfBook{zz}_{xx:.1f}', _quad(xx, xx + w_ - 0.2, BK_D0 + 0.6, BK_D1 - 1.6), LOFT_H + zz, LOFT_H + zz + h_,
+              rnd_b.choice(mats_b))
+        xx += w_
+M_POT = principled('pot', (0.66, 0.33, 0.18), rough=0.7)
+M_FERN = principled('fern', (0.16, 0.40, 0.14), rough=0.6)
+px_, py_ = 79.0, 1006.0
+bpy.ops.mesh.primitive_cone_add(vertices=24, radius1=3.6, radius2=5.0, depth=7.0, location=(px_, py_, LOFT_H + 3.5))
+bpy.context.object.data.materials.append(M_POT)
+for k in range(9):
+    a_ = k * 2 * math.pi / 9
+    tip = (px_ + math.cos(a_) * 9.5, py_ + math.sin(a_) * 8.0, LOFT_H + 9.0 + (k % 3) * 2.0)
+    mid = ((px_ + tip[0]) / 2, (py_ + tip[1]) / 2, LOFT_H + 14.0)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, location=mid, segments=12, ring_count=6)
+    o_ = bpy.context.object
+    o_.scale = (5.5, 1.5, 0.5); o_.rotation_euler = (0, -0.5, a_); o_.data.materials.append(M_FERN)
+    for pp in o_.data.polygons: pp.use_smooth = True
 M_OAK = wood('oak', (0.22, 0.11, 0.04), (0.48, 0.28, 0.12), scale=5.0, direction='X')
 _w = next(nd for nd in M_OAK.node_tree.nodes if nd.type == 'TEX_WAVE')
 _w.inputs['Distortion'].default_value = 1.2; _w.inputs['Scale'].default_value = 9.0     # straight boards
@@ -482,24 +516,66 @@ for k, (dx, w_, h_, col) in enumerate(((-7, 3.4, 7.5, (0.40, 0.08, 0.06)), (-3, 
     prism(f'basketBook{k}', ccw([(bx_, by_), (bx_ + w_, by_), (bx_ + w_, by_ + 5), (bx_, by_ + 5)]),
           LOFT_H + 1, LOFT_H + h_, m_)
 out_ = L.loft_outline()
-arc_ = [p for p in out_ if 1142 <= p[1] <= 1184]
-def _inward(i, d):
-    p = arc_[i]; q = arc_[min(i + 1, len(arc_) - 1)]; o = arc_[max(i - 1, 0)]
-    tx, ty = q[0] - o[0], q[1] - o[1]; ln = math.hypot(tx, ty) or 1
-    nx, ny = ty / ln, -tx / ln                                  # rotate the tangent: points into the loft
-    return (p[0] + nx * d, p[1] + ny * d)
-seat_poly = ccw([_inward(i, 5.0) for i in range(len(arc_))] + [_inward(i, 17.0) for i in reversed(range(len(arc_)))])
-cush_poly = ccw([_inward(i, 6.0) for i in range(1, len(arc_) - 1)] + [_inward(i, 16.0) for i in reversed(range(1, len(arc_) - 1))])
 M_CUSHION = principled('cushion', (0.55, 0.16, 0.12), rough=0.7)
-prism('benchBase', seat_poly, LOFT_H, LOFT_H + 5.0, M_WALNUT)
-prism('benchCushion', cush_poly, LOFT_H + 5.0, LOFT_H + 8.0, M_CUSHION)
-tube('benchPiping', [_inward(i, 11.0) for i in range(1, len(arc_) - 1)], LOFT_H + 8.1, 0.45, M_BRASS)
-for t in (0.3, 0.75):
-    px_, py_ = _inward(int(t * (len(arc_) - 1)), 8.5)
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=4.2, location=(px_, py_, LOFT_H + 11.0), segments=20, ring_count=10)
-    o_ = bpy.context.object; o_.scale = (1.0, 0.7, 0.55); o_.data.materials.append(
-        principled(f'pillow{t}', (0.86, 0.70, 0.30) if t < 0.5 else (0.12, 0.28, 0.20), rough=0.7))
-    for pp in o_.data.polygons: pp.use_smooth = True
+PILLOWS = [principled('pillowGold', (0.86, 0.70, 0.30), rough=0.7), principled('pillowGreen', (0.12, 0.28, 0.20), rough=0.7),
+           principled('pillowBlue', (0.14, 0.20, 0.42), rough=0.7)]
+def _arc_tools(arc):
+    def inward(i, d):
+        p = arc[i]; q = arc[min(i + 1, len(arc) - 1)]; o = arc[max(i - 1, 0)]
+        tx, ty = q[0] - o[0], q[1] - o[1]; ln = math.hypot(tx, ty) or 1
+        nx, ny = ty / ln, -tx / ln                              # rotate the tangent: points into the loft
+        return (p[0] + nx * d, p[1] + ny * d)
+    return inward
+# M9 v33 (Aaron: more benches along the curved wall): three cushioned benches along the loft's curved wall (the one
+# above the basket, one lower down, one along the top), each a walnut base, a red cushion with gold piping and pillows.
+def wall_bench(tag, keep, n_pillows=2):
+    arc = [p for p in out_ if keep(p)]
+    inward = _arc_tools(arc)
+    seat = ccw([inward(i, 5.0) for i in range(len(arc))] + [inward(i, 17.0) for i in reversed(range(len(arc)))])
+    cush = ccw([inward(i, 6.0) for i in range(1, len(arc) - 1)] + [inward(i, 16.0) for i in reversed(range(1, len(arc) - 1))])
+    prism(f'benchBase{tag}', seat, LOFT_H, LOFT_H + 5.0, M_WALNUT)
+    prism(f'benchCushion{tag}', cush, LOFT_H + 5.0, LOFT_H + 8.0, M_CUSHION)
+    tube(f'benchPiping{tag}', [inward(i, 11.0) for i in range(1, len(arc) - 1)], LOFT_H + 8.1, 0.45, M_BRASS)
+    for j in range(n_pillows):
+        t = (j + 0.5) / n_pillows
+        px_, py_ = inward(int(t * (len(arc) - 1)), 8.5)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=4.2, location=(px_, py_, LOFT_H + 11.0), segments=20, ring_count=10)
+        o_ = bpy.context.object; o_.scale = (1.0, 0.7, 0.55); o_.data.materials.append(PILLOWS[(j + len(tag)) % 3])
+        for pp in o_.data.polygons: pp.use_smooth = True
+wall_bench('Low', lambda p: 1036 <= p[1] <= 1090)
+wall_bench('Seat', lambda p: 1142 <= p[1] <= 1184)
+wall_bench('Top', lambda p: p[1] >= 1193 and p[0] <= 240, 3)
+# M9 v33 (Aaron: wall sconces instead of the hanging lamp): brass sconces on top of the curved wall's rail, each a back
+# plate, a short arm reaching into the loft and a glowing tulip shade; their pools of light are painted on the floor.
+M_SCONCE_GLASS = principled('sconceGlass', (0.95, 0.62, 0.28), emit=(1.0, 0.62, 0.26), emit_strength=1.6)
+for k, yy in enumerate(L.LOFT_SCONCE_YS):
+    i = min(range(len(out_)), key=lambda j: abs(out_[j][1] - yy))
+    inward = _arc_tools(out_)
+    wx_, wy_ = out_[i]
+    ax_, ay_ = inward(i, 5.0)
+    cylinder(f'sconcePlate{k}', wx_, wy_, 2.4, LOFT_H + 11, LOFT_H + 18, M_BRASS, verts=16)
+    tube3d(f'sconceArm{k}', [(wx_, wy_, LOFT_H + 16), (ax_, ay_, LOFT_H + 19)], 0.6, M_BRASS)
+    bpy.ops.mesh.primitive_cone_add(vertices=20, radius1=1.4, radius2=3.0, depth=4.0, location=(ax_, ay_, LOFT_H + 21.5))
+    bpy.context.object.data.materials.append(M_SCONCE_GLASS)
+# M9 v33 (Aaron: bookshelves above and below the entrance to the loft): low open bookshelves standing on the loft's
+# right-hand wall either side of the ramp's door; from above you see the books' tops between two walnut boards.
+rnd_s = __import__('random').Random(9)
+mats_s = [principled(f'wallBook{i}', c, rough=0.6) for i, c in enumerate(
+    [(0.40, 0.08, 0.06), (0.08, 0.22, 0.13), (0.09, 0.13, 0.34), (0.62, 0.44, 0.10), (0.30, 0.12, 0.34),
+     (0.55, 0.30, 0.12), (0.80, 0.74, 0.60), (0.14, 0.30, 0.32)])]
+xs0, xs1 = L.LOFT_RIGHT_X - 6.5, L.LOFT_RIGHT_X + 4.5
+for k, (y0, y1) in enumerate(((L.LOFT_BOTTOM_Y + 3, L.LOFT_DOOR_BOTTOM - 2), (L.LOFT_DOOR_TOP + 2, 1213))):
+    prism(f'shelfBase{k}', ccw([(xs0, y0), (xs1, y0), (xs1, y1), (xs0, y1)]), LOFT_H, LOFT_H + 1.5, M_WALNUT_CAP)
+    for xx in (xs0, xs1 - 1.2):
+        prism(f'shelfSide{k}{xx}', ccw([(xx, y0), (xx + 1.2, y0), (xx + 1.2, y1), (xx, y1)]), LOFT_H, LOFT_H + 15, M_WALNUT_CAP)
+    for yy in (y0, y1 - 1.4):
+        prism(f'shelfEnd{k}{yy}', ccw([(xs0, yy), (xs1, yy), (xs1, yy + 1.4), (xs0, yy + 1.4)]), LOFT_H, LOFT_H + 16, M_WALNUT_CAP)
+    yy = y0 + 1.6
+    while yy < y1 - 3.5:
+        d_ = rnd_s.uniform(1.8, 3.0); h_ = rnd_s.uniform(9.0, 13.5); w_ = rnd_s.uniform(6.0, 8.6)
+        prism(f'wallBook{k}_{yy:.1f}', ccw([(xs0 + 1.4, yy), (xs0 + 1.4 + w_, yy), (xs0 + 1.4 + w_, yy + d_ - 0.25),
+                                             (xs0 + 1.4, yy + d_ - 0.25)]), LOFT_H + 1.5, LOFT_H + h_, rnd_s.choice(mats_s))
+        yy += d_
 
 # ------------------------------------------------------------------ oblique shear: y += z * K
 bpy.ops.object.select_all(action='DESELECT')

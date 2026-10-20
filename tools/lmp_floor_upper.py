@@ -133,18 +133,46 @@ for sx, sy in ((-16, 9), (16, 9), (-16, -9), (16, -9)):
 # ---- the loft: a sage window-nook rug over the loft (block and floor), a rainy window at the top left
 loft_area = L.loft_platform()                     # M9 v3: the raised platform's top
 cr.save(); poly(loft_area); cr.clip()
-rgb((0.36, 0.42, 0.33)); cr.paint()
+# M9 v32 (loft round 3): the loft has its own floor: warm boards running across (the shop's run up the table), a
+# smaller sage rug in the middle with a gold border, and the pool of light from the lamp hanging over it.
+rnd_l = random.Random(31)
+yb = 940.0
+while yb < 1240:
+    xb = 50 - rnd_l.uniform(0, 80)
+    while xb < 270:
+        ln_ = rnd_l.uniform(60, 130)
+        c_ = rnd_l.choice([(0.33, 0.19, 0.10), (0.36, 0.21, 0.11), (0.31, 0.18, 0.09), (0.38, 0.22, 0.12)])   # darker than the shop's oak
+        rgb(c_); cr.rectangle(xb, yb, ln_, 9); cr.fill()
+        rgb((0.22, 0.12, 0.05), 0.5); cr.set_line_width(0.6); cr.move_to(xb, yb); cr.line_to(xb, yb + 9); cr.stroke()
+        xb += ln_
+    rgb((0.22, 0.12, 0.05), 0.55); cr.set_line_width(0.7); cr.move_to(40, yb); cr.line_to(270, yb); cr.stroke()
+    yb += 9
+RX0, RY0, RX1, RY1 = 128.0, 1012.0, 238.0, 1172.0
+def rug_path(i):
+    r = 6
+    cr.new_sub_path()
+    cr.arc(RX1 - r - i, RY1 - r - i, r, 0, math.pi / 2); cr.arc(RX0 + r + i, RY1 - r - i, r, math.pi / 2, math.pi)
+    cr.arc(RX0 + r + i, RY0 + r + i, r, math.pi, 1.5 * math.pi); cr.arc(RX1 - r - i, RY0 + r + i, r, 1.5 * math.pi, 2 * math.pi)
+    cr.close_path()
+rug_path(-1.5); rgb((0.10, 0.05, 0.02), 0.35); cr.fill()                        # its edge shadow
+rug_path(0); rgb((0.36, 0.42, 0.33)); cr.fill()
+cr.save(); rug_path(0); cr.clip()
 for i in range(-60, 60):                          # a woven twill: fine diagonal threads
     rgb((0.30, 0.36, 0.27) if i % 2 else (0.42, 0.48, 0.38), 0.6); cr.set_line_width(1.2)
     cr.move_to(40 + i * 4, 950); cr.line_to(40 + i * 4 + 300, 1250); cr.stroke()
-for (r1, col) in ((10, (0.72, 0.56, 0.32)), (14, (0.36, 0.42, 0.33))):           # a gold border inside its edge
-    pass
 cr.restore()
-# gold border line just inside the loft's outline
-inner = L.arch_offset(L.LEFT_ORBIT_INNER_X - L.LEFT_X + 8, L.LOFT_RIGHT_X - 8)
-stroke_path([(L.LEFT_ORBIT_INNER_X + 8, L.LOFT_BOTTOM_Y + 8)] + [p for p in inner if p[1] > L.LOFT_BOTTOM_Y + 8] +
-            [(L.LOFT_RIGHT_X - 8, inner[-1][1]), (L.LOFT_RIGHT_X - 8, L.LOFT_BOTTOM_Y + 8),
-             (L.LEFT_ORBIT_INNER_X + 8, L.LOFT_BOTTOM_Y + 8)], 1.4, (0.80, 0.62, 0.30), 0.8)
+rug_path(7); rgb((0.80, 0.62, 0.30), 0.85); cr.set_line_width(1.4); cr.stroke()   # gold border
+# M9 v33: the wall sconces' pools of light (the hanging lamp is gone): warm, falling into the loft from the curved wall
+_ol = L.loft_outline()
+for yy in L.LOFT_SCONCE_YS:
+    i = min(range(len(_ol)), key=lambda j: abs(_ol[j][1] - yy))
+    p, q, o_ = _ol[i], _ol[min(i + 1, len(_ol) - 1)], _ol[max(i - 1, 0)]
+    tx, ty = q[0] - o_[0], q[1] - o_[1]; ln = math.hypot(tx, ty) or 1
+    cx_l, cy_l = p[0] + ty / ln * 16, p[1] - tx / ln * 16
+    g = cairo.RadialGradient(cx_l, cy_l, 0, cx_l, cy_l, 38)
+    g.add_color_stop_rgba(0, 1.0, 0.76, 0.40, 0.40); g.add_color_stop_rgba(1, 1.0, 0.76, 0.40, 0.0)
+    cr.set_source(g); cr.paint()
+cr.restore()
 # M9 v5 (Aaron: the window ran into the loft's outer rail, the cushion too): the window is in the loft's wall, so what
 # shows on the floor is its light - a cool pool of rainy night light with the glazing bars' shadow and rain-streak
 # shadows, falling from the wall into the loft, clipped to the loft. The cushion lies along the wall under it.

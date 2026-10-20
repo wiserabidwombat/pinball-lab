@@ -98,6 +98,13 @@ final class LmpTableScene: SKScene {
     private var catFlapLit = false
     /// T5 M8 v20: when the rocking chair last relit the cat flap (its lamp flashes for a moment).
     private var rockingChairActedAt: TimeInterval = -100
+    /// T5 M8 v26: this ball's tally for the end-of-ball bonus, and when the armchair last kept the multiplier.
+    private var ballFinds = 0
+    private var ballRegulars = 0
+    private var ballLoops = 0
+    private var armchairActedAt: TimeInterval = -100
+    /// Nothing replaces the bonus banner until then.
+    private var bonusBannerUntil: TimeInterval = -100
     /// T5 M8 v16: the fireplace has a book waiting (lit by completing the bank; the next fireplace finds it).
     private var fireplaceFindLit = false
     private var cozyIcons: [SKSpriteNode] = []
@@ -350,6 +357,7 @@ final class LmpTableScene: SKScene {
             case .rockingChair: acting = now - rockingChairActedAt < 2
             case .windowSeat: acting = game.lucky
             case .catBed: acting = cat.mode == .nap
+            case .armchair: acting = now - armchairActedAt < 3
             }
             lamps.set("cozy\(i)", acting ? .fastBlink : .on)
         }
@@ -713,7 +721,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v25")
+        let label = SKLabelNode(text: "T5 M8 v26")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -759,7 +767,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v25 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M8 v26 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -836,6 +844,11 @@ final class LmpTableScene: SKScene {
         fireplaceFindLit = false
         loopCombo = 0
         lastLoopAt = -100
+        ballFinds = 0
+        ballRegulars = 0
+        ballLoops = 0
+        armchairActedAt = -100
+        bonusBannerUntil = -100
         cat.reset()
         game.reset()
         // M6 round 3: she starts the evening on any perch you own.
@@ -866,6 +879,7 @@ final class LmpTableScene: SKScene {
     }
 
     private func showBanner(_ text: String) {
+        if gameTime < bonusBannerUntil { return }       // T5 M8 v26: the bonus banner stays up
         #if DEBUG
         playLab?.banner(text)
         #endif
@@ -1081,8 +1095,11 @@ final class LmpTableScene: SKScene {
             if balls.isEmpty, rushBallsToServe == 0, nextBallAt == nil {
                 cameraRig.shake(strength: 4, duration: 0.3)
                 sfx(.drain)
+                let bonusShown = payBonus()                // T5 M8 v26: before the ball count (and the best evening)
                 game.ballDrained()
-                if !game.isGameOver { nextBallAt = now + 1.0 } else {
+                if !game.isGameOver {
+                    nextBallAt = now + (bonusShown ? LmpTableLayout.bonusBannerSeconds : 1.0)
+                } else {
                     // M8 round 5: a festival still lit on the season's last evening is gone tomorrow.
                     if festivalLit, LmpShop.shared.eveningOfSeason == LmpSeason.eveningsPerSeason {
                         game.festivalLine = "The \(LmpShop.shared.season.festival) slipped by · next year"
@@ -1202,6 +1219,7 @@ final class LmpTableScene: SKScene {
         let find = LmpShop.shared.find(from: source, lucky: game.lucky, festival: festivalActive,
                                        treasureBoost: has(.windowSeat) && game.lucky)
         game.findsTonight += 1
+        ballFinds += 1
         labObjective("find")
         if find.isNew { game.newTonight += 1 }
         game.findToast = find
@@ -1246,6 +1264,12 @@ final class LmpTableScene: SKScene {
             request = nil
             game.requestsTonight += 1
             labObjective("request")
+            // T5 M8 v26: each regular helped counts toward the bonus and raises its multiplier.
+            ballRegulars += 1
+            if game.bonusX < LmpTableLayout.bonusMaxX {
+                game.bonusX += 1
+                if game.bonusX == 3 { labObjective("bonus3x") }
+            }
             game.add(LmpTableLayout.requestPoints * (rushActive ? 2 : 1))
             let level = LmpShop.shared.finishRequest(for: r.regular)
             game.festivalLine = LmpShop.shared.festivalLine
@@ -1279,6 +1303,35 @@ final class LmpTableScene: SKScene {
         guard rushActive else { return r?.status }
         let head = festivalActive ? LmpShop.shared.season.festival.uppercased() : "RUSH"
         return head + " ×2 · " + (r?.status ?? "the next regular's on the way")
+    }
+
+    // MARK: - End-of-ball bonus (T5 M8 v26)
+
+    /// A ball is really lost: pays this ball's tally times the multiplier, then the multiplier goes back to 1X unless the
+    /// armchair keeps it. Returns whether a banner went up (the next ball waits for it).
+    private func payBonus() -> Bool {
+        let base = ballFinds * LmpTableLayout.bonusPerFind + ballRegulars * LmpTableLayout.bonusPerRegular
+            + ballLoops * LmpTableLayout.bonusPerLoop
+        ballFinds = 0
+        ballRegulars = 0
+        ballLoops = 0
+        let x = game.bonusX
+        let kept = has(.armchair) && x > 1 && game.ballsLeft > 1     // not on the evening's last ball
+        if kept { armchairActedAt = gameTime } else { game.bonusX = 1 }
+        var text: String
+        if base > 0 {
+            game.add(base * x)
+            text = x > 1 ? "BONUS \(base.formatted()) × \(x) = \((base * x).formatted())" : "BONUS \(base.formatted())"
+            if kept { text += " · ARMCHAIR KEEPS \(x)X" }
+        } else if kept {
+            text = "ARMCHAIR · \(x)X KEPT"
+        } else {
+            return false
+        }
+        showBanner(text)
+        bannerClearAt = gameTime + LmpTableLayout.bonusBannerSeconds
+        bonusBannerUntil = gameTime + LmpTableLayout.bonusBannerSeconds
+        return true
     }
 
     // MARK: - Cozy spots (milestone 8 round 3)
@@ -1506,6 +1559,7 @@ final class LmpTableScene: SKScene {
             showBanner(rightToLeft ? "LEFT LOOP" : "RIGHT LOOP")
         }
         lastLoopAt = gameTime
+        ballLoops += 1
         festivalShot()
         shotEvent(rightToLeft ? "rightLoop" : "leftLoop")   // named for the lane the ball went up
         requestEvent(.loop)
@@ -1726,6 +1780,7 @@ final class LmpTableScene: SKScene {
                     // T5 M8 v21: sometimes she brings you a gift instead of a book (twice as often with the cat bed).
                     if !isLabRunning, let gift = LmpShop.shared.catGift(bed: has(.catBed)) {
                         labObjective("catGift")
+                        ballFinds += 1
                         game.findToast = gift
                         findToastClearAt = gameTime + LmpTableLayout.findToastSeconds
                         showBanner(gift.isNew ? "MRRP! · A GIFT FROM THE CAT" : "MRRP! · ANOTHER GIFT")
@@ -1942,6 +1997,7 @@ extension LmpTableScene: PlayLabHost {
          PlayObjective(name: "mail", text: "Post a letter in the mail slot"),
          PlayObjective(name: "cat", text: "Wake the napping cat"),
          PlayObjective(name: "catGift", text: "Wake the cat and get a gift (twice as likely with the cat bed)"),
+         PlayObjective(name: "bonus3x", text: "Reach a 3X bonus multiplier (each regular helped on a ball adds 1X)"),
          PlayObjective(name: "festival", text: "Help 9 regulars in a season (or reach its last evening), then shoot the fireplace: Festival Night, 3 balls, every shot lit")]
     }
 
@@ -1971,7 +2027,7 @@ extension LmpTableScene: PlayLabHost {
                                  shots: [("windowSeat", 0.345)], shots60: [("windowSeat", 0.332)])]
     }
 
-    /// The cozy pieces rotate: 3 of the 5 per game, a different three each time.
+    /// The cozy pieces rotate: 3 of them per game, a different three each time (one rotation per piece).
     var playLabVariantCount: Int { LmpCozy.allCases.count }
 
     func playLabStartGame(variant: Int) -> String {

@@ -191,6 +191,14 @@ struct LmpTableView: View {
                     }
                 }
                 .accessibilityLabel("Balls \(game.ballsLeft)")
+                if game.bonusX > 1 {
+                    // T5 M8 v26: the end-of-ball bonus multiplier
+                    Text("\(game.bonusX)X")
+                        .font(.orbitron(13, .black))
+                        .foregroundStyle(Self.gold)
+                        .shadow(color: Self.gold.opacity(0.7), radius: 4)
+                        .accessibilityLabel("Bonus times \(game.bonusX)")
+                }
                 Spacer(minLength: 4)
                 Text(game.score.formatted())
                     .font(.orbitron(18, .black))

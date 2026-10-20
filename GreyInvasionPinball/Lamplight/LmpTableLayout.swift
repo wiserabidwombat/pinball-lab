@@ -581,6 +581,18 @@ enum LmpTableLayout {
 
     // MARK: Requests (milestone 8)
     static let requestPoints = 5_000
+
+    // MARK: End-of-ball bonus (T5 M8 v26)
+    /// When a ball is really lost (not saved, not a multiball ball), the evening's tally for that ball is paid:
+    /// finds × bonusPerFind + regulars helped × bonusPerRegular + loops × bonusPerLoop, times the bonus multiplier.
+    /// Each regular helped raises the multiplier by 1X, up to bonusMaxX; it goes back to 1X with the next ball unless the
+    /// armchair is in a cozy spot. A good ball (5 finds, 3 regulars, 6 loops) ≈ 22,000 × 3.
+    static let bonusPerFind = 2_000
+    static let bonusPerRegular = 3_000
+    static let bonusPerLoop = 500
+    static let bonusMaxX = 5
+    /// The bonus banner stays up this long, and the next ball waits for it.
+    static let bonusBannerSeconds: TimeInterval = 2.4
     /// The first regular comes in this long after the evening starts; the next, this long after one is helped.
     static let firstRequestDelay: TimeInterval = 4
     static let nextRequestDelay: TimeInterval = 6

@@ -40,6 +40,9 @@ final class LmpGameState {
     var festivalLine = ""
     /// Tonight's Festival Night, if there was one ("Blossom Fair").
     var festivalTonight: String?
+    /// T5 M8 v26: the end-of-ball bonus multiplier (1X–5X): each regular helped raises it; it goes back to 1X when a
+    /// ball is lost (the armchair keeps it). Shown on the LED strip from 2X.
+    var bonusX = 1
     /// Kept quietly (the plan: "best evening" lives in the collection book, not on the menu).
     var bestEvening = UserDefaults.standard.integer(forKey: lmpBestEveningKey)
 
@@ -73,5 +76,6 @@ final class LmpGameState {
         visitor = nil
         festivalLine = ""
         festivalTonight = nil
+        bonusX = 1
     }
 }

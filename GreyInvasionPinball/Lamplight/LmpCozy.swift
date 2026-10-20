@@ -3,11 +3,12 @@
 // cozy spots; each is a lamp on the left apron with the piece's icon, lit while it's placed and flashing while it acts,
 // and a banner names it the moment it helps. The same one sentence shows in the catalog and on the pause card.
 // First five pieces in round 3; the rocking chair and the window seat in T5 M8 v20 (the rocking chair relights the cat
-// flap, the plan's kickback); the cat bed in v21 (with the cat's gifts). The armchair waits for a bonus multiplier.
+// flap, the plan's kickback); the cat bed in v21 (with the cat's gifts); the armchair in v26 (with the end-of-ball bonus
+// and its multiplier).
 import Foundation
 
 nonisolated enum LmpCozy: String, CaseIterable, Codable {
-    case shopBell, teapot, readingLamp, ladder, clock, rockingChair, windowSeat, catBed
+    case shopBell, teapot, readingLamp, ladder, clock, rockingChair, windowSeat, catBed, armchair
 
     var name: String {
         switch self {
@@ -19,6 +20,7 @@ nonisolated enum LmpCozy: String, CaseIterable, Codable {
         case .rockingChair: return "Rocking chair"
         case .windowSeat: return "Window seat"
         case .catBed: return "Cat bed"
+        case .armchair: return "Armchair"
         }
     }
 
@@ -33,6 +35,7 @@ nonisolated enum LmpCozy: String, CaseIterable, Codable {
         case .rockingChair: return "The cat flap relights each time you help a regular."
         case .windowSeat: return "On a lucky evening, seasonal treasures turn up twice as often."
         case .catBed: return "The cat naps more and brings you twice as many gifts."
+        case .armchair: return "Your bonus multiplier is kept between balls."
         }
     }
 
@@ -49,6 +52,7 @@ nonisolated enum LmpCozy: String, CaseIterable, Codable {
         case .rockingChair: return 35
         case .windowSeat: return 40
         case .catBed: return 30
+        case .armchair: return 45
         }
     }
 
@@ -63,6 +67,7 @@ nonisolated enum LmpCozy: String, CaseIterable, Codable {
         case .rockingChair: return "chair.lounge.fill"
         case .windowSeat: return "sofa.fill"
         case .catBed: return "pawprint.fill"
+        case .armchair: return "chair.fill"
         }
     }
 }

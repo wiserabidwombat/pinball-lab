@@ -108,6 +108,8 @@ final class LmpTableScene: SKScene {
     /// T5 M8 v16: the fireplace has a book waiting (lit by completing the bank; the next fireplace finds it).
     private var fireplaceFindLit = false
     private var cozyIcons: [SKSpriteNode] = []
+    /// T5 M9 round 2: the fixed table is the baked art (lmp_lower / lmp_upper); the grey-box floor and walls hide under it.
+    private var hasTableArt = false
     #if DEBUG
     /// Milestone 5: the Shot Lab robot (debug builds) and its clock.
     private var shotLab: ShotLab?
@@ -249,6 +251,7 @@ final class LmpTableScene: SKScene {
 
     private func buildTable() {
         addFloor()
+        addTableArt()
         addWall(points: LmpTableLayout.outerWall,
                 friction: LmpTableLayout.railFriction, restitution: LmpTableLayout.railRestitution)
         addWall(points: LmpTableLayout.leftInlaneWall)
@@ -257,7 +260,7 @@ final class LmpTableScene: SKScene {
         addWall(points: LmpTableLayout.rightApron)
 
         for s in [LmpTableLayout.leftSling, LmpTableLayout.rightSling] {
-            let sling = LmpSlingshot(top: s.top, corner: s.corner, tip: s.tip, artBaked: false,
+            let sling = LmpSlingshot(top: s.top, corner: s.corner, tip: s.tip, artBaked: hasTableArt,
                                      kickFrom: LmpTableLayout.slingKickFrom, kickTo: LmpTableLayout.slingKickTo)
             addChild(sling)
             slingshots.append(sling)
@@ -284,7 +287,10 @@ final class LmpTableScene: SKScene {
         for (name, spot) in LmpTableLayout.shotArrows {
             let lamp = LmpLamp(.arrow(length: LmpTableLayout.arrowLength, width: LmpTableLayout.arrowWidth),
                                color: warm, at: spot.0, angle: spot.1)
-            if name == "windowSeat" { lamp.zPosition = 18 }          // over the loft's floor
+            if name == "windowSeat" {                                // over the loft's floor
+                lamp.zPosition = 18
+                lamp.position.y += LmpTableLayout.loftLift            // T5 M9 v3: on the raised loft
+            }
             addChild(lamp)
             lamps.add(lamp, named: name)
         }
@@ -438,29 +444,45 @@ final class LmpTableScene: SKScene {
         loftFloor.fillColor = SKColor(red: 0.30, green: 0.21, blue: 0.14, alpha: 1)
         loftFloor.strokeColor = .clear
         loftFloor.zPosition = 15
-        addChild(loftFloor)
+        if !hasTableArt { addChild(loftFloor) }       // T5 M9 v2: the loft's rug is in the baked art
 
         // The ramp: a translucent strip between its rails (floor balls show through underneath).
         let left = LmpTableLayout.rampRail(side: LmpTableLayout.rampHalfWidth)
         let right = LmpTableLayout.rampRail(side: -LmpTableLayout.rampHalfWidth)
+        // T5 M9 v3: drawn climbing from the floor at its mouth to the raised loft (each point lifted by its height);
+        // the physics rails stay flat underneath, undrawn, and these lifted lines stand in for them.
+        func lifted(_ pts: [CGPoint]) -> [CGPoint] {
+            pts.map { CGPoint(x: $0.x, y: $0.y + LmpTableLayout.upperHeight(at: $0) * LmpTableLayout.oblique) }
+        }
         let stripPath = CGMutablePath()
-        stripPath.addLines(between: left + right.reversed())
+        stripPath.addLines(between: lifted(left) + lifted(right).reversed())
         stripPath.closeSubpath()
         let strip = SKShapeNode(path: stripPath)
         strip.fillColor = SKColor(red: 0.55, green: 0.80, blue: 0.85, alpha: 0.22)
         strip.strokeColor = .clear
         strip.zPosition = 16
         addChild(strip)
+        for rail in [left, right] {
+            let railPath = CGMutablePath()
+            railPath.addLines(between: lifted(rail))
+            let line = SKShapeNode(path: railPath)
+            line.strokeColor = SKColor(red: 0.62, green: 0.86, blue: 0.92, alpha: 1)
+            line.lineWidth = 2.5
+            line.lineCap = .round
+            line.lineJoin = .round
+            line.zPosition = 17
+            addChild(line)
+        }
 
         // T5 M5 v6 (Shot Lab run 4: 60 Hz ramp shots got onto the ramp but ran out of speed in the turn, ~590 pt/s
         // at y 1000): the ramp's rails are low-friction rails like the outer wall, so the ball loses less speed
         // pressing the outside rail round the turn.
         for rail in [left, right] {
             addWall(points: rail, friction: LmpTableLayout.railFriction, restitution: LmpTableLayout.railRestitution,
-                    category: LmpPhysicsCategory.rampWall, z: 17)
+                    category: LmpPhysicsCategory.rampWall, z: 17, drawn: false)
         }
         for wall in LmpTableLayout.loftWalls {
-            addWall(points: wall, category: LmpPhysicsCategory.rampWall, z: 17)
+            addWall(points: wall, category: LmpPhysicsCategory.rampWall, z: 17, drawn: !hasTableArt)   // baked rails
         }
 
         loftFlipper = LmpFlipper(side: .right, pivot: LmpTableLayout.loftFlipperPivot,
@@ -469,12 +491,15 @@ final class LmpTableScene: SKScene {
                                  tipRadius: LmpTableLayout.loftFlipperTipRadius)
         loftFlipper.zPosition = 20
         loftFlipper.attach(to: self)
+        loftFlipper.drawnLift = LmpTableLayout.loftLift                  // T5 M9 v3: on the raised loft
         loftFlipper.physicsBody?.categoryBitMask = LmpPhysicsCategory.loftFlipper
         loftFlipper.physicsBody?.collisionBitMask = LmpPhysicsCategory.rampBall
 
         windowSeat = LmpScoop(at: LmpTableLayout.windowSeatCenter, ejectVelocity: LmpTableLayout.windowSeatEject,
                               points: LmpTableLayout.windowSeatPoints, captureRadius: LmpTableLayout.windowSeatCapture)
         windowSeat.zPosition = 18
+        // T5 M9 v3: drawn on the raised loft; the node (which catches by distance from its position) stays put.
+        for child in windowSeat.children { child.position.y += LmpTableLayout.loftLift }
         addChild(windowSeat)
         scoops.append(windowSeat)
     }
@@ -561,11 +586,27 @@ final class LmpTableScene: SKScene {
         addChild(pocket)
     }
 
+    /// T5 M9 round 2: the fixed table rendered in Blender, in two images at z -19 (Table 03's split). The grey-box floor
+    /// (z -20) and every floor wall line (z -19.5) sit underneath it; the ramp, loft flipper and all moving parts draw
+    /// on top as before. Missing images = the grey box, as before.
+    private func addTableArt() {
+        guard UIImage(named: "lmp_lower") != nil, UIImage(named: "lmp_upper") != nil else { return }
+        for (name, rect) in [("lmp_lower", LmpTableLayout.lowerArtRect), ("lmp_upper", LmpTableLayout.upperArtRect)] {
+            let art = SKSpriteNode(imageNamed: name)
+            art.size = rect.size
+            art.position = CGPoint(x: rect.midX, y: rect.midY)
+            art.zPosition = -19
+            addChild(art)
+        }
+        hasTableArt = true
+    }
+
     private func addWall(points: [CGPoint],
                          friction: CGFloat = LmpTableLayout.wallFriction,
                          restitution: CGFloat = LmpTableLayout.wallRestitution,
                          category: UInt32 = LmpPhysicsCategory.wall,
-                         z: CGFloat = -19.5) {
+                         z: CGFloat = -19.5,
+                         drawn: Bool = true) {
         let path = CGMutablePath()
         path.addLines(between: points)
 
@@ -587,6 +628,7 @@ final class LmpTableScene: SKScene {
             node.strokeColor = SKColor(red: 0.62, green: 0.86, blue: 0.92, alpha: 1)   // grey box: loft and ramp rails
             node.lineWidth = 2.5
         }
+        if !drawn { node.strokeColor = .clear }     // T5 M9 v2: the wall is in the baked art
 
         addChild(node)
     }
@@ -596,8 +638,8 @@ final class LmpTableScene: SKScene {
     private func addCenterPost() {
         let r = LmpTableLayout.centerPostRadius
         let post = SKShapeNode(circleOfRadius: r)
-        post.fillColor = Self.rubberColor
-        post.strokeColor = Self.wallColor
+        post.fillColor = hasTableArt ? .clear : Self.rubberColor       // T5 M9 v2: the post is in the baked art
+        post.strokeColor = hasTableArt ? .clear : Self.wallColor
         post.lineWidth = 2
         post.position = LmpTableLayout.centerPost
         post.zPosition = 1
@@ -721,7 +763,7 @@ final class LmpTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T5 M8 v26")
+        let label = SKLabelNode(text: "T5 M9 v4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -767,7 +809,7 @@ final class LmpTableScene: SKScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T5 M8 v26 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T5 M9 v4 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1131,6 +1173,7 @@ final class LmpTableScene: SKScene {
     }
 
     override func didSimulatePhysics() {
+        loftFlipper?.liftDrawing()                                        // T5 M9 v3: its picture on the raised loft
         let line = LmpTableLayout.rightOutlaneLine
         for ball in balls {
             guard let body = ball.physicsBody else { continue }
@@ -1183,6 +1226,7 @@ final class LmpTableScene: SKScene {
                 }
             }
             ball.previousPosition = p
+            ball.height = surfaceHeight(of: ball)
             ball.updateLook()
         }
     }
@@ -1466,6 +1510,15 @@ final class LmpTableScene: SKScene {
     // MARK: - The loft (milestone 3)
 
     /// Carries a ball along a straight line onto the loft (no collisions on the way), then lets it go.
+    /// T5 M9 v3: how high the surface under a ball is, for drawing it (the raised loft, the ramp, the chute). Both
+    /// rides (the hatch and the dumbwaiter) end on the loft, so a riding ball rises as it goes.
+    private func surfaceHeight(of ball: LmpBall) -> CGFloat {
+        if let ride = ball.ride {
+            return LmpTableLayout.loftHeight * CGFloat(min(max((gameTime - ride.start) / ride.duration, 0), 1))
+        }
+        return ball.isUpper ? LmpTableLayout.upperHeight(at: ball.position) : 0
+    }
+
     private func startRide(_ ball: LmpBall, to end: CGPoint, seconds: TimeInterval, exit: CGVector) {
         ball.setUpper(true)
         ball.ride = (from: ball.position, to: end, start: gameTime, duration: seconds, exit: exit)

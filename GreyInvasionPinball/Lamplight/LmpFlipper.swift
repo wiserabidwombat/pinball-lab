@@ -111,6 +111,16 @@ final class LmpFlipper: SKNode {
         body.velocity = CGVector(dx: v.dx + (surface - vn) * n.dx, dy: v.dy + (surface - vn) * n.dy)
     }
 
+    /// T5 M9 v3: the loft flipper stands on the raised loft, so its picture draws this much higher than its physics
+    /// (straight up the screen whatever its angle). The scene calls liftDrawing() after each physics step.
+    var drawnLift: CGFloat = 0 { didSet { liftDrawing() } }
+    func liftDrawing() {
+        guard drawnLift != 0 else { return }
+        let a = -zRotation
+        let offset = CGPoint(x: -drawnLift * sin(a), y: drawnLift * cos(a))
+        for child in children { child.position = offset }
+    }
+
     private func buildShape() {
         let len = length
         let r0 = pivotRadius

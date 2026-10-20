@@ -105,14 +105,21 @@ final class LmpBall: SKNode {
     }
 
     /// Keeps the highlight and the shadow fixed in world space while the body rolls (after physics).
+    /// T5 M9 v3: how high the surface under the ball is (the raised loft, the ramp, the chute); set by the scene each
+    /// frame. The drawn ball and its shadow ease toward it, so a drop off the loft's edge reads as a little fall.
+    var height: CGFloat = 0
+    private var shownHeight: CGFloat = 0
+
     func updateLook() {
         let a = -zRotation
         visual.zRotation = a
-        let lift = heldIn == nil ? Self.lift : 0
+        shownHeight += (height - shownHeight) * 0.35
+        let raised = shownHeight * LmpTableLayout.oblique
+        let lift = (heldIn == nil ? Self.lift : 0) + raised
         visual.position = CGPoint(x: -lift * sin(a), y: lift * cos(a))
         shadow.zRotation = a
-        shadow.position = CGPoint(x: shadowOffset.dx * cos(a) - shadowOffset.dy * sin(a),
-                                  y: shadowOffset.dx * sin(a) + shadowOffset.dy * cos(a))
+        let sx = shadowOffset.dx, sy = shadowOffset.dy + raised
+        shadow.position = CGPoint(x: sx * cos(a) - sy * sin(a), y: sx * sin(a) + sy * cos(a))
         if trail.targetNode == nil { trail.targetNode = scene }
         trail.position = visual.position
         let v = physicsBody?.velocity ?? .zero

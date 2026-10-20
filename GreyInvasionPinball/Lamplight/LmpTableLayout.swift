@@ -41,6 +41,10 @@ enum LmpTableLayout {
     /// Rendered part boxes (none yet: the parts fall back to their grey-box shapes). Kept so the copied parts build.
     static let upperFlipperArtBox = CGRect(x: -76, y: -15, width: 91, height: 30)
     static let launchGateArtBox = CGRect(x: -35, y: -37, width: 47, height: 48)
+    /// T5 M9 round 2: the fixed table baked in Blender (tools/lmp_bake_table.py, cut by tools/lmp_split_table.py) at
+    /// 3 px/pt: lmp_lower.png covers this rect, lmp_upper.png the one above it (Table 03's split at y 525).
+    static let lowerArtRect = CGRect(x: -40, y: -75, width: 680, height: 600)
+    static let upperArtRect = CGRect(x: -40, y: 525, width: 680, height: 805)
 
     /// A sprite placed by its art box (size + anchor), or nil when the image isn't in the app (grey box then).
     static func artSprite(_ name: String, box: CGRect) -> SKSpriteNode? {
@@ -398,6 +402,28 @@ enum LmpTableLayout {
          loftFlipperGuide]
     }
     /// The loft's floor, for drawing.
+    /// T5 M9 v3 (Aaron: "the loft doesn't really feel like a loft"): the baked art raises the loft 20 pt on a walnut
+    /// platform, so everything drawn on it (the ball, the loft flipper, the window seat, its lamp, the cat on the
+    /// cushion) draws loftLift higher than its physics, and the chute and the ramp slope between the floor and it.
+    /// Physics is unchanged: this is how high the surface under an upper-layer ball is, for drawing only.
+    static let loftHeight: CGFloat = 20
+    static var loftLift: CGFloat { loftHeight * oblique }
+    private static let loftFloorPath: CGPath = {
+        let p = CGMutablePath(); p.addLines(between: loftFloor); p.closeSubpath(); return p
+    }()
+    /// The chute's low end (the loft's exit switch, in the left lane).
+    static let chuteLowX: CGFloat = 46
+    static func upperHeight(at p: CGPoint) -> CGFloat {
+        if p.x > loftRightX + 4 {
+            // The ramp: climbs along its first straight from the mouth, level from the turn to the loft's door.
+            let along = (p.x - rampMouth.x) * cos(rampHeading) + (p.y - rampMouth.y) * sin(rampHeading)
+            return loftHeight * min(max(along / rampStraightLength, 0), 1)
+        }
+        if p.y >= loftBottomY || loftFloorPath.contains(p) { return loftHeight }
+        // The chute: down from the loft's lower right to the left lane.
+        return loftHeight * min(max((p.x - chuteLowX) / (loftRightX - chuteLowX), 0), 1)
+    }
+
     static var loftFloor: [CGPoint] {
         [loftSlope[1], loftSlope[0]] + loftOutline.filter { $0.y > loftSlope[0].y }
             + [loftTopRight, CGPoint(x: loftRightX, y: loftBottomY),
@@ -615,7 +641,8 @@ enum LmpTableLayout {
 
     // MARK: Cozy spots (milestone 8 round 3)
     /// Three lamps on the left apron, under the slope and below the shop lamps, one per cozy spot.
-    static let cozyLamps: [CGPoint] = [CGPoint(x: 70, y: 148), CGPoint(x: 118, y: 131), CGPoint(x: 166, y: 114)]
+    /// T5 M9 v4 (Aaron: they sat on the apron's gold pinstripes): 24 pt lower, clear of both lines (was y 148/131/114).
+    static let cozyLamps: [CGPoint] = [CGPoint(x: 70, y: 124), CGPoint(x: 118, y: 107), CGPoint(x: 166, y: 90)]
     static let cozyLampRadius: CGFloat = 10
     /// The grandfather clock's ball save at the start of each ball.
     /// T5 M8 v8: 8 (was 3). In two Play Lab runs a 3 s save never fired: a ball almost never drains that soon after a

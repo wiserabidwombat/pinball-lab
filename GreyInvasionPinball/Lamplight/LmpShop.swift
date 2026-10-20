@@ -163,7 +163,7 @@ nonisolated enum LmpPerch: String, CaseIterable, Codable {
         case .shelf: return CGPoint(x: 370, y: 1175)
         case .mantel: return CGPoint(x: 252, y: 877)
         case .kettle: return CGPoint(x: 134, y: 945)
-        case .windowSeat: return CGPoint(x: 165, y: 1140)
+        case .windowSeat: return CGPoint(x: 165, y: 1140 + LmpTableLayout.loftLift)   // T5 M9 v3: on the raised loft
         }
     }
 }

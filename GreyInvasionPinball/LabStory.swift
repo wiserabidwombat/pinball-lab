@@ -378,6 +378,10 @@ struct LabCreditsView: View {
                     credit("Impact Sounds (flippers, slings, targets, holes, gates)", "Kenney · kenney.nl",
                            "CC0 1.0 (public domain), edited and levelled for the table")
                 }
+                Section("Table 05 · The Lamplight") {
+                    credit("Table art (the shop floor, rug, fireplace, loft, cabinet and rails)",
+                           "Painted and rendered in Blender for this table", "Original")
+                }
                 Section {
                     Text("Thanks to Kenney for the free game assets.")
                         .foregroundStyle(.secondary)

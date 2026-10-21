@@ -12,6 +12,7 @@ struct LmpCollectionView: View {
     @State private var selected: LmpBook?
     @State private var confirmNewShop = false
     @State private var tab: Tab = .shop
+    @State private var pulled: String?                 // T5 M9 v47: the book slid up off its shelf
     private var shop: LmpShop { LmpShop.shared }
 
     private enum Tab: String, CaseIterable { case shop = "The Shop", books = "Books", catalog = "The Catalog" }
@@ -60,6 +61,9 @@ struct LmpCollectionView: View {
             .sheet(item: $selected) { book in
                 bookCard(book)
                     .presentationDetents([.height(260)])
+            }
+            .onChange(of: selected) { _, now in
+                if now == nil { withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { pulled = nil } }
             }
             .alert("Start a new shop?", isPresented: $confirmNewShop) {
                 Button("Start over", role: .destructive) { shop.startNewShop() }
@@ -344,67 +348,193 @@ struct LmpCollectionView: View {
         }
     }
 
+    // MARK: - Shelves (T5 M9 v47: real spines on a walnut shelf)
+    // Every genre is a shelf of up to 10 books a row, standing upright with their spines out between brass bookends.
+    // The edition shows in the spine: a paperback is thin and plain; a hardback cloth with two gilt bands; an illustrated
+    // edition adds a gold title and an emblem; the two rarest are leather with raised bands and gilt lettering, the first
+    // edition with gilt edges and a warm shine. A missing book is a gap with a faint outline (its rarity's colour at the
+    // foot). Tap a book: it slides up off the shelf and its card opens.
+
+    private static let booksPerRow = 10
+    private static let rowHeight: CGFloat = 118
+    private static let brass = LinearGradient(colors: [Color(red: 0.98, green: 0.84, blue: 0.52), Color(red: 0.72, green: 0.52, blue: 0.24),
+                                                       Color(red: 0.92, green: 0.74, blue: 0.40)], startPoint: .leading, endPoint: .trailing)
+    private static let gilt = Color(red: 0.95, green: 0.78, blue: 0.42)
+
     private func shelf(_ genre: String, books given: [LmpBook]? = nil) -> some View {
         let books = given ?? LmpShop.books.filter { $0.genre == genre }
         let owned = books.filter { shop.owns($0) }.count
-        return VStack(alignment: .leading, spacing: 10) {
+        let rows = stride(from: 0, to: books.count, by: Self.booksPerRow).map {
+            Array(books[$0..<min($0 + Self.booksPerRow, books.count)])
+        }
+        let complete = owned == books.count
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(genre.uppercased())
                     .font(.orbitron(13, .bold))
                     .tracking(1.5)
                     .foregroundStyle(.white.opacity(0.9))
                 Spacer()
-                Text(owned == books.count ? "SHELF COMPLETE" : "\(owned) / \(books.count)")
+                Text(complete ? "SHELF COMPLETE" : "\(owned) / \(books.count)")
                     .font(.orbitron(12, .bold))
-                    .foregroundStyle(owned == books.count ? LmpTableView.gold : .white.opacity(0.55))
+                    .foregroundStyle(complete ? LmpTableView.gold : .white.opacity(0.55))
             }
-            LazyVGrid(columns: Self.columns, spacing: 8) {
-                ForEach(books) { book in
-                    spine(book)
-                        .onTapGesture { if shop.owns(book) { selected = book } }
+            VStack(spacing: 0) {
+                ForEach(rows.indices, id: \.self) { i in
+                    shelfRow(rows[i], plate: complete && i == rows.count - 1)
                 }
             }
-            Rectangle()                                   // the shelf board
-                .fill(Color(red: 0.42, green: 0.28, blue: 0.16))
-                .frame(height: 5)
-                .clipShape(RoundedRectangle(cornerRadius: 2))
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .background(                                            // the bookcase's dark back and walnut sides
+                LinearGradient(colors: [Color(red: 0.09, green: 0.06, blue: 0.04), Color(red: 0.16, green: 0.10, blue: 0.06)],
+                               startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.36, green: 0.22, blue: 0.12), lineWidth: 3))
         }
     }
 
-    /// A found book: its title on a warm cover with a rarity ribbon. A missing one: a dark silhouette, ribbon dimmed.
-    private func spine(_ book: LmpBook) -> some View {
-        let found = shop.owns(book)
-        let ribbon = LmpTableView.rarityColor(book.rarity)
-        return ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(found ? Self.cover(book) : Color.white.opacity(0.06))
-            RoundedRectangle(cornerRadius: 5)
-                .stroke(found ? ribbon.opacity(0.9) : Color.white.opacity(0.12), lineWidth: found ? 1.5 : 1)
-            Rectangle()
-                .fill(ribbon.opacity(found ? 1 : 0.35))
-                .frame(height: 5)
-                .clipShape(RoundedRectangle(cornerRadius: 2))
-                .padding(.horizontal, 6)
-                .padding(.top, 5)
-            Group {
-                if found {
-                    Text(book.title)
-                        .font(.system(size: 10.5, weight: .semibold, design: .serif))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .minimumScaleFactor(0.7)
-                } else {
-                    Text("?")
-                        .font(.system(size: 22, weight: .bold, design: .serif))
-                        .foregroundStyle(.white.opacity(0.25))
+    /// One row of books between bookends, standing on a walnut board, scaled down to fit narrow screens.
+    private func shelfRow(_ books: [LmpBook], plate: Bool) -> some View {
+        let natural = books.reduce(CGFloat(0)) { $0 + Self.spineSize($1).width + 2 } + 2 * 9
+        return VStack(spacing: 0) {
+            GeometryReader { geo in
+                let k = min(1, geo.size.width / natural)
+                HStack(alignment: .bottom, spacing: 2) {
+                    bookend()
+                    ForEach(books) { book in
+                        spine(book)
+                            .offset(y: pulled == book.id ? -14 : 0)
+                            .onTapGesture {
+                                guard shop.owns(book) else { return }
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { pulled = book.id }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { selected = book }
+                            }
+                    }
+                    bookend()
+                }
+                .scaleEffect(k, anchor: .bottomLeading)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomLeading)
+            }
+            .frame(height: Self.rowHeight)
+            ZStack {                                               // the shelf board
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(LinearGradient(colors: [Color(red: 0.55, green: 0.35, blue: 0.19), Color(red: 0.32, green: 0.19, blue: 0.09)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .frame(height: 10)
+                    .shadow(color: .black.opacity(0.6), radius: 3, y: 3)
+                if plate {
+                    Text("COMPLETE")
+                        .font(.system(size: 7, weight: .heavy, design: .serif))
+                        .tracking(1)
+                        .foregroundStyle(Color(red: 0.25, green: 0.15, blue: 0.05))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Self.brass, in: RoundedRectangle(cornerRadius: 2))
                 }
             }
-            .padding(.horizontal, 5)
-            .padding(.top, 14)
-            .frame(maxHeight: .infinity)
+            .padding(.bottom, 10)
         }
-        .frame(height: 82)
-        .accessibilityLabel(found ? "\(book.title), \(book.rarity.name)" : "Missing \(book.rarity.name) book")
+    }
+
+    private func bookend() -> some View {
+        UnevenRoundedRectangle(topLeadingRadius: 4, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 4)
+            .fill(Self.brass)
+            .frame(width: 7, height: 66)
+            .shadow(color: .black.opacity(0.5), radius: 1.5, x: 1)
+    }
+
+    /// A stable size per book: width by edition (thicker as it gets rarer), height varied a little by its id.
+    private static func spineSize(_ book: LmpBook) -> CGSize {
+        let seed = book.id.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
+        let widths: [LmpRarity: CGFloat] = [.common: 22, .uncommon: 26, .rare: 28, .veryRare: 30, .ultraRare: 32]
+        let w = (widths[book.rarity] ?? 26) + CGFloat(seed % 4)
+        let h = 86 + CGFloat(seed % 23)
+        return CGSize(width: w, height: h)
+    }
+
+    /// A book standing on the shelf: its spine as the edition dresses it, or a gap where a missing one will go.
+    @ViewBuilder
+    private func spine(_ book: LmpBook) -> some View {
+        let size = Self.spineSize(book)
+        let ribbon = LmpTableView.rarityColor(book.rarity)
+        if shop.owns(book) {
+            let base = Self.cover(book)
+            let r = book.rarity
+            let cloth = r == .common ? base.opacity(0.75) : base
+            let leather = r >= .veryRare
+            ZStack {
+                RoundedRectangle(cornerRadius: r == .common ? 1.5 : 3)
+                    .fill(LinearGradient(colors: [cloth.opacity(0.55), cloth, cloth.opacity(0.85), .black.opacity(0.55)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .background(RoundedRectangle(cornerRadius: 3).fill(leather ? Color(red: 0.12, green: 0.06, blue: 0.03) : base))
+                if r == .common {                                   // a paperback: a little white publisher's mark
+                    Circle().fill(.white.opacity(0.7)).frame(width: 5, height: 5)
+                        .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 6)
+                }
+                if r >= .uncommon && !leather {                     // cloth with two gilt bands
+                    VStack {
+                        band(); Spacer(); band()
+                    }
+                    .padding(.vertical, 7)
+                }
+                if leather {                                        // raised bands across the leather
+                    VStack(spacing: 0) {
+                        ForEach(0..<5, id: \.self) { i in
+                            if i > 0 { Spacer() }
+                            ridge()
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+                if r == .rare {                                     // an illustrated edition's little emblem
+                    Image(systemName: "seal.fill")
+                        .font(.system(size: 7))
+                        .foregroundStyle(Self.gilt)
+                        .frame(maxHeight: .infinity, alignment: .top).padding(.top, 14)
+                }
+                Text(book.title)
+                    .font(.system(size: 9, weight: r >= .rare ? .bold : .semibold, design: .serif))
+                    .foregroundStyle(r >= .rare ? Self.gilt : .white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.4)
+                    .frame(width: size.height - 34, height: size.width - 6)
+                    .rotationEffect(.degrees(90))
+                    .frame(width: size.width, height: size.height - 34)
+            }
+            .frame(width: size.width, height: size.height)
+            .overlay(alignment: .top) {                             // a first edition's gilt top edge
+                if r == .ultraRare {
+                    Rectangle().fill(Self.gilt).frame(height: 2).padding(.horizontal, 2)
+                }
+            }
+            .shadow(color: r == .ultraRare ? Self.gilt.opacity(0.55) : .black.opacity(0.5), radius: r == .ultraRare ? 5 : 1.5, x: 1)
+            .accessibilityLabel("\(book.title), \(book.rarity.name)")
+        } else {
+            RoundedRectangle(cornerRadius: 3)
+                .strokeBorder(Color.white.opacity(0.14), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .overlay(alignment: .bottom) {
+                    Capsule().fill(ribbon.opacity(0.4)).frame(width: size.width * 0.5, height: 3).padding(.bottom, 4)
+                }
+                .frame(width: size.width, height: size.height)
+                .accessibilityLabel("Missing \(book.rarity.name) book")
+        }
+    }
+
+    private func band() -> some View {
+        VStack(spacing: 2) {
+            Rectangle().fill(Self.gilt).frame(height: 1.2)
+            Rectangle().fill(Self.gilt).frame(height: 1.2)
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func ridge() -> some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(.white.opacity(0.22)).frame(height: 1)
+            Rectangle().fill(.black.opacity(0.45)).frame(height: 1.5)
+        }
+        .padding(.horizontal, 1)
     }
 
     /// Each genre's covers share a colour family.

@@ -64,6 +64,18 @@ struct CthTableView: View {
         .onAppear {
             // Game controller: A = Play / Resume / Play Again, Menu = pause (flippers and plunger: the scene)
             LabGamepad.shared.claim("cthulhu", onA: { gamepadA() }, onMenu: { gamepadMenu() })
+            #if DEBUG
+            // Launched with `-playlab cthulhu`: run the Play Lab unattended (the scene quits the app when done).
+            if PlayLab.launchTable == "cthulhu" {
+                Task { @MainActor in
+                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }   // built in didMove
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartPlayLab()
+                }
+            }
+            #endif
         }
         .onDisappear { LabGamepad.shared.release("cthulhu") }
         .onChange(of: scenePhase) { _, phase in
@@ -291,6 +303,8 @@ struct CthTableView: View {
             .padding(.top, 4)
             // Sling Lab (milestone 5 round 2): the same balls thrown at four sling designs (~30 min).
             debugButton("Sling Lab") { scene.debugStartSlingLab(); setPaused(false) }
+            // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator).
+            debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
             // Rules shortcuts (M7 v2): skip ahead through the tomes, or straight to the Ritual.
             HStack(spacing: 8) {
                 debugButton("Skip Tome") { scene.debugSkipTome(); setPaused(false) }

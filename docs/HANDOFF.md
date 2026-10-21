@@ -838,3 +838,22 @@ Second iPhone pinball table, after the Orbit Pinball proof of concept. Theme: de
 - Aaron (09:51): "Next round!" → M11 v2 (plastic mesa ramp, sky a little at a time) taken as passed.
 - T4 M11 v3 (polish round 2): LabStory Table 04 — finished stats (frame rate "even in the storm"; art "watercolor … with parts rendered in 3D"; sounds "36 effects and a four-layer storm"; code "About 6,500 lines in 21 files" — counted on the Mac, Monsoon/ only; testing "Shot Lab robot and a game simulator"), new-since notes (+ a storm that builds, parts that color in), lessons (check effects on the phone; paint should follow the rules; a toy can steer the game; contrast on paper). LabHome: built "Oct 2026 · table four". Card picture mon_lab_thumb replaced by tools/mon_lab_thumb_table.py: two full-table renders by mon_howto_map.py (color, and pencil: _sketch art + sketch parts copied as mon_bumper/mon_standup.png) mixed by a ragged bloom from the arroyo and lower left, crop world x −25…625, y 140…1300 → 420x750. Tag "T4 M11 v3". Committed and verified (PNG pixels identical).
   - Next: last polish notes from Aaron, tick milestone 11, then milestone 12 = TestFlight build 2 (Pinball Lab with Table 04): bump the build number, Archive, Upload.
+
+## Play Lab for every table — round 1: the shared Play Lab (2026-10-17, T5 M8 v6)
+(Full notes: the claude.ai Project's gi-starter/HANDOFF.md + HANDOFF-2.md. This file is a snapshot for git.)
+- PlayLab.swift (new, top level, DEBUG): the Lamplight robot generalized for every table — four skills, 120 Hz and
+  60 Hz physics passes, an objectives manifest per table (PlayObjective), PlayLabHost protocol, launch arguments
+  `-playlab <table> [-playlab-games N] [-playlab-hz 120|60|both] [-playlab-skills a,b] [-playlab-cap S]`; quits
+  when the report is saved so tools/playlab_run.sh can run it unattended in the Simulator.
+- Lamplight adopts PlayLabHost (objectives: request, rush, fireplaceOpen, fireplace, find, loft, windowSeat,
+  loopCombo, luckyEvening, mail, cat; the robot aims at the request's step, then fast-blinking, then blinking shot
+  arrows via LmpLampController.state(of:)). LmpPlayLab.swift removed.
+- tools/playlab_report.py: per pass × skill tables, objectives reached % + median time, aim accuracy, incidents,
+  too-hard flags; tools/playlab_run.sh: boot the Simulator, build, launch with the arguments, print the report.
+
+## Play Lab run 1 on The Lamplight (2026-10-17) — for the table agent (full notes: Project gi-starter/HANDOFF-2.md)
+- The loft is a farm: the window seat ejects back onto the loft flipper; advanced/expert robots made it 105/109 and
+  138/138 and hit the 8-min cap on ball 1 (~700 K, 180 books). Fix: one window seat per loft visit — after the first
+  catch on a visit, later window seats score less and eject down the chute to the lower table (per-ball flag cleared
+  when the ball leaves the upper layer; windowSeat lamp off for that ball). Then re-run `tools/playlab_run.sh lamplight 1 120`.
+- Watch: cradle bookshelf aims low (0/4, 1/2) vs the Shot Lab's 97%; mail 0/2. Watchdog: 0 incidents.

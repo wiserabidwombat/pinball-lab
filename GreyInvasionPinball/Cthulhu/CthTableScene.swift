@@ -33,6 +33,12 @@ final class CthTableScene: SKScene {
     private var shotLabTime: TimeInterval = 0
     /// This run keeps Cthulhu up and swaying (the Lagoon is then a moving target, not a hole).
     private var shotLabCthulhuUp = false
+    /// Play Lab (shared, PlayLab.swift): the run, when its next game starts, and the robot's buttons.
+    private var playLab: PlayLab?
+    private var playLabNextAt: TimeInterval?
+    private var playLabStarting = false
+    private var robotLeft = false
+    private var robotRight = false
     /// The slingshot test (milestone 5 round 2): throws the same balls at each sling design.
     private var slingLab: CthSlingLab?
     private var slingLabTime: TimeInterval = 0
@@ -134,6 +140,7 @@ final class CthTableScene: SKScene {
             guard isAttractMode != oldValue else { return }
             #if DEBUG
             if isAttractMode { shotLab = nil; stopSlingLab() }   // Menu stops the Shot Lab and the Sling Lab
+            if isAttractMode { stopPlayLab(saving: true) }      // and the Play Lab (saving the games so far)
             #endif
             physicsWorld.speed = isAttractMode ? 0 : 1
             if isAttractMode { releaseAllControls(); sound.stopLoop() }
@@ -1319,7 +1326,10 @@ final class CthTableScene: SKScene {
         case .rampUp: layer = "ramp up"
         case .rampDown: layer = "wire"
         }
-        let text = "\(fps)T3 M11 v1 \(effectiveCameraMode.tag) · \(layer) · \(speed)"
+        var text = "\(fps)T3 M11 v1 \(effectiveCameraMode.tag) · \(layer) · \(speed)"
+        #if DEBUG
+        if let lab = playLab { text += "\n" + lab.progressText }
+        #endif
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1389,6 +1399,7 @@ final class CthTableScene: SKScene {
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                              // a new game (or Menu) stops the Shot Lab
         stopSlingLab()
+        if !playLabStarting { stopPlayLab(saving: true) }   // and the Play Lab, unless it's starting its next game
         #endif
         isAttractMode = false
         padAArmed = false                          // the A press that started the game isn't a plunger pull
@@ -1424,13 +1435,17 @@ final class CthTableScene: SKScene {
     }
 
     private func showBanner(_ text: String) {
+        #if DEBUG
+        playLab?.banner(text)
+        labObjective(forBanner: text)
+        #endif
         game.banner = text
         bannerClearAt = gameTime + CthTableLayout.bannerSeconds
     }
 
     private func sfx(_ s: CthSound) {
         #if DEBUG
-        if shotLab != nil || slingLab != nil { return }   // the robots play silently
+        if shotLab != nil || slingLab != nil || playLab != nil { return }   // the robots play silently
         #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }
@@ -1489,8 +1504,12 @@ final class CthTableScene: SKScene {
         #if DEBUG
         if shotLab != nil || slingLab != nil { return }   // a lab robot has the flippers
         #endif
-        let left = activeTouches.values.contains(.left) || padLeft
-        let right = activeTouches.values.contains(.right) || padRight
+        var left = activeTouches.values.contains(.left) || padLeft
+        var right = activeTouches.values.contains(.right) || padRight
+        #if DEBUG
+        left = left || robotLeft
+        right = right || robotRight
+        #endif
         if left && !leftFlipper.isPressed { rotateLanes(by: -1); sfx(.flipper) }
         if right && !rightFlipper.isPressed { rotateLanes(by: 1); sfx(.flipper) }
         leftFlipper.isPressed = left
@@ -1562,7 +1581,10 @@ final class CthTableScene: SKScene {
     // MARK: - Game loop
 
     override func update(_ realTime: TimeInterval) {
-        let step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        var step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        #if DEBUG
+        if let lab = playLab { step *= Double(lab.physicsSpeed) }   // the Play Lab's pass: 120 Hz or 60 Hz steps
+        #endif
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
@@ -1584,6 +1606,9 @@ final class CthTableScene: SKScene {
         let dt = CGFloat(step)
         lastStep = dt
         updateGamepad()
+        #if DEBUG
+        updatePlayLab(now)
+        #endif
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         upperFlipper.step(dt: dt)
@@ -1669,6 +1694,10 @@ final class CthTableScene: SKScene {
             nextBallAt = nil
             placeBallOnPlunger()
         }
+
+        #if DEBUG
+        checkPlayLabGame(now)
+        #endif
 
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
@@ -1785,6 +1814,7 @@ extension CthTableScene {
     fileprivate func labEvent(_ name: String) {
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
+        playLab?.shot(name, now: gameTime)
         #endif
     }
 
@@ -1995,3 +2025,213 @@ extension CthTableScene: SKPhysicsContactDelegate {
         }
     }
 }
+
+// MARK: - Play Lab host (debug builds)
+
+#if DEBUG
+extension CthTableScene: PlayLabHost {
+    var playLabTableName: String { "Cthulhu Rising" }
+    var playLabBallRadius: CGFloat { CthTableLayout.ballRadius }
+    var playLabVariantCount: Int { 1 }
+
+    /// The three acts as the How to Play tells them, plus the saves and the side goals.
+    var playLabObjectives: [PlayObjective] {
+        [PlayObjective(name: "clue", text: "Find a clue (ramp, orbit, Lagoon, all three Candle lanes, or the Sigil bank)"),
+         PlayObjective(name: "libraryLit", text: "Two clues light the Library"),
+         PlayObjective(name: "tome1", text: "Open Tome I · Necronomicon at the lit Library"),
+         PlayObjective(name: "tome1Read", text: "Read Tome I (40 pages in 50 s: spinner spins, ramps ×10)"),
+         PlayObjective(name: "tome2", text: "Open Tome II · Pnakotic Manuscripts"),
+         PlayObjective(name: "tome2Read", text: "Read Tome II (two lit shots within 30 s)"),
+         PlayObjective(name: "tome3", text: "Open Tome III · Sea Captain's Log"),
+         PlayObjective(name: "tome3Read", text: "Read Tome III (clear the Sigil bank, then the ramp)"),
+         PlayObjective(name: "ritualLit", text: "All three tomes read: the Library lights the Ritual"),
+         PlayObjective(name: "ritual", text: "Start the Ritual (2-ball multiball)"),
+         PlayObjective(name: "candle", text: "Light a Ritual candle (orbit, ramp, Library, Lagoon, a Sigil target)"),
+         PlayObjective(name: "summoning", text: "The Summoning: all five candles"),
+         PlayObjective(name: "awakening", text: "The Awakening: Cthulhu rises (3-ball multiball)"),
+         PlayObjective(name: "tentacleCut", text: "Cut a tentacle (Cthulhu, the ramp or the orbit)"),
+         PlayObjective(name: "eyeOpen", text: "All four tentacles cut: the eye opens"),
+         PlayObjective(name: "eyeStruck", text: "Strike the eye (hit Cthulhu)"),
+         PlayObjective(name: "banished", text: "Banish Cthulhu (three eye hits)"),
+         PlayObjective(name: "candlesLit", text: "Finish all three Candle lanes (+1X)"),
+         PlayObjective(name: "sigilsBroken", text: "Clear the Sigil bank"),
+         PlayObjective(name: "kickback", text: "Light the kickback"),
+         PlayObjective(name: "skillShot", text: "Plunge into the lit Candle lane")]
+    }
+
+    /// Flip delays = the middle of each shot's window in the Shot Lab runs of 2026-10-13 (16-18 Cthulhu down, 16-59
+    /// Cthulhu up: his sway makes the Lagoon line the "cthulhu" shot). Candle-lane flips aren't aimed shots.
+    var playLabFlippers: [PlayRobotFlipper] {
+        let specs = shotLabFlippers
+        let rest = CthTableLayout.flipperRestAngle
+        return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: CthTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
+                                 shots: [("library", 0.298), ("lagoon", 0.347), ("cthulhu", 0.366), ("rightRamp", 0.446),
+                                         ("sigil", 0.528)],
+                                 shots60: [("library", 0.318), ("lagoon", 0.358), ("cthulhu", 0.377), ("rightRamp", 0.434),
+                                           ("sigil", 0.500)]),
+                PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: CthTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
+                                 // No sigil from the right: the Shot Lab's "window" there is a 1–2 trial sliver at the
+                                 // end of the sweep (0/17 in Play Lab runs 1–2); the left flipper takes the bank.
+                                 shots: [("library", 0.295), ("cthulhu", 0.412), ("orbit", 0.493)],
+                                 shots60: [("library", 0.317), ("cthulhu", 0.425), ("orbit", 0.491)]),
+                PlayRobotFlipper(name: "upper", pivot: specs[2].pivot, length: CthTableLayout.upperFlipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: false,
+                                 shots: [("cthulhu", 0.299), ("lagoon", 0.346)],
+                                 shots60: [("cthulhu", 0.326), ("lagoon", 0.357), ("sigil", 0.421), ("library", 0.443)])]
+    }
+
+    func playLabStartGame(variant: Int) -> String {
+        game.isRobot = true
+        playLabStarting = true
+        newGame()
+        playLabStarting = false
+        physicsWorld.speed = playLab?.physicsSpeed ?? 1
+        return ""
+    }
+
+    func playLabEndGame() -> [String: Int] {
+        if !game.isGameOver {
+            removeAllBalls()
+            nextBallAt = nil
+            pendingReleases = 0
+            magnetBall = nil
+            magnet?.setState(.off)
+        }
+        return ["clues": campaign.clues, "tomes": campaign.tomesDone, "candles": campaign.candles.count,
+                "cycle": campaign.cycle]
+    }
+
+    func playLabStop() {
+        game.isRobot = false
+    }
+
+    /// Starts the Play Lab (robot players at four skills, 120 Hz and 60 Hz passes, or as the launch arguments say).
+    /// Menu or a new game stops it, saving the games played so far.
+    func debugStartPlayLab() {
+        shotLab = nil
+        stopSlingLab()
+        stopPlayLab(saving: true)
+        isAttractMode = false
+        let lab = PlayLab(host: self)
+        playLab = lab
+        lab.beginGame(now: gameTime)
+    }
+
+    /// Everything the robot needs to know this frame, and its buttons and plunger applied.
+    fileprivate func updatePlayLab(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if game.isGameOver || playLabNextAt != nil {
+            if robotLeft || robotRight { robotLeft = false; robotRight = false; updateFlippers() }
+            return
+        }
+        let view = PlayRobotView(now: now, balls: balls.map { b in
+            PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: b.layer != .floor,
+                               isHeld: b.heldIn != nil || b === magnetBall, onPlunger: isOnPlunger(b),
+                               id: ObjectIdentifier(b).hashValue)
+        }, wanted: robotWanted())
+        guard let cmd = lab.frame(view) else { return }
+        if cmd.left != robotLeft || cmd.right != robotRight {
+            robotLeft = cmd.left
+            robotRight = cmd.right
+            updateFlippers()
+        }
+        if let power = cmd.plunge, isBallOnPlunger {
+            plungerPull = power * CthTableLayout.plungerMaxPull
+            releasePlunger()
+        }
+    }
+
+    /// The shots the table wants, most wanted first: Cthulhu while he's up, then what the arrows say (fast-blink
+    /// before blink), then the shots worth taking anyway.
+    private func robotWanted() -> [String] {
+        let arrows = ["rightRamp", "orbit", "library", "lagoon", "sigil"]
+        var w: [String] = []
+        if cthulhu?.isAwake == true { w.append("cthulhu") }
+        w += arrows.filter { lamps.state(of: "arrow." + $0) == .fastBlink }
+        w += arrows.filter { lamps.state(of: "arrow." + $0) == .blink }
+        // Run 1: with no arrow lit the expert made the Library 82 times in a row and never earned the next clue.
+        // Clues come from the ramp, the orbit, the Lagoon, the Candle lanes or the Sigil bank, never the Library;
+        // the Library is the shot once it is lit (its arrow blinks then).
+        if campaign.phase == .research {
+            w += ["rightRamp", "orbit", "lagoon", "sigil", "library"]
+        } else {
+            w += ["library", "rightRamp", "orbit", "lagoon", "sigil"]
+        }
+        return w
+    }
+
+    /// Banners double as the objective record: the first of each per game is what the report shows.
+    fileprivate func labObjective(forBanner text: String) {
+        guard let lab = playLab else { return }
+        let name: String?
+        switch text {
+        case "LIBRARY LIT": name = "libraryLit"
+        case "RITUAL LIT!": name = "ritualLit"
+        case "THE RITUAL BEGINS": name = "ritual"
+        case "THE AWAKENING! CTHULHU RISES": name = "awakening"
+        case "THE EYE OPENS · STRIKE IT!": name = "eyeOpen"
+        case "CANDLES LIT": name = "candlesLit"
+        case "SIGILS BROKEN": name = "sigilsBroken"
+        case "KICKBACK": name = "kickback"
+        case "SKILL SHOT": name = "skillShot"
+        default:
+            if text.hasPrefix("CLUE ") { name = "clue" }
+            else if text.hasPrefix("TOME I:") { name = "tome1" }
+            else if text.hasPrefix("TOME II:") { name = "tome2" }
+            else if text.hasPrefix("TOME III:") { name = "tome3" }
+            else if text.hasPrefix("NECRONOMICON READ") { name = "tome1Read" }
+            else if text.hasPrefix("PNAKOTIC READ") { name = "tome2Read" }
+            else if text.hasPrefix("CAPTAIN'S LOG READ") { name = "tome3Read" }
+            else if text.hasPrefix("CANDLE ") { name = "candle" }
+            else if text.hasPrefix("THE SUMMONING!") { name = "summoning" }
+            else if text.hasPrefix("TENTACLE CUT") { name = "tentacleCut" }
+            else if text.hasPrefix("EYE STRUCK") { name = "eyeStruck" }
+            else if text.hasPrefix("CTHULHU BANISHED!") { name = "banished" }
+            else { name = nil }
+        }
+        if let name { lab.objective(name, now: gameTime) }
+    }
+
+    /// At game over (or after the cap) the game is recorded; the next one starts 2 s later.
+    fileprivate func checkPlayLabGame(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if let due = playLabNextAt {
+            if now >= due {
+                playLabNextAt = nil
+                if lab.isDone { finishPlayLab() } else { lab.beginGame(now: now) }
+            }
+            return
+        }
+        guard lab.current != nil, game.isGameOver || lab.isTimeUp(now: now) else { return }
+        let over = game.isGameOver
+        lab.endGame(score: game.score, ballsPlayed: CthGameState.ballsPerGame - game.ballsLeft + (over ? 0 : 1),
+                    endedBy: over ? "gameOver" : "time", now: now)
+        physicsWorld.speed = lab.physicsSpeed
+        playLabNextAt = now + 2
+    }
+
+    private func finishPlayLab() {
+        guard let lab = playLab else { return }
+        let saved = lab.save()
+        let count = lab.games.count
+        stopPlayLab(saving: false)
+        newGame()
+        game.banner = "PLAY LAB DONE · \(count) GAMES · \(saved)"
+        bannerClearAt = nil
+        PlayLab.quitIfLaunchedForLab()
+    }
+
+    fileprivate func stopPlayLab(saving: Bool) {
+        guard let lab = playLab else { return }
+        playLab = nil
+        lab.stop(saving: saving)
+        playLabNextAt = nil
+        robotLeft = false
+        robotRight = false
+        if leftFlipper != nil { updateFlippers() }
+        physicsWorld.speed = isAttractMode ? 0 : 1
+    }
+}
+#endif

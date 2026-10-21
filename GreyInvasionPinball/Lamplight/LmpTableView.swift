@@ -13,6 +13,7 @@ struct LmpTableView: View {
     @State private var screen: Screen = .menu
     @State private var isPaused = false
     @State private var showCollection = false      // M6 round 2: the collection book
+    @State private var showHowTo = false           // T5 M9 v44: How to Play (menu and pause), a picture per goal
     @Environment(\.scenePhase) private var scenePhase
 
     /// Lamp amber, the table's accent (the warm light in the shop window).
@@ -48,6 +49,10 @@ struct LmpTableView: View {
                 gameOverOverlay
             default:
                 EmptyView()
+            }
+
+            if showHowTo {
+                LmpHowToPlayView { showHowTo = false }
             }
         }
         .fullScreenCover(isPresented: $showCollection) {
@@ -109,7 +114,7 @@ struct LmpTableView: View {
     }
 
     private func gamepadA() {
-        guard !showCollection else { return }
+        guard !showCollection, !showHowTo else { return }
         switch screen {
         case .menu:
             startGame()
@@ -119,7 +124,7 @@ struct LmpTableView: View {
     }
 
     private func gamepadMenu() {
-        guard !showCollection, screen == .playing, !game.isGameOver else { return }
+        guard !showCollection, !showHowTo, screen == .playing, !game.isGameOver else { return }
         setPaused(!isPaused)
     }
 
@@ -265,6 +270,7 @@ struct LmpTableView: View {
 
                 overlayButton("Play", prominent: true, action: startGame)
                 overlayButton("The Collection") { showCollection = true }
+                overlayButton("How to Play") { showHowTo = true }
                 cameraButton
 
                 Text("Touch left or right to flip · pull down to launch")
@@ -336,6 +342,7 @@ struct LmpTableView: View {
                 .padding(.top, 8)
             cameraButton
             volumeRow
+            overlayButton("How to Play") { showHowTo = true }
             overlayButton("Restart", action: startGame)
             overlayButton("Menu", action: goToMenu)
             #if DEBUG

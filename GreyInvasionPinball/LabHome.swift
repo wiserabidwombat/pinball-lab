@@ -36,7 +36,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return "Oct 2026 · table two"
         case .cthulhu: return "Oct 2026 · table three"
         case .monsoon: return "Oct 2026 · table four"
-        case .lamplight: return "Oct 2026 · being built"
+        case .lamplight: return "Oct 2026 · table five"
         }
     }
 
@@ -62,7 +62,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return ["Ramps", "Multiball", "Waves", "Flying camera", "Robot-tested"]
         case .cthulhu: return ["Spinner", "Magnet", "Moving toy", "Up-kicker", "Real-table art"]
         case .monsoon: return ["Color as progress", "Habitrails", "Captive ball", "Dust devil", "Watercolor"]
-        case .lamplight: return ["Cozy", "Collections", "Center post", "The loft", "Furniture"]
+        case .lamplight: return ["Cozy", "Collections", "The loft", "A cat", "Seasons"]
         }
     }
 
@@ -83,7 +83,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return "howto_map"
         case .cthulhu: return "cth_lab_thumb"       // the rendered table with Cthulhu risen (art round 5b)
         case .monsoon: return "mon_lab_thumb"       // the finished table, half pencil, half watercolor (tools/mon_lab_thumb_table.py)
-        case .lamplight: return nil                 // the shop's own thumbnail comes with its art
+        case .lamplight: return "lmp_lab_thumb"     // the shop on a festival evening (tools/lmp_howto.py)
         }
     }
 

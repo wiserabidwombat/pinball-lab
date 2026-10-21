@@ -273,3 +273,9 @@ save(table(lit={'fireplace', 'leftLoop', 'rightLoop', 'ramp', 'kettle', 'windowS
            cozy=COZY3, cozy_lit=3, season='winter'), 'lmp_howto_festival', FULL, 1000)
 save(table(cozy=COZY3, cozy_lit=3, shop_lit=6,
            extra=lambda cr: [ring(cr, *p, 15) for p in COZY_LAMPS]), 'lmp_howto_cozy', (-40, -75, 300, 340))
+
+# ------------------------------------------------------------------ T5 M9 v45: the Lab card's picture (420 × 750)
+# The shop on a festival evening: the fire lit, the cat on her shelf, string lights in the season's colours, lamps on.
+save(table(lit={'fireplace', 'leftLoop', 'rightLoop', 'ramp', 'kettle', 'windowSeat'}, mail=True, lucky=True,
+           balls=[(300, 640)], upper_balls=[(170, 1060)], shop_lit=6, teacup_lit=True, festival=True,
+           cozy=COZY3, cozy_lit=3, season='autumn'), 'lmp_lab_thumb', (-6, 237, 606, 1330), 420)

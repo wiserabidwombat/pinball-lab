@@ -77,16 +77,16 @@ extension LabTable {
                 LabStat(label: "Testing", value: "Shot Lab robot and a game simulator"),
             ]
         case .lamplight:
-            // T5 M1: the plan's numbers, filled in as the table is built.
+            // T5 M9 v45: the finished table's numbers.
             return [
                 LabStat(label: "Table size", value: "600 × 1300 points, plus a loft upstairs"),
-                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down"),
-                LabStat(label: "Frame rate", value: "Aiming for 120 fps on ProMotion iPhones"),
+                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down; multiball goes top-down"),
+                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones"),
                 LabStat(label: "Goal", value: "Nothing to beat: fill the shelves and furnish the shop"),
-                LabStat(label: "Art", value: "Being made"),
-                LabStat(label: "Sounds", value: "Being made"),
-                LabStat(label: "Code", value: "Being written"),
-                LabStat(label: "Testing", value: "Shot Lab robot and a game simulator, as before"),
+                LabStat(label: "Art", value: "A bookshop rendered in 3D: bookcases, a loft, a live fire, a cat in five poses"),
+                LabStat(label: "Sounds", value: "29 effects and two beds, the fire and the rain, made for this table"),
+                LabStat(label: "Code", value: "About 7,300 lines in 22 files"),
+                LabStat(label: "Testing", value: "Shot Lab robot and the Play Lab, robots that play whole evenings"),
             ]
         }
     }
@@ -131,9 +131,14 @@ extension LabTable {
             ]
         case .lamplight:
             return [
+                LabNote(title: "Cozy pinball", detail: "No villain to beat: every evening adds books to the shelves and furniture to the shop, and it all stays."),
+                LabNote(title: "Regulars and requests", detail: "Regulars come in wanting a book, a pot of tea, a favor or a chat. The arrows light their shots in order, with no clock."),
+                LabNote(title: "Collections", detail: "Books from common to ultra rare, seasonal treasures and the cat's gifts, kept in a collection book; tips buy furniture that changes the rules."),
+                LabNote(title: "A loft upstairs", detail: "A raised reading nook up its own ramp, with stairs back down, a dumbwaiter from the kettle and its own flipper. The ball grows as it climbs."),
+                LabNote(title: "A cat", detail: "She walks her shelf, naps on her perches, swats passing balls and brings you gifts."),
+                LabNote(title: "Seasons", detail: "Every seven evenings the season turns, the mantel and the window change, and a Festival Night waits at the fireplace."),
                 LabNote(title: "A new lower table", detail: "A rubber center post between the flippers and only one outlane, where every earlier table had two."),
-                LabNote(title: "Cozy pinball", detail: "No villain and no game over to fear: every game adds books to the shelves and furniture to the shop, and it all stays."),
-                LabNote(title: "Collections", detail: "Books from common to ultra rare, furniture, teas and regulars, each one kept in a collection book."),
+                LabNote(title: "A How to Play you can see", detail: "Every goal is shown on the table, with its lamps lit and the shot drawn on."),
             ]
         }
     }
@@ -172,6 +177,11 @@ extension LabTable {
         case .lamplight:
             return [
                 LabNote(title: "Change the layout", detail: "Tables 02 to 04 shared a lower table and kept the drop targets and upper flipper in the same places; this one starts from a new lower table."),
+                LabNote(title: "Let robots find the farm", detail: "The Play Lab's best robots spent whole games in the loft, shooting the window seat. One window seat per visit sent them back downstairs."),
+                LabNote(title: "Simulate the economy", detail: "The robots owned every book within four evenings. A small simulator set the find rate so the shelves take a season or more to fill."),
+                LabNote(title: "Measure contrast on the phone", detail: "Walnut flippers and a ginger cat vanished on the oak floor. Measured on a screenshot, they became ivory flippers and a black-and-white cat."),
+                LabNote(title: "Draw height, keep physics simple", detail: "Balls seemed to fall through the ramp. Drawing the loft and ramp twice as tall fixed the look without a solid ramp that could trap balls."),
+                LabNote(title: "Shapes, not boxes", detail: "A box round the fireplace's pointed roof caught balls rolling off its outside. The check now follows the roof."),
             ]
         }
     }

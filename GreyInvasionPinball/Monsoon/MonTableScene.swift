@@ -1616,7 +1616,7 @@ final class MonTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T4 M11 v3")
+        let label = SKLabelNode(text: "T4 M11 v4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2071,6 +2071,13 @@ final class MonTableScene: SKScene {
         for ball in balls {
             updateRampLayer(ball)
             guard let body = ball.physicsBody else { continue }
+            // The flip assist (Lamplight's T5 M8 v12): a flip gives a floor ball its full speed at 60 Hz too.
+            if ball.isOnFloor, ball.ride == nil, ball.heldIn == nil {
+                let r = MonTableLayout.ballRadius
+                leftFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                rightFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                upperFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+            }
             let v = body.velocity
             let speed = hypot(v.dx, v.dy)
             let maxSpeed = ball.layer == .rampDown ? MonTableLayout.rampReturnMaxSpeed : MonTableLayout.maxBallSpeed
@@ -2370,8 +2377,10 @@ extension MonTableScene: PlayLabHost {
          PlayObjective(name: "skillShot", text: "Plunge through the ringed raindrop lane")]
     }
 
-    /// Flip delays = the middle of each shot's window in the Shot Lab run of 2026-10-16 00-02 (dust devil at rest;
-    /// its raging windows differ by ~40 ms, see the 10-15 22-38 run). The helix is the mesa ramp with the diverter set,
+    /// Flip delays = the middle of each shot's window in the Shot Lab run of 2026-10-21 21-32 (after T4 M11 v4's flip
+    /// assist; dust devil at rest — its raging windows differ by ~40 ms, see the 10-15 22-38 run). The assist moved
+    /// the arroyo to a later, wider window (left 0.353–0.416, 17 trials) and gave the right flipper a real arroyo
+    /// window (0.330–0.423, 24 trials); captiveTop shrank to a 2-trial band (0.509–0.516), so it's gone at both rates. The helix is the mesa ramp with the diverter set,
     /// so the robot aims "mesaRamp" either way (the ride takes longer than the aim window; the HELIX banner records it).
     /// Runs 1–2: the right flipper's arroyo (a 2-trial band, 0/8) and the upper flipper's shots (1–3 trial bands,
     /// 2/22) aren't real windows, so they're gone; the upper flipper isn't modelled, as on Grey Invasion.
@@ -2380,13 +2389,12 @@ extension MonTableScene: PlayLabHost {
         let rest = MonTableLayout.flipperRestAngle
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
-                                 shots: [("arroyo", 0.312), ("mesaRamp", 0.450), ("standup", 0.522)],
-                                 shots60: [("arroyo", 0.327), ("mesaRamp", 0.432), ("standup", 0.500)]),
+                                 shots: [("arroyo", 0.385), ("mesaRamp", 0.442), ("standup", 0.520)],
+                                 shots60: [("arroyo", 0.407), ("mesaRamp", 0.432), ("standup", 0.501)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
-                                 shots: [("orbit", 0.492), ("captiveTop", 0.517)],
-                                 // Run 3: captiveTop at 60 Hz was two single-trial delays (0/9); gone.
-                                 shots60: [("arroyo", 0.308), ("orbit", 0.476)])]
+                                 shots: [("arroyo", 0.377), ("orbit", 0.487)],
+                                 shots60: [("arroyo", 0.373), ("orbit", 0.467)])]
     }
 
     func playLabStartGame(variant: Int) -> String {

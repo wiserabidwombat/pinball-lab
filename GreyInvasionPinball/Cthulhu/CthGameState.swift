@@ -38,6 +38,8 @@ final class CthGameState {
     /// The act and goal (M7 v2), e.g. "RESEARCH · CLUE 2 OF 3"; shown dim when there's no banner.
     var status: String?
     var highScore = UserDefaults.standard.integer(forKey: cthHighScoreKey)
+    /// A Play Lab robot is playing: its scores never become the high score.
+    var isRobot = false
     var isNewHighScore = false
 
     var isGameOver: Bool { ballsLeft == 0 }
@@ -78,7 +80,7 @@ final class CthGameState {
     }
 
     private func recordHighScore() {
-        guard score > highScore else { return }
+        guard !isRobot, score > highScore else { return }
         highScore = score
         isNewHighScore = true
         UserDefaults.standard.set(score, forKey: cthHighScoreKey)

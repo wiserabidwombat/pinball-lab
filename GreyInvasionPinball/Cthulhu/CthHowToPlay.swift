@@ -95,42 +95,55 @@ struct CthHowToPlayView: View {
                             para("Three forbidden tomes stand between you and the Ritual. Each one is opened at the Library.")
                             step(1, "Find two clues",
                                  "Make the ramp, the orbit or the Lagoon, finish all three Candle lanes, or clear the Sigil bank. Each is a clue; two light the Library.")
+                            picture("cth_howto_clues", "Any of these is a clue: the ramp, the orbit, the Lagoon, all three Candle lanes, or the whole Sigil bank.")
                             step(2, "Open a tome",
                                  "Shoot the lit Library. The status line under the score always says what to hit next.")
+                            picture("cth_howto_library", "With two clues the Library arrow blinks, and so does the lamp of the tome it will open.")
                             step(3, "Tome I · Necronomicon",
                                  "Turn 40 pages in 50 seconds. Every spin of the orbit's spinner turns a page; every ramp turns 10.")
+                            picture("cth_howto_tome1", "The orbit and ramp arrows blink. The spinner (ringed) sits in the orbit lane.")
                             step(4, "Tome II · Pnakotic Manuscripts",
                                  "Two shots light up. Hit both within 30 seconds.")
+                            picture("cth_howto_tome2", "The two shots are picked at random; here the ramp and the Lagoon.")
                             step(5, "Tome III · Sea Captain's Log",
                                  "Break the four seals (clear the Sigil bank), then shoot the ramp. No time limit.")
+                            picture("cth_howto_tome3", "1: knock down all four Sigil targets. 2: the ramp arrow lights; shoot it.")
                             para("Each tome pays 25,000 × its number, plus a mystery award: the kickback, +1X or 50,000. It also lights the outlane save. If a tome's time runs out, the Library relights and you carry on where you left off. After each tome, find two more clues for the next.")
                         }
                         section("ACT 2 · THE RITUAL") {
                             para("With all three tomes read, the Library lights for the Ritual. Shoot it to start a 2-ball multiball: a second ball fires up the brass wire, and for 10 seconds any drained ball comes back.")
                             step(1, "Light the five candles",
                                  "Each candle is one shot: the orbit, the ramp, the Library, the Lagoon and a Sigil target. Their arrows blink until they're lit. 10,000 each.")
+                            picture("cth_howto_candles", "Two candles lit (the orbit and the ramp). The Library, the Lagoon and the Sigil bank still blink.")
                             step(2, "The Summoning",
                                  "The fifth candle pays 100,000, and Cthulhu rises.")
+                            picture("cth_howto_summoning", "All five candles lit: Cthulhu rises from the Lagoon.")
                             para("If you're down to one ball first, the Ritual falters. The candles you lit stay lit, and the Library relights the Ritual.")
                         }
                         section("ACT 3 · THE AWAKENING") {
                             para("Cthulhu rises out of the Lagoon and sways from side to side. Balls fire out of the Library until three are in play, and for 25 seconds any drained ball comes back. The magnet in the ritual circle wakes too: it grabs a passing ball and flings it.")
                             step(1, "Cut his tentacles",
                                  "Hit Cthulhu, or shoot the ramp or the orbit, to cut a tentacle: 30,000 each. Four to cut.")
+                            picture("cth_howto_tentacles", "Two tentacles cut, two to go. The green lamps show the ones left; the ramp, the orbit and Cthulhu all cut.")
                             step(2, "Strike the eye",
                                  "With every tentacle cut, his eye opens. Hit Cthulhu himself three times, 250,000 each.")
+                            picture("cth_howto_eye", "His tentacles are gone, so the eye is open. The purple lamps count eye hits; the next one blinks.")
                             step(3, "Banish him",
                                  "The third eye hit banishes him for 1,000,000. Research starts again with every award doubled (then tripled, and so on).")
+                            picture("cth_howto_banish", "All three eye lamps lit: he's banished.")
                             para("If you're down to one ball first, he sinks back into the Lagoon. Your eye hits are kept and the candles stay lit: shoot the Library to summon him again (his tentacles grow back).")
                         }
                         section("SAVING YOUR BALL") {
                             tip("Elder Sign", "For 10 seconds after each launch, a drained ball comes back.")
                             tip("Kickback", "Lit by the Sigil bank. Fires a ball back out of the left outlane once.")
+                            picture("cth_howto_kickback", "1: clear the Sigil bank. 2: the kickback lamp lights.")
                             tip("Outlane save", "Lit by finishing a tome. Brings back one ball from the right outlane, on that ball.")
+                            picture("cth_howto_outlane", "A read tome's lamp, and the outlane save it lights.")
                             tip("Multiball saves", "10 seconds at the start of the Ritual, 25 at the start of the Awakening.")
                         }
                         section("SCORING TIPS") {
                             tip("Multiplier", "Every set of Candle lanes adds 1X, up to 5X. It multiplies everything until you lose the ball.")
+                            picture("cth_howto_lanes", "All three Candle lanes lit: +1X.")
                             tip("Skill shot", "A ring circles one candle at each launch. Roll through that lane within 5 seconds for 10,000.")
                             tip("Spinner", "100 a spin, 500 while the Necronomicon is open.")
                             tip("Bonus", "Each lost ball pays 1,000 per shot made and 20 per spin, times your multiplier.")
@@ -217,6 +230,27 @@ struct CthHowToPlayView: View {
                 para(text)
             }
         }
+    }
+
+    /// A goal picture (Assets CthHowTo, tools/cth_howto_goals.py) with a caption under it.
+    private func picture(_ name: String, _ caption: String) -> some View {
+        VStack(spacing: 6) {
+            if let art = UIImage(named: name) {
+                Image(uiImage: art)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 440)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Self.green.opacity(0.35), lineWidth: 1))
+            }
+            Text(caption)
+                .font(.system(.caption))
+                .italic()
+                .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func tip(_ title: String, _ text: String) -> some View {

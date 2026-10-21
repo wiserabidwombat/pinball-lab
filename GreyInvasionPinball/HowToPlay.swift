@@ -3,6 +3,8 @@ import UIKit
 
 /// How to Play (M10 v11, Aaron: "add a how to that explains what all the elements are and how you
 /// play through and defeat the mothership"). Opens from the menu and the pause card.
+/// 2026-10-20 (Aaron's testers: "Light the hangar: show the table with the three lanes highlighted"): every goal now has
+/// a picture of the table with that goal's lamps lit and the shot drawn on (tools/art_howto_goals.py → howto_goal_*).
 /// A numbered map of the table, then the controls, the invasion wave by wave, the Mothership,
 /// ways to save a ball and scoring tips. Every number here comes from Campaign.swift / TableLayout.
 struct HowToPlayView: View {
@@ -95,14 +97,20 @@ struct HowToPlayView: View {
                             para("Earth faces three waves of invaders, then the Mothership. Your progress carries over from ball to ball.")
                             step(1, "Light the Hangar",
                                  "Light all three U-F-O lanes, or make 3 ramp shots. The Hangar arrow starts blinking.")
+                            picture("howto_goal_lanes", "All three U-F-O lanes lit: roll the ball through each lane at the top.")
                             step(2, "Shoot the Hangar",
                                  "A lit Hangar starts the next wave. The status line under the score always says what to hit.")
+                            picture("howto_goal_hangar", "The Hangar arrow lit: shoot straight up the middle.")
                             step(3, "Wave 1 · Scout Saucers",
                                  "Two shots light up with a scout over each. Hit both within 30 seconds; the faster you are, the more each one is worth. If time runs out the scouts escape, and the Hangar stays lit so you can try again.")
+                            picture("howto_goal_wave1", "Two shots lit, a scout over each: here the Tractor Beam ramp (1) and the orbit (2).")
                             step(4, "Wave 2 · Fighter Squadron",
                                  "Knock down all four fighters in the bank, then shoot the Defense Cannon (left ramp). No time limit. Clearing it lights an Extra Ball at the Hangar, once per game.")
+                            picture("howto_goal_wave2a", "First the fighter bank: knock down all four.")
+                            picture("howto_goal_wave2b", "Then the Defense Cannon: the left ramp, from the right flipper.")
                             step(5, "Wave 3 · Abductors",
                                  "A saucer beams up a cow over the Abduction scoop. Shoot the scoop before the beam finishes (20 seconds) to save it. Save 3 cows to clear the wave.")
+                            picture("howto_goal_wave3", "A cow in the beam over the Abduction scoop: shoot the scoop before it's gone.")
                             step(6, "Wave 4 · The Mothership",
                                  "Light the Hangar again and shoot it to bring in the Mothership.")
                         }
@@ -110,8 +118,10 @@ struct HowToPlayView: View {
                             para("Shooting the Hangar starts a 2-ball multiball. For the first 15 seconds any drained ball comes straight back.")
                             step(1, "Knock out the shields",
                                  "The three saucer bumpers are its shield generators, each good for 3 hits. Bump them, or shoot the orbit, Hangar or Abduction scoop (their arrows blink) to knock out a hit on the strongest one. The status line counts the hits left on each.")
+                            picture("howto_goal_shields", "The Mothership overhead: its three shield generators are the saucer bumpers.")
                             step(2, "Hit the core",
                                  "With every shield down, the core opens and glows green. Shoot either ramp for a core hit worth 250,000. The shields then come back up.")
+                            picture("howto_goal_core", "The core open and glowing green: shoot either ramp.")
                             step(3, "Do it three times",
                                  "The third core hit destroys the Mothership for 1,000,000. The next invasion starts at Wave 1 with every wave and Mothership award doubled (then tripled, and so on).")
                             para("If you're down to one ball first, the Mothership escapes. Your core hits are kept, and the Hangar relights so you can call it back.")
@@ -119,6 +129,7 @@ struct HowToPlayView: View {
                         section("SAVING YOUR BALL") {
                             tip("Shields Up", "For 10 seconds after each launch, a drained ball comes back.")
                             tip("Kickback", "Lit by the fighter bank. Fires a ball back out of the left outlane once.")
+                            picture("howto_goal_kickback", "The kickback lamp lit: a ball down the left outlane (1) is fired back up (2).")
                             tip("Outlane save", "Lit by clearing a wave. Brings back one ball from the right outlane.")
                             tip("Extra Ball", "Lit at the Hangar after Wave 2.")
                         }
@@ -126,6 +137,8 @@ struct HowToPlayView: View {
                             tip("Multiplier", "Every set of U-F-O lanes adds 1X, up to 5X. It multiplies everything until you lose the ball.")
                             tip("Skill shot", "A ring marks one U-F-O lane at each launch. Roll through it within 5 seconds for 10,000.")
                             tip("Combos", "Make a ramp or the orbit within 3 seconds of the last one for double points.")
+                            tip("Multiball", "Lock 3 balls in the Abduction scoop (its three green lamps count them) for Abduction multiball.")
+                            picture("howto_goal_lock", "Two of the three lock lamps lit: one more ball in the scoop starts multiball.")
                             tip("Multiball jackpot", "In Abduction multiball, the Tractor Beam ramp is worth +50,000.")
                             tip("Bonus", "Each lost ball pays 1,000 per ship down and 500 per ramp, times your multiplier.")
                         }
@@ -171,6 +184,27 @@ struct HowToPlayView: View {
                     .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    /// One goal as it looks on the table, with a caption under it.
+    private func picture(_ name: String, _ caption: String) -> some View {
+        VStack(spacing: 6) {
+            if let art = UIImage(named: name) {
+                Image(uiImage: art)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 440)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Self.green.opacity(0.35), lineWidth: 1))
+            }
+            Text(caption)
+                .font(.system(.caption))
+                .italic()
+                .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {

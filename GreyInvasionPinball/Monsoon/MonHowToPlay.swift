@@ -102,28 +102,38 @@ struct MonHowToPlayView: View {
                         section("ACT 1 · PAINT THE DESERT") {
                             para("The table starts as a pencil sketch. Five regions take color: the sky, the mesas, the saguaros, the arroyo and the desert floor. A shot that paints a region lays a wash there (250). When the region has all its washes it fills in (10,000) and lights the outlane save.")
                             step(1, "Sky · 5 washes", "The orbit is a whole wash. Each raindrop lane you light is a quarter, and finishing all three another quarter. Every bumper hit adds a touch.")
+                            picture("mon_goal_sky", "Sky: the orbit from the right flipper (1), the raindrop lanes (2) and the storm clouds (3). Every arrow blinks on the fresh sketch; the sky's paint drop blinks once it's under way.")
                             step(2, "Mesas · 3 washes", "The mesa ramp and the helix.")
+                            picture("mon_goal_mesas", "Mesas: the mesa ramp from the left flipper (1) climbs to the gate; the helix (2) paints them too. The sky is done, so its drop is lit and the orbit arrow has gone out.")
                             step(3, "Saguaros · 5 washes", "Each standup you light is half a wash; the full set of three is a whole one. So is the captive ball reaching the top.")
+                            picture("mon_goal_saguaros", "Saguaros: the standups from the left flipper (1), each one lighting as you hit it, and the captive ball from the right flipper (2).")
                             step(4, "Arroyo · 6 washes", "The arroyo hole. A finished wire ride is half a wash.")
+                            picture("mon_goal_arroyo", "Arroyo: the centre hole (1), which sends the ball round the low wire (2) to the right inlane. A painted region has lit the outlane save, bottom right.")
                             step(5, "Desert · 6 washes", "Every 10th bumper hit. Each pass through the dust devil is a quarter wash.")
+                            picture("mon_goal_desert", "Desert: every 10th storm-cloud hit (1) and every pass through the dust devil (2).")
                             para("Shot arrows blink while their region still needs color, and the five paint drops round the dust devil show how far each region has got.")
                         }
                         section("ACT 2 · MONSOON") {
                             para("Paint three regions and Monsoon lights at the arroyo. Shoot it for a 2-ball multiball: the storm rolls in, a second ball fires up the low wire, and for 10 seconds any drained ball comes back.")
+                            picture("mon_goal_monsoon", "Three regions painted: the arroyo arrow blinks fast and the sky starts to darken. Shoot the arroyo.")
                             step(1, "Bloom the wildflowers",
                                  "The gate throws to the helix. Every helix ride, or a mesa ramp made, is a 25,000 jackpot that blooms a patch of wildflowers. Bloom four.")
+                            picture("mon_goal_wildflowers", "In Monsoon the helix lamp is on: the mesa ramp throws the ball into the helix for a 25,000 jackpot. Shoot again stays lit through the multiball save.")
                             step(2, "The storm passes",
                                  "Monsoon ends when you're down to one ball. It lights again after two more regions are painted, or straight away if the whole desert is painted and the wildflowers aren't all out.")
                         }
                         section("ACT 3 · SUPERBLOOM") {
                             para("With all five regions painted and four wildflowers bloomed, Superbloom lights at the arroyo. Shoot it for a 3-ball multiball with a 25-second ball save, and the petals fall.")
+                            picture("mon_goal_superbloom_lit", "The whole desert painted and four wildflowers out: the Superbloom star blinks. Shoot the arroyo.")
                             step(1, "Every shot blooms",
                                  "The orbit, the mesa ramp, the arroyo, each standup and the captive ball: 15,000 each.")
                             step(2, "Super jackpot", "The helix: 75,000.")
+                            picture("mon_goal_superbloom", "Superbloom: every shot arrow lit for 15,000, and the helix (pink) for the 75,000 super jackpot.")
                             step(3, "A new sketch",
                                  "When you're down to one ball the painting is finished. A moment later the table goes back to pencil and starts again, with every painting award doubled (then tripled, and so on).")
                         }
                         section("SAVING YOUR BALL") {
+                            picture("mon_goal_saves", "Shoot again (1), the kickback (2), lit by the three saguaro standups, and the outlane save (3).")
                             tip("Shoot again", "For 10 seconds after each launch, a drained ball comes back.")
                             tip("Kickback", "Lit by the three saguaro standups. Fires a ball back out of the left outlane once.")
                             tip("Outlane save", "Lit by painting a region. Brings back one ball from the right outlane.")
@@ -131,6 +141,7 @@ struct MonHowToPlayView: View {
                         }
                         section("SCORING TIPS") {
                             tip("Multiplier", "Every set of raindrop lanes adds 1X, up to 5X. It multiplies everything until you lose the ball.")
+                            picture("mon_goal_lanes", "All three raindrop lanes lit: +1X. Each flipper press moves the lit lanes along.")
                             tip("Skill shot", "A ring circles one raindrop lane at each launch. Roll through that lane within 5 seconds for 10,000.")
                             tip("Spinner", "20 a spin.")
                             tip("Bonus", "Each lost ball pays 1,000 per shot made and 20 per spin, times your multiplier.")
@@ -175,6 +186,26 @@ struct MonHowToPlayView: View {
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    /// A goal picture (tools/mon_howto_goals.py: the table as the game draws it in that state, lamps lit by the rules
+    /// and the shots drawn on in gold) with a caption under it. Skipped if the image is missing.
+    @ViewBuilder
+    private func picture(_ name: String, _ caption: String) -> some View {
+        if let art = UIImage(named: name) {
+            VStack(alignment: .leading, spacing: 6) {
+                Image(uiImage: art)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: 460)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Self.green.opacity(0.5), lineWidth: 1))
+                Text(caption)
+                    .font(.system(.footnote).italic())
+                    .foregroundStyle(.white.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

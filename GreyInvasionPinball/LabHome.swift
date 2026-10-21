@@ -6,7 +6,7 @@ import Foundation
 /// tables evolve as we get better at making them. The home screen lists the tables; tapping one plays it,
 /// and each table's own menu has a "Tables" button back here.
 enum LabTable: String, CaseIterable, Identifiable {
-    case orbit, greyInvasion, cthulhu, monsoon
+    case orbit, greyInvasion, cthulhu, monsoon, lamplight
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return 2
         case .cthulhu: return 3
         case .monsoon: return 4
+        case .lamplight: return 5
         }
     }
 
@@ -25,6 +26,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return "Grey Invasion"
         case .cthulhu: return "Cthulhu Rising"
         case .monsoon: return "Monsoon"
+        case .lamplight: return "The Lamplight"
         }
     }
 
@@ -34,6 +36,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return "Oct 2026 · table two"
         case .cthulhu: return "Oct 2026 · table three"
         case .monsoon: return "Oct 2026 · table four"
+        case .lamplight: return "Oct 2026 · table five"
         }
     }
 
@@ -47,6 +50,8 @@ enum LabTable: String, CaseIterable, Identifiable {
             return "Research forbidden tomes, perform the ritual, then fight Cthulhu as he rises from the Lagoon. Every part modelled and rendered like a real table."
         case .monsoon:
             return "A desert sketched in pencil. Every goal brings the summer storm closer, and the rain washes watercolor into the table until the desert blooms."
+        case .lamplight:
+            return "A cozy bookshop-café on a rainy evening. Nothing to beat: every game fills the shelves, furnishes the shop and brings back the regulars."
         }
     }
 
@@ -57,6 +62,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return ["Ramps", "Multiball", "Waves", "Flying camera", "Robot-tested"]
         case .cthulhu: return ["Spinner", "Magnet", "Moving toy", "Up-kicker", "Real-table art"]
         case .monsoon: return ["Color as progress", "Habitrails", "Captive ball", "Dust devil", "Watercolor"]
+        case .lamplight: return ["Cozy", "Collections", "The loft", "A cat", "Seasons"]
         }
     }
 
@@ -66,6 +72,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return Color(red: 0.35, green: 0.95, blue: 0.55)
         case .cthulhu: return Color(red: 0.30, green: 0.85, blue: 0.75)
         case .monsoon: return Color(red: 0.96, green: 0.78, blue: 0.45)
+        case .lamplight: return Color(red: 1.0, green: 0.74, blue: 0.40)
         }
     }
 
@@ -76,6 +83,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .greyInvasion: return "howto_map"
         case .cthulhu: return "cth_lab_thumb"       // the rendered table with Cthulhu risen (art round 5b)
         case .monsoon: return "mon_lab_thumb"       // the finished table, half pencil, half watercolor (tools/mon_lab_thumb_table.py)
+        case .lamplight: return "lmp_lab_thumb"     // the shop on a festival evening (tools/lmp_howto.py)
         }
     }
 
@@ -83,7 +91,24 @@ enum LabTable: String, CaseIterable, Identifiable {
 
 /// The app's root: the table list, or the table being played.
 struct PinballLabRoot: View {
-    @State private var playing: LabTable?
+    @State private var playing: LabTable? = PinballLabRoot.launchTable
+
+    /// Debug builds launched with `-playlab <table>` (or `-shotlab <table>`) open that table at once (its view starts
+    /// the lab).
+    private static var launchTable: LabTable? {
+        #if DEBUG
+        switch PlayLab.launchTable ?? ShotLab.launchTable {
+        case "lamplight": return .lamplight
+        case "greyinvasion": return .greyInvasion
+        case "cthulhu": return .cthulhu
+        case "monsoon": return .monsoon
+        case "orbit": return .orbit
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
+    }
 
     var body: some View {
         Group {
@@ -96,6 +121,8 @@ struct PinballLabRoot: View {
                 CthTableView(onExit: { playing = nil })
             case .some(.monsoon):
                 MonTableView(onExit: { playing = nil })
+            case .some(.lamplight):
+                LmpTableView(onExit: { playing = nil })
             case .none:
                 LabHomeView { table in playing = table }
             }

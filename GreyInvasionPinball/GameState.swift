@@ -42,6 +42,8 @@ final class GameState {
     var bonusText: String?
     var highScore = UserDefaults.standard.integer(forKey: highScoreKey)
     var isNewHighScore = false
+    /// A Play Lab robot is playing: its scores never become the high score.
+    var isRobot = false
 
     var isGameOver: Bool { ballsLeft == 0 }
 
@@ -86,7 +88,7 @@ final class GameState {
     }
 
     private func recordHighScore() {
-        guard score > highScore else { return }
+        guard !isRobot, score > highScore else { return }
         highScore = score
         isNewHighScore = true
         UserDefaults.standard.set(score, forKey: highScoreKey)

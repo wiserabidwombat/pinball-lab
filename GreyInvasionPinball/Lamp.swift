@@ -131,6 +131,11 @@ final class LampController {
         lamps[name]?.state = state
     }
 
+    /// A lamp's state (the Play Lab robot reads the arrows the way a player does).
+    func state(of name: String) -> LampState? {
+        lamps[name]?.state
+    }
+
     func update(time: TimeInterval) {
         if showPattern != nil, time >= showEnd { showPattern = nil }
         let slowOn = Int(time * 4) % 2 == 0     // 2 blinks a second

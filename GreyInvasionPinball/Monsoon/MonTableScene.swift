@@ -267,8 +267,7 @@ final class MonTableScene: SKScene {
                 friction: MonTableLayout.railFriction, restitution: MonTableLayout.railRestitution)
         addWall(points: MonTableLayout.leftLaneGuide)
         addWall(points: MonTableLayout.leftOutlaneWall)
-        addWall(points: MonTableLayout.leftOutlanePostRail)
-        addOutlanePostArt()
+        addWall(points: MonTableLayout.leftOutlanePostRail)      // its rail and post are baked into mon_lower
         addWall(points: MonTableLayout.rightOutlaneWall)
         addWall(points: MonTableLayout.rightApron)
         addWall(points: MonTableLayout.rightLaneGuide)
@@ -549,49 +548,6 @@ final class MonTableScene: SKScene {
         node.physicsBody = body
 
         addChild(node)
-    }
-
-    /// The left outlane post's rail and brass post, drawn over the baked art (which has only the guide's own post) in
-    /// its steel-and-brass style, lifted a little for the oblique view like the baked posts.
-    private func addOutlanePostArt() {
-        let base = CGPoint(x: MonTableLayout.laneGuideX, y: MonTableLayout.laneGuideTop)
-        let tip = MonTableLayout.leftOutlanePostTip
-        let lift: CGFloat = 4
-        func rail(_ dy: CGFloat, _ dx: CGFloat, color: SKColor, width: CGFloat) {
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: base.x + dx, y: base.y + dy))
-            path.addLine(to: CGPoint(x: tip.x + dx, y: tip.y + dy))
-            let n = SKShapeNode(path: path)
-            n.strokeColor = color
-            n.lineWidth = width
-            n.lineCap = .round
-            n.zPosition = -18.5
-            addChild(n)
-        }
-        rail(-1, 1.5, color: SKColor(white: 0, alpha: 0.35), width: 5)                     // shadow on the floor
-        rail(lift, 0, color: SKColor(white: 0.30, alpha: 1), width: 4.5)                   // rod edge
-        rail(lift, 0, color: SKColor(red: 0.74, green: 0.76, blue: 0.78, alpha: 1), width: 2.6)
-        rail(lift + 0.7, 0, color: SKColor(white: 0.95, alpha: 0.8), width: 0.8)           // highlight
-        let post = SKShapeNode(circleOfRadius: 4.5)                                          // white plastic base
-        post.fillColor = SKColor(white: 0.90, alpha: 1)
-        post.strokeColor = SKColor(white: 0.45, alpha: 1)
-        post.lineWidth = 0.8
-        post.position = CGPoint(x: tip.x, y: tip.y + 2)
-        post.zPosition = -18.4
-        addChild(post)
-        let cap = SKShapeNode(circleOfRadius: 3.4)                                           // brass cap
-        cap.fillColor = SKColor(red: 0.80, green: 0.64, blue: 0.32, alpha: 1)
-        cap.strokeColor = SKColor(red: 0.45, green: 0.33, blue: 0.12, alpha: 1)
-        cap.lineWidth = 0.8
-        cap.position = CGPoint(x: tip.x, y: tip.y + lift + 1)
-        cap.zPosition = -18.3
-        addChild(cap)
-        let shine = SKShapeNode(circleOfRadius: 1.1)
-        shine.fillColor = SKColor(red: 1, green: 0.95, blue: 0.8, alpha: 0.9)
-        shine.strokeColor = .clear
-        shine.position = CGPoint(x: tip.x - 1, y: tip.y + lift + 2)
-        shine.zPosition = -18.2
-        addChild(shine)
     }
 
     private func addPlunger() {

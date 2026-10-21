@@ -44,6 +44,12 @@ final class MonTableScene: SKScene {
     private var shotLab: ShotLab?
     private var shotLabTime: TimeInterval = 0
     private var shotLabDevilRaging = false
+    /// Play Lab (shared, PlayLab.swift): the run, when its next game starts, and the robot's buttons.
+    private var playLab: PlayLab?
+    private var playLabNextAt: TimeInterval?
+    private var playLabStarting = false
+    private var robotLeft = false
+    private var robotRight = false
     #endif
 
     private var balls: [MonBall] = []
@@ -171,6 +177,7 @@ final class MonTableScene: SKScene {
             guard isAttractMode != oldValue else { return }
             #if DEBUG
             if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
+            if isAttractMode { stopPlayLab(saving: true) }      // and the Play Lab (saving the games so far)
             #endif
             physicsWorld.speed = isAttractMode ? 0 : 1
             if isAttractMode { releaseAllControls(); sound.stopLoops() }
@@ -1659,7 +1666,10 @@ final class MonTableScene: SKScene {
             let which = ball.ride != nil ? "helix" : (ball.activeRamp === arroyoWire ? "low wire" : "high wire")
             level = ball.layer == .rampUp ? "\(which) up" : which
         }
-        let text = "\(fps)T4 M5 v3 \(effectiveCameraMode.tag) · \(level) · \(speed)"
+        var text = "\(fps)T4 M5 v3 \(effectiveCameraMode.tag) · \(level) · \(speed)"
+        #if DEBUG
+        if let lab = playLab { text += "\n" + lab.progressText }
+        #endif
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1714,6 +1724,7 @@ final class MonTableScene: SKScene {
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                              // a new game (or Menu) stops the Shot Lab
+        if !playLabStarting { stopPlayLab(saving: true) }   // and the Play Lab, unless it's starting its next game
         #endif
         isAttractMode = false
         padAArmed = false                          // the A press that started the game isn't a plunger pull
@@ -1765,6 +1776,10 @@ final class MonTableScene: SKScene {
     }
 
     private func showBanner(_ text: String) {
+        #if DEBUG
+        playLab?.banner(text)
+        labObjective(forBanner: text)
+        #endif
         game.banner = text
         bannerClearAt = gameTime + MonTableLayout.bannerSeconds
     }
@@ -1773,7 +1788,10 @@ final class MonTableScene: SKScene {
     /// the thunder closer and the desert fades; Monsoon lit brings the first drops; Monsoon is full rain and thunder;
     /// Superbloom eases the rain and the birds come out; the finished painting is birds and a breeze. Silent at game over.
     private func updateStormBed(_ dt: CGFloat) {
-        let v = Float(settings.soundVolume) * Float(MonTableLayout.stormBedGain)
+        var v = Float(settings.soundVolume) * Float(MonTableLayout.stormBedGain)
+        #if DEBUG
+        if playLab != nil { v = 0 }                // the robot plays silently
+        #endif
         let p = Float(paintedRegions.count) / 5
         var mix: [MonLoop: Float]
         if game.isGameOver {
@@ -1796,7 +1814,7 @@ final class MonTableScene: SKScene {
 
     private func sfx(_ s: MonSound) {
         #if DEBUG
-        if shotLab != nil { return }               // the robot plays silently
+        if shotLab != nil || playLab != nil { return }   // the robots play silently
         #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }
@@ -1855,8 +1873,12 @@ final class MonTableScene: SKScene {
         #if DEBUG
         if shotLab != nil { return }               // the robot has the flippers
         #endif
-        let left = activeTouches.values.contains(.left) || padLeft
-        let right = activeTouches.values.contains(.right) || padRight
+        var left = activeTouches.values.contains(.left) || padLeft
+        var right = activeTouches.values.contains(.right) || padRight
+        #if DEBUG
+        left = left || robotLeft
+        right = right || robotRight
+        #endif
         if left && !leftFlipper.isPressed { rotateLanes(by: -1); sfx(.flipper) }
         if right && !rightFlipper.isPressed { rotateLanes(by: 1); sfx(.flipper) }
         leftFlipper.isPressed = left
@@ -1928,7 +1950,10 @@ final class MonTableScene: SKScene {
     // MARK: - Game loop
 
     override func update(_ realTime: TimeInterval) {
-        let step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        var step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        #if DEBUG
+        if let lab = playLab { step *= Double(lab.physicsSpeed) }   // the Play Lab's pass: 120 Hz or 60 Hz steps
+        #endif
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
@@ -1948,6 +1973,9 @@ final class MonTableScene: SKScene {
         let dt = CGFloat(step)
         lastStep = dt
         updateGamepad()
+        #if DEBUG
+        updatePlayLab(now)
+        #endif
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         upperFlipper.step(dt: dt)
@@ -2029,6 +2057,9 @@ final class MonTableScene: SKScene {
             placeBallOnPlunger()
         }
 
+        #if DEBUG
+        checkPlayLabGame(now)
+        #endif
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
             game.ballOnPlunger = waiting
@@ -2185,6 +2216,7 @@ extension MonTableScene {
         if Self.bonusShots.contains(name) { shotsThisBall += 1 }
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
+        playLab?.shot(name, now: gameTime)
         #endif
     }
 
@@ -2305,3 +2337,199 @@ extension MonTableScene: SKPhysicsContactDelegate {
         MainActor.assumeIsolated { handleContact(contact) }
     }
 }
+
+#if DEBUG
+extension MonTableScene: PlayLabHost {
+    var playLabTableName: String { "Monsoon" }
+    var playLabBallRadius: CGFloat { MonTableLayout.ballRadius }
+    var playLabVariantCount: Int { 1 }
+
+    /// The three acts as the How to Play tells them, plus the saves and the side goals.
+    var playLabObjectives: [PlayObjective] {
+        [PlayObjective(name: "skyPainted", text: "Paint the sky (the orbit, the raindrop lanes, bumper touches)"),
+         PlayObjective(name: "mesasPainted", text: "Paint the mesas (the mesa ramp and the helix)"),
+         PlayObjective(name: "saguarosPainted", text: "Paint the saguaros (the standups and the captive ball)"),
+         PlayObjective(name: "arroyoPainted", text: "Paint the arroyo (the arroyo hole, wire rides)"),
+         PlayObjective(name: "desertPainted", text: "Paint the desert (every 10th bumper hit, the dust devil)"),
+         PlayObjective(name: "monsoonLit", text: "Three regions painted: Monsoon lights at the arroyo"),
+         PlayObjective(name: "monsoon", text: "Start Monsoon (2-ball multiball)"),
+         PlayObjective(name: "wildflower", text: "A Monsoon jackpot blooms wildflowers (helix ride or mesa ramp)"),
+         PlayObjective(name: "superbloomLit", text: "All five regions painted and four wildflowers: Superbloom lights"),
+         PlayObjective(name: "superbloom", text: "Start Superbloom (3-ball multiball)"),
+         PlayObjective(name: "bloom", text: "A Superbloom shot blooms (15,000)"),
+         PlayObjective(name: "superJackpot", text: "Superbloom's super jackpot (the helix, 75,000)"),
+         PlayObjective(name: "paintingFinished", text: "The painting is finished (Superbloom down to one ball)"),
+         PlayObjective(name: "newSketch", text: "A new sketch: the next cycle, awards multiplied"),
+         PlayObjective(name: "lanesComplete", text: "Finish the three raindrop lanes (+1X)"),
+         PlayObjective(name: "multiplier", text: "Reach 2X or more"),
+         PlayObjective(name: "helix", text: "Ride the helix (mesa ramp with the diverter set)"),
+         PlayObjective(name: "captiveTop", text: "Knock the captive ball to the top of its channel"),
+         PlayObjective(name: "kickback", text: "Light the kickback (the three saguaro standups)"),
+         PlayObjective(name: "outlaneSave", text: "Use the outlane save (lit by painting a region)"),
+         PlayObjective(name: "skillShot", text: "Plunge through the ringed raindrop lane")]
+    }
+
+    /// Flip delays = the middle of each shot's window in the Shot Lab run of 2026-10-16 00-02 (dust devil at rest;
+    /// its raging windows differ by ~40 ms, see the 10-15 22-38 run). The helix is the mesa ramp with the diverter set,
+    /// so the robot aims "mesaRamp" either way (the ride takes longer than the aim window; the HELIX banner records it).
+    /// Runs 1–2: the right flipper's arroyo (a 2-trial band, 0/8) and the upper flipper's shots (1–3 trial bands,
+    /// 2/22) aren't real windows, so they're gone; the upper flipper isn't modelled, as on Grey Invasion.
+    var playLabFlippers: [PlayRobotFlipper] {
+        let specs = shotLabFlippers
+        let rest = MonTableLayout.flipperRestAngle
+        return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
+                                 shots: [("arroyo", 0.312), ("mesaRamp", 0.450), ("standup", 0.522)],
+                                 shots60: [("arroyo", 0.327), ("mesaRamp", 0.432), ("standup", 0.500)]),
+                PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
+                                 shots: [("orbit", 0.492), ("captiveTop", 0.517)],
+                                 // Run 3: captiveTop at 60 Hz was two single-trial delays (0/9); gone.
+                                 shots60: [("arroyo", 0.308), ("orbit", 0.476)])]
+    }
+
+    func playLabStartGame(variant: Int) -> String {
+        game.isRobot = true
+        playLabStarting = true
+        newGame()
+        playLabStarting = false
+        physicsWorld.speed = playLab?.physicsSpeed ?? 1
+        return ""
+    }
+
+    func playLabEndGame() -> [String: Int] {
+        if !game.isGameOver {
+            removeAllBalls()
+            nextBallAt = nil
+            pendingReleases = 0
+            bonusStart = nil
+            game.bonusText = nil
+        }
+        return ["painted": paintedRegions.count, "wildflowers": wildflowers, "cycle": cycle]
+    }
+
+    func playLabStop() {
+        game.isRobot = false
+    }
+
+    /// Starts the Play Lab (robot players at four skills, 120 Hz and 60 Hz passes, or as the launch arguments say).
+    /// Menu or a new game stops it, saving the games played so far.
+    func debugStartPlayLab() {
+        shotLab = nil
+        stopPlayLab(saving: true)
+        isAttractMode = false
+        let lab = PlayLab(host: self)
+        playLab = lab
+        lab.beginGame(now: gameTime)
+    }
+
+    /// Everything the robot needs to know this frame, and its buttons and plunger applied.
+    fileprivate func updatePlayLab(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if game.isGameOver || playLabNextAt != nil {
+            if robotLeft || robotRight { robotLeft = false; robotRight = false; updateFlippers() }
+            return
+        }
+        let view = PlayRobotView(now: now, balls: balls.map { b in
+            PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: !b.isOnFloor,
+                               isHeld: b.heldIn != nil, onPlunger: isOnPlunger(b),
+                               id: ObjectIdentifier(b).hashValue)
+        }, wanted: robotWanted())
+        guard let cmd = lab.frame(view) else { return }
+        if cmd.left != robotLeft || cmd.right != robotRight {
+            robotLeft = cmd.left
+            robotRight = cmd.right
+            updateFlippers()
+        }
+        if let power = cmd.plunge, isBallOnPlunger {
+            plungerPull = power * MonTableLayout.plungerMaxPull
+            releasePlunger()
+        }
+    }
+
+    /// The shots the table wants, most wanted first: what the arrows say (fast-blink before blink), then the shots
+    /// worth taking anyway. (The mesa ramp arrow fast-blinks in Monsoon: that flip is the helix jackpot.)
+    private func robotWanted() -> [String] {
+        let arrows: [(lamp: String, shot: String)] = [("orbit", "orbit"), ("mesaRamp", "mesaRamp"),
+                                                      ("saguaros", "standup"), ("captive", "captiveTop"),
+                                                      ("arroyo", "arroyo")]
+        var w: [String] = []
+        w += arrows.filter { lamps.state(of: "arrow." + $0.lamp) == .fastBlink }.map { $0.shot }
+        w += arrows.filter { lamps.state(of: "arrow." + $0.lamp) == .blink }.map { $0.shot }
+        w += arrows.map { $0.shot }
+        return w
+    }
+
+    /// Banners double as the objective record: the first of each per game is what the report shows.
+    fileprivate func labObjective(forBanner text: String) {
+        guard let lab = playLab else { return }
+        let name: String?
+        switch text {
+        case "SKY PAINTED": name = "skyPainted"
+        case "MESAS PAINTED": name = "mesasPainted"
+        case "SAGUAROS PAINTED": name = "saguarosPainted"
+        case "ARROYO PAINTED": name = "arroyoPainted"
+        case "DESERT PAINTED": name = "desertPainted"
+        case "MONSOON IS LIT · SHOOT THE ARROYO": name = "monsoonLit"
+        case "MONSOON!": name = "monsoon"
+        case "SUPERBLOOM IS LIT · SHOOT THE ARROYO": name = "superbloomLit"
+        case "SUPERBLOOM!": name = "superbloom"
+        case "THE PAINTING IS FINISHED": name = "paintingFinished"
+        case "LANES COMPLETE": name = "lanesComplete"
+        case "KICKBACK": name = "kickback"
+        case "OUTLANE SAVE": name = "outlaneSave"
+        case "SKILL SHOT": name = "skillShot"
+        case "CAPTIVE BALL": name = "captiveTop"
+        case "HELIX": name = "helix"
+        default:
+            if text.contains("JACKPOT · WILDFLOWERS") { name = "wildflower" }
+            else if text.hasPrefix("SUPER JACKPOT") { name = "superJackpot" }
+            else if text.hasPrefix("BLOOM ") { name = "bloom" }
+            else if text.hasPrefix("A NEW SKETCH") { name = "newSketch" }
+            else if text.hasSuffix("X"), Int(text.dropLast()) != nil { name = "multiplier" }
+            else { name = nil }
+        }
+        if let name { lab.objective(name, now: gameTime) }
+    }
+
+    /// At game over (or after the cap) the game is recorded; the next one starts 2 s later.
+    fileprivate func checkPlayLabGame(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if let due = playLabNextAt {
+            if now >= due {
+                playLabNextAt = nil
+                if lab.isDone { finishPlayLab() } else { lab.beginGame(now: now) }
+            }
+            return
+        }
+        guard lab.current != nil, game.isGameOver || lab.isTimeUp(now: now) else { return }
+        let over = game.isGameOver
+        lab.endGame(score: game.score, ballsPlayed: MonGameState.ballsPerGame - game.ballsLeft + (over ? 0 : 1),
+                    endedBy: over ? "gameOver" : "time", now: now)
+        physicsWorld.speed = lab.physicsSpeed
+        playLabNextAt = now + 2
+    }
+
+    private func finishPlayLab() {
+        guard let lab = playLab else { return }
+        let saved = lab.save()
+        let count = lab.games.count
+        stopPlayLab(saving: false)
+        newGame()
+        game.banner = "PLAY LAB DONE · \(count) GAMES · \(saved)"
+        bannerClearAt = nil
+        PlayLab.quitIfLaunchedForLab()
+    }
+
+    fileprivate func stopPlayLab(saving: Bool) {
+        guard let lab = playLab else { return }
+        playLab = nil
+        lab.stop(saving: saving)
+        playLabNextAt = nil
+        robotLeft = false
+        robotRight = false
+        if leftFlipper != nil { updateFlippers() }
+        physicsWorld.speed = isAttractMode ? 0 : 1
+    }
+}
+#endif

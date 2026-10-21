@@ -64,6 +64,18 @@ struct MonTableView: View {
         .onAppear {
             // Game controller: A = Play / Resume / Play Again, Menu = pause (flippers and plunger: the scene)
             LabGamepad.shared.claim("monsoon", onA: { gamepadA() }, onMenu: { gamepadMenu() })
+            #if DEBUG
+            // Launched with `-playlab monsoon`: run the Play Lab unattended (the scene quits the app when done).
+            if PlayLab.launchTable == "monsoon" {
+                Task { @MainActor in
+                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }   // built in didMove
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartPlayLab()
+                }
+            }
+            #endif
         }
         .onDisappear { LabGamepad.shared.release("monsoon") }
         .onChange(of: scenePhase) { _, phase in
@@ -304,6 +316,8 @@ struct MonTableView: View {
                 debugButton("Lab: devil raging") { scene.debugStartShotLab(devilRaging: true); setPaused(false) }
             }
             .padding(.top, 4)
+            // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator).
+            debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
             #endif
         }
     }

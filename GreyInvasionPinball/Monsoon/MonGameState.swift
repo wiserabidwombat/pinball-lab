@@ -40,6 +40,8 @@ final class MonGameState {
 
     var score = 0
     var ballsLeft = ballsPerGame
+    /// A robot (Play Lab) game: never recorded as the high score.
+    var isRobot = false
     var ballOnPlunger = false
     var multiplier = 1
     /// Short HUD message; the scene clears it.
@@ -89,7 +91,7 @@ final class MonGameState {
     }
 
     private func recordHighScore() {
-        guard score > highScore else { return }
+        guard !isRobot, score > highScore else { return }
         highScore = score
         isNewHighScore = true
         UserDefaults.standard.set(score, forKey: monHighScoreKey)

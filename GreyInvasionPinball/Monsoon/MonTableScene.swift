@@ -1399,8 +1399,8 @@ final class MonTableScene: SKScene {
         }
     }
 
-    /// A lit kickback fires a ball draining down the left outlane straight back up it. One save, then a full
-    /// saguaro bank must relight it.
+    /// A lit kickback fires a ball draining down the left outlane straight back up it. Lit at the start of every
+    /// ball; one save, then a full saguaro bank must relight it.
     private func updateKickback() {
         guard kickbackLit else { return }
         for ball in balls where ball.isOnFloor {
@@ -1451,7 +1451,12 @@ final class MonTableScene: SKScene {
         shotsThisBall = 0
         spinsThisBall = 0
         game.ballDrained()
-        if !game.isGameOver { nextBallAt = now + 0.5 }
+        if !game.isGameOver {
+            nextBallAt = now + 0.5
+            // Play Lab run 1: 7 of 16 drains went down the unprotected left outlane, so each new ball starts with
+            // the kickback lit (one save); a full saguaro bank relights it.
+            kickbackLit = true
+        }
     }
 
     // MARK: - Rules: Act 3, Superbloom (milestone 8 round 4)
@@ -1728,7 +1733,7 @@ final class MonTableScene: SKScene {
         monsoonOn = false
         superbloomLit = false
         superbloomOn = false
-        kickbackLit = false
+        kickbackLit = true                         // every ball starts with the kickback lit
         outlaneSaveLit = false
         ballSaveUsed = false
         launchedAt = nil

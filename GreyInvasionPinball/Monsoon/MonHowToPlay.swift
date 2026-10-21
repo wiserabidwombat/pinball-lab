@@ -43,7 +43,7 @@ struct MonHowToPlayView: View {
         Spot(id: 11, at: CGPoint(x: 430, y: 1165), name: "Helix",
              what: "A corkscrew down into the bumpers. Paints the mesas, and it's the jackpot in Monsoon and Superbloom."),
         Spot(id: 12, at: CGPoint(x: 496, y: 560), name: "Saguaro standups",
-             what: "Each one you light paints the saguaros a little. Light all three for 5,000, more saguaros and the kickback."),
+             what: "Each one you light paints the saguaros a little. Light all three for 5,000, more saguaros and to relight the kickback."),
         Spot(id: 13, at: CGPoint(x: 112, y: 640), name: "Captive ball",
              what: "Knock it to the top of its channel for 2,500 and a wash of saguaro green."),
         Spot(id: 14, at: CGPoint(x: 505, y: 790), name: "Upper flipper",
@@ -133,7 +133,7 @@ struct MonHowToPlayView: View {
                                  "When you're down to one ball the painting is finished. A moment later the table goes back to pencil and starts again, with every painting award doubled (then tripled, and so on).")
                         }
                         section("SAVING YOUR BALL") {
-                            picture("mon_goal_saves", "Shoot again (1), the kickback (2), lit by the three saguaro standups, and the outlane save (3).")
+                            picture("mon_goal_saves", "Shoot again (1), the kickback (2), lit at the start of every ball and relit by the three saguaro standups, and the outlane save (3).")
                             tip("Shoot again", "For 10 seconds after each launch, a drained ball comes back.")
                             tip("Kickback", "Lit by the three saguaro standups. Fires a ball back out of the left outlane once.")
                             tip("Outlane save", "Lit by painting a region. Brings back one ball from the right outlane.")

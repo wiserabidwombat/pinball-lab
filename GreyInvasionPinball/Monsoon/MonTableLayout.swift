@@ -146,6 +146,14 @@ enum MonTableLayout {
         [CGPoint(x: laneGuideX, y: laneGuideBend), CGPoint(x: laneGuideX, y: outlaneWallBottom)]
     }
     static var rightOutlaneWall: [CGPoint] { leftOutlaneWall.map { mirrored($0) } }
+    /// The left outlane post (Play Lab run 3: the left outlane took 31 of 83 drains). A ball that comes up the left
+    /// side hits the underside of the captive channel, slides to the wall and drops straight down at x ≈ 47, just
+    /// left of the lane guide's top post, so it went down the outlane; 9 of 26 kickbacks came straight back that way.
+    /// A short rail from the guide's top post up and left to a second post moves the split point to x 44: those
+    /// balls now roll off it to the right. The outlane mouth stays 24 wide (the ball is 18), so balls hugging the
+    /// wall still drain, and a kickback (x ≈ 31) still clears it. Checked in a 2D model (tools/mon_outlane_sim.py).
+    static let leftOutlanePostTip = CGPoint(x: 44, y: 482)
+    static var leftOutlanePostRail: [CGPoint] { [CGPoint(x: laneGuideX, y: laneGuideTop), leftOutlanePostTip] }
 
     // MARK: Top-right lane and its one-way gate (Table 03's: a plunge swings the gate and rides the arch;
     // a ball coming round the top the other way is stopped and drops back into the playfield).

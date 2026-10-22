@@ -929,7 +929,7 @@ final class TableScene: SKScene {
         let mb = multiballActive ? " · MULTIBALL" : " · locks \(lockedBalls)"
         // Two lines: the frame rate on top, the build tag underneath.
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)Lab v5 \(effectiveCameraMode.tag) · \(layer) · \(speed)\(count)\(mb)"
+        var text = "\(fps)Lab v6 \(effectiveCameraMode.tag) · \(layer) · \(speed)\(count)\(mb)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1746,7 +1746,7 @@ extension TableScene: PlayLabHost {
          PlayObjective(name: "wave1", text: "Start Wave 1 (shoot the lit Hangar)"),
          PlayObjective(name: "wave1Cleared", text: "Clear Wave 1 · Scout Saucers (2 lit shots in 30 s)"),
          PlayObjective(name: "wave2Cleared", text: "Clear Wave 2 · Fighter Squadron (the bank, then the Defense Cannon)"),
-         PlayObjective(name: "wave3Cleared", text: "Clear Wave 3 · Abductors (save 3 cows at the Abduction scoop)"),
+         PlayObjective(name: "wave3Cleared", text: "Clear Wave 3 · Abductors (save 3 cows: the Abduction scoop or the right ramp)"),
          PlayObjective(name: "mothership", text: "Start the Mothership finale"),
          PlayObjective(name: "coreOpen", text: "Knock out all three shield generators"),
          PlayObjective(name: "coreHit", text: "Hit the core (a ramp while it's open)"),

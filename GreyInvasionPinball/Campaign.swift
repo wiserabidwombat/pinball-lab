@@ -62,7 +62,11 @@ final class Campaign {
     // Wave 2: Fighter Squadron (untimed): the whole fighter bank, then the Defense Cannon ramp
     static let cannonPoints = 10_000
 
-    // Wave 3: Abductors, one at a time; the Abduction scoop saves the cow
+    // Wave 3: Abductors, one at a time; the Abduction scoop or the Tractor Beam (right ramp) saves the cow.
+    // M11 (Play Lab sweep 2026-10-22): the scoop alone was too precise for a timed goal. At 120 Hz the left
+    // flipper's line sweeps across it fast (a 17 ms window, ~25% for an average player, ~13% from the right),
+    // so the robots saved 5 cows and lost 15. The right ramp (~42% at 120 Hz, ~50% at 60 Hz) now saves a cow too; the scoop stays
+    // the hard lock shot.
     static let cowsToSave = 3
     static let beamSeconds: TimeInterval = 20
     static let cowSavedPoints = 7_500
@@ -122,7 +126,7 @@ final class Campaign {
     /// Wave 2 running and the bank still to finish: the bank arrow blinks.
     var wantsFighterBank: Bool { phase == .running && wave == 2 && !fightersDown }
 
-    /// Wave 3 running: the Abduction scoop saves cows and doesn't lock balls.
+    /// Wave 3 running: the Abduction scoop (or the Tractor Beam ramp) saves cows; the scoop doesn't lock balls.
     var abductorsActive: Bool { phase == .running && wave == 3 }
 
     /// The Mothership finale is on.
@@ -261,7 +265,7 @@ final class Campaign {
                 let targets = Shot.allCases.filter { litShots.contains($0) }.map { $0.label }.joined(separator: " · ")
                 return "WAVE 1 · HIT \(targets) · \(seconds)s"
             case 2: return fightersDown ? "WAVE 2 · SHOOT THE DEFENSE CANNON" : "WAVE 2 · KNOCK DOWN THE FIGHTERS"
-            case 3: return "WAVE 3 · SHOOT ABDUCTION · SAVED \(cowsSaved)/\(Self.cowsToSave) · BEAM \(seconds)s"
+            case 3: return "WAVE 3 · ABDUCTION OR RIGHT RAMP · SAVED \(cowsSaved)/\(Self.cowsToSave) · \(seconds)s"
             default:
                 let core = "CORE HITS \(coreHits)/\(Self.coreHitsToDestroy)"
                 if coreOpen { return "MOTHERSHIP · CORE OPEN · SHOOT A RAMP · \(core)" }
@@ -307,7 +311,7 @@ final class Campaign {
         case 3:
             timeLeft = Self.beamSeconds
             cowsSaved = 0
-            litShots = [.abduction]
+            litShots = [.abduction, .rightRamp]  // M11: the Tractor Beam saves cows too
         default:
             timeLeft = 0
             coreOpen = false

@@ -37,11 +37,11 @@ struct HowToPlayView: View {
         Spot(id: 7, at: CGPoint(x: 228, y: 630), name: "Defense Cannon ramp",
              what: "The left ramp. Shoot it from the right flipper."),
         Spot(id: 8, at: CGPoint(x: 360, y: 630), name: "Tractor Beam ramp",
-             what: "The right ramp. Shoot it from the left flipper. Worth a jackpot in multiball."),
+             what: "The right ramp. Shoot it from the left flipper. Worth a jackpot in multiball, and it saves cows in Wave 3."),
         Spot(id: 9, at: CGPoint(x: 244, y: 658), name: "Hangar",
              what: "The centre hole. When it's lit, shoot it to start the next wave."),
         Spot(id: 10, at: CGPoint(x: 502, y: 688), name: "Abduction scoop",
-             what: "Lock 3 balls here for multiball. In Wave 3 it saves cows instead."),
+             what: "Lock 3 balls here for multiball. In Wave 3 it saves cows instead (so does the Tractor Beam)."),
         Spot(id: 11, at: CGPoint(x: 464, y: 550), name: "Fighter bank",
              what: "Four drop targets. Knock them all down to light the kickback."),
         Spot(id: 12, at: CGPoint(x: 505, y: 790), name: "Upper flipper",
@@ -109,8 +109,8 @@ struct HowToPlayView: View {
                             picture("howto_goal_wave2a", "First the fighter bank: knock down all four.")
                             picture("howto_goal_wave2b", "Then the Defense Cannon: the left ramp, from the right flipper.")
                             step(5, "Wave 3 · Abductors",
-                                 "A saucer beams up a cow over the Abduction scoop. Shoot the scoop before the beam finishes (20 seconds) to save it. Save 3 cows to clear the wave.")
-                            picture("howto_goal_wave3", "A cow in the beam over the Abduction scoop: shoot the scoop before it's gone.")
+                                 "A saucer beams up a cow over the Abduction scoop. Shoot the scoop or the Tractor Beam (right ramp) before the beam finishes (20 seconds) to save it. Save 3 cows to clear the wave.")
+                            picture("howto_goal_wave3", "A cow in the beam over the Abduction scoop: shoot the scoop or the Tractor Beam before it's gone.")
                             step(6, "Wave 4 · The Mothership",
                                  "Light the Hangar again and shoot it to bring in the Mothership.")
                         }

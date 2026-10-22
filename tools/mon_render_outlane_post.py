@@ -6,8 +6,10 @@ own top post and the top of its wires are rendered too, so the two posts overlap
 gives the shadows with a transparent background.
 Usage:
   python3 mon_render_outlane_post.py -- render out.png [samples]      (Blender bpy: the RGBA overlay)
-  python3 mon_render_outlane_post.py -- paste overlay.png mon_lower.jpg mon_lower_sketch.jpg
-     (pastes the overlay into the colour art, and a grey version into the sketch art, in place)"""
+  python3 mon_render_outlane_post.py -- render mask.png 16 mask        (metal white, rubber black)
+  python3 mon_render_outlane_post.py -- paste overlay.png mask.png mon_lower.jpg mon_lower_sketch.jpg
+     (pastes the overlay into the colour art, and a grey/pencil version into the sketch art, in place)
+  Prefix with MON_POST_SIDE=right for the right outlane's post (2026-10-21, mirrored)."""
 import sys, os, math
 
 OBLIQUE = 0.4040
@@ -16,6 +18,14 @@ LOWER = (-40, -75, 680, 600)               # MonTableLayout.lowerArtRect
 BOX = (22, 455, 52, 64)                    # world x, y, w, h of the overlay (covers both posts, their tops and shadows)
 GUIDE_TOP = (54, 470)
 TIP = (44, 482)
+# MON_POST_SIDE=right renders and pastes the mirrored post on the right (MonTableLayout.rightOutlanePostRail, mirrored
+# about x 284: guide top (514, 470), tip (524, 482)). The geometry is mirrored, not the picture, so the light still
+# comes from the top left like everywhere else on the table.
+MIRROR = 568
+if os.environ.get('MON_POST_SIDE') == 'right':
+    BOX = (MIRROR - BOX[0] - BOX[2], BOX[1], BOX[2], BOX[3])
+    GUIDE_TOP = (MIRROR - GUIDE_TOP[0], GUIDE_TOP[1])
+    TIP = (MIRROR - TIP[0], TIP[1])
 
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
 MODE = argv[0]
@@ -160,9 +170,15 @@ elif MODE == 'paste':
     sketch = lum(rgb) * np.array([0.98, 0.97, 0.94], np.float32) * (1 - rubber) + pencil * rubber
     bx, by, bw, bh = BOX
     x0 = int(round((bx - LOWER[0]) * PX)); y0 = int(round((LOWER[1] + LOWER[3] - (by + bh)) * PX))
-    for path, src in ((argv[3], color), (argv[4], sketch)):
+    # the shadow catcher's alpha is grainy (the denoiser leaves alpha alone): smooth it where it's only shadow, and in
+    # the sketch lay it in lighter, like pencil shading on cream
+    shadow = 1 - part
+    a_soft = ndimage.gaussian_filter(a[..., 0], 2.6)[..., None]
+    a_color = a * part + a_soft * shadow
+    a_sketch = a * part + a_soft * 0.6 * shadow
+    for path, src, alpha in ((argv[3], color, a_color), (argv[4], sketch, a_sketch)):
         im = np.asarray(Image.open(path).convert('RGB')).astype(np.float32) / 255
         reg = im[y0:y0 + H, x0:x0 + W]
-        im[y0:y0 + H, x0:x0 + W] = src * a + reg * (1 - a)   # shadow-catcher pixels (black, part alpha) darken the floor
+        im[y0:y0 + H, x0:x0 + W] = src * alpha + reg * (1 - alpha)   # shadow pixels (black, part alpha) darken the floor
         Image.fromarray((np.clip(im, 0, 1) * 255 + 0.5).astype(np.uint8)).save(path, quality=93, subsampling=0)
         print('pasted into', path, 'at', x0, y0, W, H)

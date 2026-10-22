@@ -154,6 +154,10 @@ enum MonTableLayout {
     /// wall still drain, and a kickback (x ≈ 31) still clears it. Checked in a 2D model (tools/mon_outlane_sim.py).
     static let leftOutlanePostTip = CGPoint(x: 44, y: 482)
     static var leftOutlanePostRail: [CGPoint] { [CGPoint(x: laneGuideX, y: laneGuideTop), leftOutlanePostTip] }
+    /// The same post on the right (Play Lab run 6: the right outlane took 46 of 112 drains). Most of those are balls
+    /// thrown onto the right wall by the bumpers, which still drain; this catches the ones dropping off the right bulge
+    /// at x ≈ 516–523 that hit the guide's post on its outer side. Mirrored about x 284: (514, 470) → (524, 482).
+    static var rightOutlanePostRail: [CGPoint] { leftOutlanePostRail.map { mirrored($0) } }
 
     // MARK: Top-right lane and its one-way gate (Table 03's: a plunge swings the gate and rides the arch;
     // a ball coming round the top the other way is stopped and drops back into the playfield).

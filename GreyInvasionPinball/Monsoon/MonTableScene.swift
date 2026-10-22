@@ -268,6 +268,7 @@ final class MonTableScene: SKScene {
         addWall(points: MonTableLayout.leftLaneGuide)
         addWall(points: MonTableLayout.leftOutlaneWall)
         addWall(points: MonTableLayout.leftOutlanePostRail)      // its rail and post are baked into mon_lower
+        addWall(points: MonTableLayout.rightOutlanePostRail)     // (the right one too)
         addWall(points: MonTableLayout.rightOutlaneWall)
         addWall(points: MonTableLayout.rightApron)
         addWall(points: MonTableLayout.rightLaneGuide)
@@ -1616,7 +1617,7 @@ final class MonTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T4 M11 v4")
+        let label = SKLabelNode(text: "T4 M11 v5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)

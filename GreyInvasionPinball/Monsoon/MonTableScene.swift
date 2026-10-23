@@ -2398,7 +2398,15 @@ extension MonTableScene: PlayLabHost {
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
                                  shots: [("orbit", 0.492), ("captiveTop", 0.517)],
-                                 shots60: [("arroyo", 0.373), ("orbit", 0.467)])]
+                                 shots60: [("arroyo", 0.373), ("orbit", 0.467)]),
+                // Round 6a (Aaron: the robot never used the upper flipper): back in, with the post-assist Shot Lab
+                // (21-32): from its cradle the one solid window is the raindrop LANES (0.302–0.331 at 120 Hz,
+                // 0.370–0.427 at 60 Hz). Its arroyo/standup bands are 3–5 trials and went 0/38 in run 8 (6b: gone), so
+                // the lanes are its only shot. Listed, it also makes reactive flips and catches.
+                PlayRobotFlipper(name: "upper", pivot: specs[2].pivot, length: MonTableLayout.upperFlipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: false,
+                                 shots: [("lane", 0.317)],
+                                 shots60: [("lane", 0.398)])]
     }
 
     func playLabStartGame(variant: Int) -> String {
@@ -2447,7 +2455,9 @@ extension MonTableScene: PlayLabHost {
             PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: !b.isOnFloor,
                                isHeld: b.heldIn != nil, onPlunger: isOnPlunger(b),
                                id: ObjectIdentifier(b).hashValue)
-        }, wanted: robotWanted())
+        }, wanted: robotWanted(), lanes: lanesResetAt == nil && !rollovers.isEmpty
+            ? PlayRobotView.Lanes(xs: rollovers.map { $0.position.x }, y: rollovers[0].position.y, lit: rollovers.map { $0.isLit })
+            : nil)
         guard let cmd = lab.frame(view) else { return }
         if cmd.left != robotLeft || cmd.right != robotRight {
             robotLeft = cmd.left
@@ -2470,6 +2480,8 @@ extension MonTableScene: PlayLabHost {
         w += arrows.filter { lamps.state(of: "arrow." + $0.lamp) == .fastBlink }.map { $0.shot }
         w += arrows.filter { lamps.state(of: "arrow." + $0.lamp) == .blink }.map { $0.shot }
         w += arrows.map { $0.shot }
+        // The raindrop lanes (the upper flipper's shot) while a lane is still dark: +1X and a quarter of the sky each.
+        if lanesResetAt == nil, rollovers.contains(where: { !$0.isLit }) { w.append("lane") }
         return w
     }
 

@@ -46,7 +46,8 @@ def classify_drain(dr, flippers):
     buttons = [q[2] if len(q) > 2 else 0 for q in p]
     tail = pts[-20:]
     held = any(b for b in buttons[-7:])
-    if any(x > 490 and y < 220 for x, y in pts):
+    # Right outlane: x 490–548 (the lane wall); beyond it is the plunger lane (a relaunched ball, not a drain path).
+    if any(490 < x < 549 and y < 220 for x, y in pts):
         return "outlane R", held
     if any(x < 110 and y < 220 for x, y in pts):
         return "outlane L", held
@@ -86,6 +87,7 @@ def analyze(d, precise=()):
                 rows.append(dict(pass_=p, skill=s, games=len(gs), score=mean([g["score"] for g in gs]),
                                  minutes=mean([g["seconds"] for g in gs]) / 60, balls=mean([g["ballsPlayed"] for g in gs]),
                                  catches=mean([g["catches"] for g in gs]),
+                                 lane_taps=mean([g.get("laneTaps", 0) for g in gs]),
                                  extras={k: mean([g.get("extras", {}).get(k, 0) for g in gs]) for k in extras},
                                  ends=[g["endedBy"] for g in gs]))
 
@@ -262,11 +264,11 @@ def tracks_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
 def print_text(d, a, report_path, checks):
     games, passes, extras = a["games"], a["passes"], a["extras"]
     print(f"{d['table']} · {d['date']} · {len(games)} games · {d['fps']} fps · passes {', '.join(passes)}")
-    print(f"\n{'pass':7}{'skill':13}{'games':>6}{'score':>10}{'min':>6}{'balls':>6}{'catch':>6}"
+    print(f"\n{'pass':7}{'skill':13}{'games':>6}{'score':>10}{'min':>6}{'balls':>6}{'catch':>6}{'lanes':>6}"
           + "".join(f"{k[:7]:>8}" for k in extras) + "  end")
     for r in a["rows"]:
         print(f"{r['pass_']:7}{r['skill']:13}{r['games']:>6}{r['score']:>10,.0f}{r['minutes']:>6.1f}{r['balls']:>6.1f}"
-              f"{r['catches']:>6.1f}" + "".join(f"{r['extras'][k]:>8.1f}" for k in extras)
+              f"{r['catches']:>6.1f}{r['lane_taps']:>6.1f}" + "".join(f"{r['extras'][k]:>8.1f}" for k in extras)
               + "  " + ",".join(e[:4] for e in r["ends"]))
     if a["names"]:
         print("\nObjectives reached (share of games · median seconds to the first):")
@@ -366,10 +368,11 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
 
     # Summary
     h.append("<h2>Games</h2><div class='panel'><table><tr><th>pass</th><th>skill</th><th>games</th><th>score</th><th>min</th>"
-             "<th>balls</th><th>catches</th>" + "".join(f"<th>{e(k)}</th>" for k in extras) + "<th>ended by</th></tr>")
+             "<th>balls</th><th>catches</th><th title='flipper taps that moved the lit lanes under a ball'>lane taps</th>"
+             + "".join(f"<th>{e(k)}</th>" for k in extras) + "<th>ended by</th></tr>")
     for r in a["rows"]:
         h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['games']}</td><td>{r['score']:,.0f}</td>"
-                 f"<td>{r['minutes']:.1f}</td><td>{r['balls']:.1f}</td><td>{r['catches']:.1f}</td>"
+                 f"<td>{r['minutes']:.1f}</td><td>{r['balls']:.1f}</td><td>{r['catches']:.1f}</td><td>{r['lane_taps']:.1f}</td>"
                  + "".join(f"<td>{r['extras'][k]:.1f}</td>" for k in extras)
                  + f"<td>{e(', '.join(r['ends']))}</td></tr>")
     h.append("</table></div>")

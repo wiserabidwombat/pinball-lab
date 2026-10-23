@@ -2139,7 +2139,9 @@ extension CthTableScene: PlayLabHost {
             PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: b.layer != .floor,
                                isHeld: b.heldIn != nil || b === magnetBall, onPlunger: isOnPlunger(b),
                                id: ObjectIdentifier(b).hashValue)
-        }, wanted: robotWanted())
+        }, wanted: robotWanted(), lanes: lanesResetAt == nil && !rollovers.isEmpty
+            ? PlayRobotView.Lanes(xs: rollovers.map { $0.position.x }, y: rollovers[0].position.y, lit: rollovers.map { $0.isLit })
+            : nil)
         guard let cmd = lab.frame(view) else { return }
         if cmd.left != robotLeft || cmd.right != robotRight {
             robotLeft = cmd.left

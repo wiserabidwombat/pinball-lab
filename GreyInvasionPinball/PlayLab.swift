@@ -10,7 +10,7 @@
 // how long since the plunge) so the report can say why a skill loses balls.
 // Round 2: screenshots and shot tracks. The lab grabs a picture of the table (SKView.texture(from:)) the first time
 // each objective is reached in a game, at every watchdog incident and at the end of each game, into a folder beside
-// the JSON (playlab-<table>-<date>/NN-<reason>.png, at most `maxCapturesPerGame`). Every aimed flip records the ball's
+// the JSON (playlab-<table>-<date>/NN-<reason>.jpg, half size, at most `maxCapturesPerGame`). Every aimed flip records the ball's
 // path for the next few seconds (PlayTrack: flipper, target, outcome made / miss / drain, points), and the report tool
 // draws the tracks over the table as an SVG.
 //
@@ -57,6 +57,9 @@ nonisolated enum PlaySkill: String, CaseIterable, Codable {
     /// Whether they aim at what the table wants (otherwise a random shot from that flipper).
     var aims: Bool { self == .advanced || self == .expert }
 
+    /// Round 6a: whether they tap a flipper to move the lit lanes under a ball heading into the top lanes.
+    var changesLanes: Bool { aims }
+
     /// Beginners often hit both buttons at once.
     var flailChance: Double { self == .beginner ? 0.5 : 0 }
 
@@ -95,10 +98,19 @@ struct PlayRobotView {
         /// Optional: a stable id per ball (hosts may leave it 0; the lab then follows the aimed ball by proximity).
         var id: Int = 0
     }
+    /// Round 6a: the top lanes, for lane changes — each lane's x, their y, and which are lit now. Hosts whose
+    /// flippers rotate the lit lanes (a tap of the left button shifts the pattern one lane left, right one lane
+    /// right) pass this; nil while the lanes are blinking complete, or on tables without the rule.
+    struct Lanes {
+        let xs: [CGFloat]
+        let y: CGFloat
+        let lit: [Bool]
+    }
     let now: TimeInterval
     let balls: [Ball]
     /// The shots the table wants, most wanted first.
     let wanted: [String]
+    var lanes: Lanes? = nil
 }
 
 /// One flipper as the robot knows it.
@@ -139,6 +151,8 @@ struct PlayRobotCommand {
     /// A shot the robot just flipped for (to score aims), and the flipper it flipped.
     var aimedAt: String?
     var aimedFrom: Int?
+    /// Round 6a: this frame's press is a lane change (a tap to rotate the lit lanes), not a flip at a ball.
+    var laneTap = false
 }
 
 final class PlayRobot {
@@ -161,8 +175,13 @@ final class PlayRobot {
     private var holdUntil: [TimeInterval]
     private var decidedCatch: [Bool?]
     private var plungeAt: TimeInterval?
+    /// Round 6a: lane changes — the tap being held (a couple of frames), which button, and the pause between taps.
+    private var laneTapUntil: TimeInterval = -1
+    private var laneTapRight = false
+    private var laneCooldownUntil: TimeInterval = -1
 
     private(set) var catches = 0
+    private(set) var laneTaps = 0
 
     init(skill: PlaySkill, pass: PlayPass, flippers: [PlayRobotFlipper], ballRadius: CGFloat) {
         self.skill = skill
@@ -282,8 +301,7 @@ final class PlayRobot {
         case .dropped(let i, let flipAt, let target):
             if now >= flipAt {
                 pressed[i] = true
-                cmd.aimedAt = target
-                cmd.aimedFrom = i
+                if target != "none" { cmd.aimedAt = target; cmd.aimedFrom = i }   // a flipper with no shots just flips
                 mode = .shooting(flipper: i, until: now + 0.35)
             }
         case .shooting(let i, let until):
@@ -336,6 +354,38 @@ final class PlayRobot {
         for (i, f) in flippers.enumerated() where pressed[i] {
             if f.rightButton { cmd.right = true } else { cmd.left = true }
         }
+
+        // Round 6a: lane changes. A ball heading into the top lanes toward a LIT lane while another is dark: tap the
+        // button that brings a dark lane under it (left shifts the lit pattern one lane left, right one lane right),
+        // the fewer taps the better, one tap every 0.3 s. Only when no ball is anywhere near the flippers (the tap
+        // flips a lower flipper too) and the robot isn't mid-shot — the way a player picks the moment.
+        if now < laneTapUntil {
+            if laneTapRight { cmd.right = true } else { cmd.left = true }
+        } else if let lanes = view.lanes, skill.changesLanes, busy == nil, now >= laneCooldownUntil,
+                  lanes.xs.count == lanes.lit.count, lanes.xs.count >= 2, lanes.lit.contains(false),
+                  !pressed.contains(true) {
+            let lowY = (flippers.map(\.pivot.y).max() ?? 220) + 260
+            if lowerFree.allSatisfy({ $0.position.y > lowY }),
+               let b = lowerFree.first(where: { ball in
+                   let dy = ball.position.y - lanes.y
+                   let toward = (dy > 0 && ball.velocity.dy < -40) || (dy < 0 && ball.velocity.dy > 40)
+                   return toward && abs(dy) < 170 && ball.position.x > lanes.xs.min()! - 24 && ball.position.x < lanes.xs.max()! + 24
+               }) {
+                let n = lanes.xs.count
+                let i = lanes.xs.indices.min(by: { abs(lanes.xs[$0] - b.position.x) < abs(lanes.xs[$1] - b.position.x) })!
+                if lanes.lit[i] {
+                    // Taps of the left button needed until the lane under the ball is dark, and of the right button.
+                    let leftTaps = (1..<n).first(where: { !lanes.lit[(i + $0) % n] }) ?? n
+                    let rightTaps = (1..<n).first(where: { !lanes.lit[((i - $0) % n + n) % n] }) ?? n
+                    laneTapRight = rightTaps < leftTaps
+                    laneTapUntil = now + 0.06
+                    laneCooldownUntil = now + 0.3
+                    laneTaps += 1
+                    cmd.laneTap = true
+                    if laneTapRight { cmd.right = true } else { cmd.left = true }
+                }
+            }
+        }
         return cmd
     }
 
@@ -345,7 +395,9 @@ final class PlayRobot {
         if skill.aims {
             for w in wanted { if let s = shots.first(where: { $0.name == w }) { return (s.name, s.delay) } }
         }
-        let s = shots.randomElement(using: &rng) ?? (name: "none", delay: 0.35)
+        // No cradle shots from this flipper (Monsoon's upper flipper: the Shot Lab found only slivers there): just flip
+        // it off the cradle somewhere, as a player would, without scoring an aim.
+        let s = shots.randomElement(using: &rng) ?? (name: "none", delay: Double.random(in: 0.28...0.42, using: &rng))
         return (s.name, s.delay)
     }
 }
@@ -410,6 +462,7 @@ nonisolated struct PlayGame: Codable {
     var endedBy = ""                    // "gameOver" (balls gone) or "time" (the cap)
     var ballsPlayed = 0
     var catches = 0
+    var laneTaps = 0                    // round 6a: flipper taps made to move the lit lanes under a ball
     var banners: [String: Int] = [:]
     var shots: [String: Int] = [:]
     var aims: [String: [Int]] = [:]     // target → [tried, made]
@@ -697,11 +750,20 @@ final class PlayLab {
         guard let view = host.playLabView, let scene = view.scene else { return }
         for item in queue {
             guard let texture = view.texture(from: scene) else { continue }
-            let image = UIImage(cgImage: texture.cgImage())
-            guard let data = image.pngData() else { continue }
+            // 2026-10-23: half-size JPEG (~0.3–0.5 MB) instead of a full-size PNG (~8 MB); full PNGs filled the Mac's disk
+            // during an overnight sweep (~1.2 GB per run).
+            let full = texture.cgImage()
+            let half = CGSize(width: max(1, full.width / 2), height: max(1, full.height / 2))
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            format.opaque = true
+            let image = UIGraphicsImageRenderer(size: half, format: format).image { _ in
+                UIImage(cgImage: full).draw(in: CGRect(origin: .zero, size: half))
+            }
+            guard let data = image.jpegData(compressionQuality: 0.7) else { continue }
             capturesThisGame += 1
             let reason = item.reason.replacingOccurrences(of: ":", with: "-")
-            let name = "g" + String(format: "%02d", index + 1) + "-" + String(format: "%02d", capturesThisGame) + "-\(reason).png"
+            let name = "g" + String(format: "%02d", index + 1) + "-" + String(format: "%02d", capturesThisGame) + "-\(reason).jpg"
             if LabFiles.writeData(data, folder: runFolderName, name: name) {
                 current?.captures.append(PlayCapture(file: name, reason: item.reason, at: item.at.rounded()))
             }
@@ -763,6 +825,7 @@ final class PlayLab {
         g.endedBy = endedBy
         g.ballsPlayed = ballsPlayed
         g.catches = robot?.catches ?? 0
+        g.laneTaps = robot?.laneTaps ?? 0
         g.extras = host.playLabEndGame()
         games.append(g)
         current = nil

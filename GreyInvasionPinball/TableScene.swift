@@ -929,7 +929,7 @@ final class TableScene: SKScene {
         let mb = multiballActive ? " · MULTIBALL" : " · locks \(lockedBalls)"
         // Two lines: the frame rate on top, the build tag underneath.
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)Lab v6 \(effectiveCameraMode.tag) · \(layer) · \(speed)\(count)\(mb)"
+        var text = "\(fps)Lab v7 \(effectiveCameraMode.tag) · \(layer) · \(speed)\(count)\(mb)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1579,6 +1579,13 @@ final class TableScene: SKScene {
         for ball in balls {
             updateRampLayer(ball)
             guard let body = ball.physicsBody else { continue }
+            // Lab v7: the flip assist (as on Monsoon and Lamplight), so a flip gives a floor ball its full speed at 60 Hz too.
+            if ball.isOnFloor, ball.heldIn == nil {
+                let r = TableLayout.ballRadius
+                leftFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                rightFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                upperFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+            }
             let v = body.velocity
             let speed = hypot(v.dx, v.dy)
             let maxSpeed = ball.layer == .rampDown ? TableLayout.rampReturnMaxSpeed : TableLayout.maxBallSpeed
@@ -1760,19 +1767,21 @@ extension TableScene: PlayLabHost {
          PlayObjective(name: "combo", text: "Two ramps or orbits within 3 s")]
     }
 
-    /// Flip delays = the middle of each shot's window in the Shot Lab (run 5, 120 Hz, Hangar at y 650).
+    /// Flip delays = the middle of each shot's solid window (3+ trials) in the Shot Lab. Lab v7: re-measured after the
+    /// flip assist (shotlab-grey-invasion-2026-10-22T23-38-45Z); the Hangar moved from ~0.30 to ~0.38, and the right
+    /// flipper's abduction is gone (a 2-trial band on a same-side shot: 7/75 and 5/49 in the last two Play Lab runs).
     var playLabFlippers: [PlayRobotFlipper] {
         let specs = shotLabFlippers
         let rest = TableLayout.flipperRestAngle
-        // shots60: the 60 Hz pass's windows (16.7 ms strip of the same run); the abduction from the right has none.
+        // shots60: the 60 Hz pass's windows (16.7 ms steps, same run).
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: TableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
-                                 shots: [("hangar", 0.304), ("rightRamp", 0.459), ("abduction", 0.500), ("fighter", 0.533)],
-                                 shots60: [("hangar", 0.317), ("rightRamp", 0.433), ("abduction", 0.467), ("fighter", 0.501)]),
+                                 shots: [("hangar", 0.382), ("rightRamp", 0.443), ("abduction", 0.483), ("fighter", 0.525)],
+                                 shots60: [("hangar", 0.376), ("rightRamp", 0.432), ("abduction", 0.458), ("fighter", 0.502)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: TableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
-                                 shots: [("hangar", 0.321), ("abduction", 0.367), ("leftRamp", 0.433), ("orbit", 0.495)],
-                                 shots60: [("hangar", 0.317), ("leftRamp", 0.425), ("orbit", 0.481)])]
+                                 shots: [("hangar", 0.387), ("leftRamp", 0.450), ("orbit", 0.488)],
+                                 shots60: [("hangar", 0.369), ("leftRamp", 0.416), ("orbit", 0.484)])]
     }
 
     func playLabStartGame(variant: Int) -> String {

@@ -929,7 +929,7 @@ final class TableScene: SKScene {
         let mb = multiballActive ? " · MULTIBALL" : " · locks \(lockedBalls)"
         // Two lines: the frame rate on top, the build tag underneath.
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)Lab v7 \(effectiveCameraMode.tag) · \(layer) · \(speed)\(count)\(mb)"
+        var text = "\(fps)Lab v8 \(effectiveCameraMode.tag) · \(layer) · \(speed)\(count)\(mb)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1767,20 +1767,21 @@ extension TableScene: PlayLabHost {
          PlayObjective(name: "combo", text: "Two ramps or orbits within 3 s")]
     }
 
-    /// Flip delays = the middle of each shot's solid window (3+ trials) in the Shot Lab. Lab v7: re-measured after the
-    /// flip assist (shotlab-grey-invasion-2026-10-22T23-38-45Z); the Hangar moved from ~0.30 to ~0.38, and the right
-    /// flipper's abduction is gone (a 2-trial band on a same-side shot: 7/75 and 5/49 in the last two Play Lab runs).
+    /// Flip delays = the middle of each shot's window in the Shot Lab. Lab v8: the flip assist is 60 Hz only, so the
+    /// 120 Hz delays are back to the pre-assist run (Shot Lab run 5, 2026-10-11 16-07, Hangar at y 650) and the 60 Hz ones
+    /// are from the post-assist run (shotlab-grey-invasion-2026-10-22T23-38-45Z). The right flipper's abduction stays out
+    /// at both rates (a 2-trial band on a same-side shot: 7/75 and 5/49 in Play Lab runs).
     var playLabFlippers: [PlayRobotFlipper] {
         let specs = shotLabFlippers
         let rest = TableLayout.flipperRestAngle
         // shots60: the 60 Hz pass's windows (16.7 ms steps, same run).
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: TableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
-                                 shots: [("hangar", 0.382), ("rightRamp", 0.443), ("abduction", 0.483), ("fighter", 0.525)],
+                                 shots: [("hangar", 0.301), ("rightRamp", 0.447), ("abduction", 0.503), ("fighter", 0.528)],
                                  shots60: [("hangar", 0.376), ("rightRamp", 0.432), ("abduction", 0.458), ("fighter", 0.502)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: TableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
-                                 shots: [("hangar", 0.387), ("leftRamp", 0.450), ("orbit", 0.488)],
+                                 shots: [("hangar", 0.300), ("leftRamp", 0.446), ("orbit", 0.490)],
                                  shots60: [("hangar", 0.369), ("leftRamp", 0.416), ("orbit", 0.484)])]
     }
 

@@ -27,6 +27,10 @@ final class CthFlipper: SKNode {
     private let length: CGFloat
     private let pivotRadius: CGFloat
     private let tipRadius: CGFloat
+    /// T3 M11 v2 flip assist (from Lamplight's T5 M8 v12, as on Monsoon and Grey Invasion): how far it was raised
+    /// when this frame's step() ran, and that frame's length.
+    private var raisedAtStep: CGFloat = 0
+    private var stepDt: CGFloat = 1.0 / 120
 
     init(side: Side, pivot: CGPoint,
          length: CGFloat = CthTableLayout.flipperLength,
@@ -71,12 +75,45 @@ final class CthFlipper: SKNode {
         if raised < -slack || raised > travel + slack {
             zRotation = restRotation + raiseSign * min(max(raised, 0), travel)
         }
+        raisedAtStep = raised                                  // after the safety net, so a snap-back isn't a swing
+        stepDt = dt
 
         let target: CGFloat = isPressed ? travel : 0
         let wanted = (target - raised) / dt
         let speed = min(max(wanted, -CthTableLayout.flipperDownSpeed), CthTableLayout.flipperUpSpeed)
         body.isResting = false                        // a sleeping body ignores new velocities
         body.angularVelocity = raiseSign * speed
+    }
+
+    /// The flip assist (Lamplight T5 M8 v12, Monsoon T4 M11 v4, Grey Invasion Lab v7; Cthulhu's 60 Hz robots stalled in
+    /// the 2026-10-22 sweep). At 60 Hz the flipper swings a quarter of its travel per physics step and part of the hit is
+    /// lost untangling the overlap, so the same flip sends the ball ~15% slower than at 120 Hz. Call after the physics
+    /// step: if this flipper swung up this frame and the ball is touching its top face, the ball leaves at least as fast
+    /// (along the face's normal) as that point of the face was moving. It never slows a ball, and does nothing at rest or
+    /// when held up.
+    func flipAssist(_ body: SKPhysicsBody, ballAt p: CGPoint, ballRadius: CGFloat) {
+        let swung = raised - raisedAtStep
+        // 2026-10-23 (Aaron: "60 Hz only"): at 120 Hz the physics already gives the ball the face's speed, and the
+        // assist changed shots that were designed and tuned there (GI Hangar 67 → 90 %, Cthulhu upper Lagoon 97 → 40 %),
+        // so it only acts on long steps (60 Hz phones, Low Power Mode, a hitch). 1/90 s sits between the two rates.
+        guard isPressed, swung > 0.02, stepDt > 1.0 / 90 else { return }   // a real flip step is 0.2–0.4 rad
+        let omega = min(swung / stepDt, CthTableLayout.flipperUpSpeed)   // this frame's angular speed (rad/s)
+        // The ball in the flipper's own frame (arm along +x for the left flipper, −x for the right).
+        let dx = p.x - position.x, dy = p.y - position.y
+        let c = cos(zRotation), s = sin(zRotation)
+        let lx = dx * c + dy * s
+        let ly = -dx * s + dy * c
+        let along = side == .left ? lx : -lx                      // distance out along the arm
+        guard along > -pivotRadius, along < length, ly > 0 else { return }
+        let t = min(max(along / length, 0), 1)
+        let half = pivotRadius + (tipRadius - pivotRadius) * t
+        guard ly - half - ballRadius < 3 else { return }          // touching the top face (3 pt of slack)
+        let surface = omega * max(along, 0)                       // the face's speed at that point
+        let n = CGVector(dx: -s, dy: c)                           // the top face's normal in the scene
+        let v = body.velocity
+        let vn = v.dx * n.dx + v.dy * n.dy
+        guard vn < surface else { return }
+        body.velocity = CGVector(dx: v.dx + (surface - vn) * n.dx, dy: v.dy + (surface - vn) * n.dy)
     }
 
     private func buildShape() {

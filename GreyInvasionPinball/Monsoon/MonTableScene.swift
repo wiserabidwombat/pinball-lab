@@ -1617,7 +1617,7 @@ final class MonTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T4 M11 v5")
+        let label = SKLabelNode(text: "T4 M11 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2378,8 +2378,11 @@ extension MonTableScene: PlayLabHost {
          PlayObjective(name: "skillShot", text: "Plunge through the ringed raindrop lane")]
     }
 
-    /// Flip delays = the middle of each shot's window in the Shot Lab run of 2026-10-21 21-32 (after T4 M11 v4's flip
-    /// assist; dust devil at rest — its raging windows differ by ~40 ms, see the 10-15 22-38 run). The assist moved
+    /// Flip delays = the middle of each shot's window in the Shot Lab. T4 M11 v6: the flip assist is 60 Hz only, so the
+    /// 120 Hz lower-flipper delays are back to the pre-assist lists (Shot Lab 2026-10-16 00-02, after rounds 4h′/4h″:
+    /// Play Lab run 4) and the 60 Hz ones stay from the post-assist run of 2026-10-21 21-32 (dust devil at rest — its
+    /// raging windows differ by ~40 ms, see the 10-15 22-38 run). The upper flipper's 120 Hz lane (0.317) is from 21-32
+    /// too: there's no pre-assist measurement of it. The notes below describe the 21-32 run. The assist moved
     /// the arroyo to a later, wider window (left 0.353–0.416, 17 trials) and gave the right flipper a real arroyo
     /// window (0.330–0.423, 24 trials); captiveTop shrank to a 2-trial band (0.509–0.516), so it's gone at both rates. The helix is the mesa ramp with the diverter set,
     /// so the robot aims "mesaRamp" either way (the ride takes longer than the aim window; the HELIX banner records it).
@@ -2390,11 +2393,11 @@ extension MonTableScene: PlayLabHost {
         let rest = MonTableLayout.flipperRestAngle
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
-                                 shots: [("arroyo", 0.385), ("mesaRamp", 0.442), ("standup", 0.520)],
+                                 shots: [("arroyo", 0.312), ("mesaRamp", 0.450), ("standup", 0.522)],
                                  shots60: [("arroyo", 0.407), ("mesaRamp", 0.432), ("standup", 0.501)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
-                                 shots: [("arroyo", 0.377), ("orbit", 0.487)],
+                                 shots: [("orbit", 0.492), ("captiveTop", 0.517)],
                                  shots60: [("arroyo", 0.373), ("orbit", 0.467)])]
     }
 

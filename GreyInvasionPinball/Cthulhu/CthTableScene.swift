@@ -1326,7 +1326,7 @@ final class CthTableScene: SKScene {
         case .rampUp: layer = "ramp up"
         case .rampDown: layer = "wire"
         }
-        var text = "\(fps)T3 M11 v1 \(effectiveCameraMode.tag) · \(layer) · \(speed)"
+        var text = "\(fps)T3 M11 v3 \(effectiveCameraMode.tag) · \(layer) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1709,6 +1709,14 @@ final class CthTableScene: SKScene {
         for ball in balls {
             updateRampLayer(ball)
             guard let body = ball.physicsBody else { continue }
+            // T3 M11 v2: the flip assist (as on Lamplight, Monsoon and Grey Invasion), so a flip gives a floor ball its
+            // full speed at 60 Hz too.
+            if ball.isOnFloor, ball.heldIn == nil {
+                let r = CthTableLayout.ballRadius
+                leftFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                rightFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                upperFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+            }
             let v = body.velocity
             let speed = hypot(v.dx, v.dy)
             let maxSpeed = ball.layer == .rampDown ? CthTableLayout.rampReturnMaxSpeed : CthTableLayout.maxBallSpeed
@@ -2059,8 +2067,10 @@ extension CthTableScene: PlayLabHost {
          PlayObjective(name: "skillShot", text: "Plunge into the lit Candle lane")]
     }
 
-    /// Flip delays = the middle of each shot's window in the Shot Lab runs of 2026-10-13 (16-18 Cthulhu down, 16-59
-    /// Cthulhu up: his sway makes the Lagoon line the "cthulhu" shot). Candle-lane flips aren't aimed shots.
+    /// Flip delays = the middle of each shot's window in the Shot Lab. T3 M11 v3: the flip assist is 60 Hz only, so the
+    /// 120 Hz delays are back to the pre-assist runs of 2026-10-13 (16-18 Cthulhu down, 16-59 Cthulhu up: his sway makes
+    /// the Lagoon line the "cthulhu" shot) and the 60 Hz ones are from the post-assist run
+    /// (shotlab-cthulhu-rising-2026-10-23T02-38-40Z; the "cthulhu" ones are still 10-13's). Candle-lane flips aren't aimed.
     var playLabFlippers: [PlayRobotFlipper] {
         let specs = shotLabFlippers
         let rest = CthTableLayout.flipperRestAngle
@@ -2068,18 +2078,17 @@ extension CthTableScene: PlayLabHost {
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
                                  shots: [("library", 0.298), ("lagoon", 0.347), ("cthulhu", 0.366), ("rightRamp", 0.446),
                                          ("sigil", 0.528)],
-                                 shots60: [("library", 0.318), ("lagoon", 0.358), ("cthulhu", 0.377), ("rightRamp", 0.434),
-                                           ("sigil", 0.500)]),
+                                 shots60: [("library", 0.370), ("cthulhu", 0.377), ("rightRamp", 0.433), ("sigil", 0.502)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: CthTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
                                  // No sigil from the right: the Shot Lab's "window" there is a 1–2 trial sliver at the
                                  // end of the sweep (0/17 in Play Lab runs 1–2); the left flipper takes the bank.
                                  shots: [("library", 0.295), ("cthulhu", 0.412), ("orbit", 0.493)],
-                                 shots60: [("library", 0.317), ("cthulhu", 0.425), ("orbit", 0.491)]),
+                                 shots60: [("library", 0.376), ("cthulhu", 0.425), ("orbit", 0.482)]),
                 PlayRobotFlipper(name: "upper", pivot: specs[2].pivot, length: CthTableLayout.upperFlipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: false,
                                  shots: [("cthulhu", 0.299), ("lagoon", 0.346)],
-                                 shots60: [("cthulhu", 0.326), ("lagoon", 0.357), ("sigil", 0.421), ("library", 0.443)])]
+                                 shots60: [("cthulhu", 0.326), ("sigil", 0.214), ("lagoon", 0.388)])]
     }
 
     func playLabStartGame(variant: Int) -> String {

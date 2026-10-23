@@ -92,7 +92,10 @@ final class MonFlipper: SKNode {
     /// that point of the face was moving. It never slows a ball, and does nothing at rest or when held up.
     func flipAssist(_ body: SKPhysicsBody, ballAt p: CGPoint, ballRadius: CGFloat) {
         let swung = raised - raisedAtStep
-        guard isPressed, swung > 0.02, stepDt > 0 else { return }   // a real flip step is 0.2–0.4 rad
+        // 2026-10-23 (Aaron: "60 Hz only"): at 120 Hz the physics already gives the ball the face's speed, and the
+        // assist changed shots that were designed and tuned there (GI Hangar 67 → 90 %, Cthulhu upper Lagoon 97 → 40 %),
+        // so it only acts on long steps (60 Hz phones, Low Power Mode, a hitch). 1/90 s sits between the two rates.
+        guard isPressed, swung > 0.02, stepDt > 1.0 / 90 else { return }   // a real flip step is 0.2–0.4 rad
         let omega = min(swung / stepDt, MonTableLayout.flipperUpSpeed)   // this frame's angular speed (rad/s)
         // The ball in the flipper's own frame (arm along +x for the left flipper, −x for the right).
         let dx = p.x - position.x, dy = p.y - position.y

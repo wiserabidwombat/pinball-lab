@@ -1326,7 +1326,7 @@ final class CthTableScene: SKScene {
         case .rampUp: layer = "ramp up"
         case .rampDown: layer = "wire"
         }
-        var text = "\(fps)T3 M11 v3 \(effectiveCameraMode.tag) · \(layer) · \(speed)"
+        var text = "\(fps)T3 M11 v4 \(effectiveCameraMode.tag) · \(layer) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2167,6 +2167,12 @@ extension CthTableScene: PlayLabHost {
         // the Library is the shot once it is lit (its arrow blinks then).
         if campaign.phase == .research {
             w += ["rightRamp", "orbit", "lagoon", "sigil", "library"]
+        } else if campaign.runningTome == 1 {
+            // T3 M11 v4 (sweep 2026-10-23): in Tome II only the lit glyphs count, and the Library kickout comes back to
+            // the same flipper, so when that flipper had no lit glyph the robot looped on the Library (10–14 in a row)
+            // until the 30 s ran out (4 of 10 Tome II games). With no lit glyph in reach it shoots something that moves
+            // the ball round the table instead; a lit Library glyph still comes first through its blinking arrow.
+            w += ["rightRamp", "orbit", "sigil", "lagoon"]
         } else {
             w += ["library", "rightRamp", "orbit", "lagoon", "sigil"]
         }

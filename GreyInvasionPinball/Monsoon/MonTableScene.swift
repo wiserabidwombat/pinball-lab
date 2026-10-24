@@ -1617,7 +1617,7 @@ final class MonTableScene: SKScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T4 M11 v6")
+        let label = SKLabelNode(text: "T4 M11 v7")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2381,8 +2381,9 @@ extension MonTableScene: PlayLabHost {
     /// Flip delays = the middle of each shot's window in the Shot Lab. T4 M11 v6: the flip assist is 60 Hz only, so the
     /// 120 Hz lower-flipper delays are back to the pre-assist lists (Shot Lab 2026-10-16 00-02, after rounds 4h′/4h″:
     /// Play Lab run 4) and the 60 Hz ones stay from the post-assist run of 2026-10-21 21-32 (dust devil at rest — its
-    /// raging windows differ by ~40 ms, see the 10-15 22-38 run). The upper flipper's 120 Hz lane (0.317) is from 21-32
-    /// too: there's no pre-assist measurement of it. The notes below describe the 21-32 run. The assist moved
+    /// raging windows differ by ~40 ms, see the 10-15 22-38 run). T4 M11 v7: the upper flipper's 120 Hz lane is 0.450,
+    /// from the pre-assist run of 2026-10-16 00-02 (lane 0.445–0.465, 6 trials; the 10-15 21-55 run has lanes at
+    /// 0.385–0.447); 21-32's 0.317 was measured with the assist and went 1/43 once it was 60 Hz only. The notes below describe the 21-32 run. The assist moved
     /// the arroyo to a later, wider window (left 0.353–0.416, 17 trials) and gave the right flipper a real arroyo
     /// window (0.330–0.423, 24 trials); captiveTop shrank to a 2-trial band (0.509–0.516), so it's gone at both rates. The helix is the mesa ramp with the diverter set,
     /// so the robot aims "mesaRamp" either way (the ride takes longer than the aim window; the HELIX banner records it).
@@ -2405,7 +2406,7 @@ extension MonTableScene: PlayLabHost {
                 // the lanes are its only shot. Listed, it also makes reactive flips and catches.
                 PlayRobotFlipper(name: "upper", pivot: specs[2].pivot, length: MonTableLayout.upperFlipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: false,
-                                 shots: [("lane", 0.317)],
+                                 shots: [("lane", 0.450)],
                                  shots60: [("lane", 0.398)])]
     }
 

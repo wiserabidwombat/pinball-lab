@@ -37,7 +37,7 @@ enum LmpTableLayout {
 
     // MARK: Art
     /// The oblique view the art will be drawn in (Tables 03–04's 22°): a point at height z appears z × this farther up.
-    static let oblique: CGFloat = 0.4040
+    nonisolated static let oblique: CGFloat = 0.4040
     /// Rendered part boxes (none yet: the parts fall back to their grey-box shapes). Kept so the copied parts build.
     static let upperFlipperArtBox = CGRect(x: -76, y: -15, width: 91, height: 30)
     static let launchGateArtBox = CGRect(x: -35, y: -37, width: 47, height: 48)
@@ -428,8 +428,9 @@ enum LmpTableLayout {
     /// Physics is unchanged: this is how high the surface under an upper-layer ball is, for drawing only.
     /// T5 M9 v27 (Aaron: balls looked like they fell through the ramp): 20 → 40, two balls tall, so a floor ball can
     /// pass under the ramp's upper half; the low part of the climb is drawn as a closed entry. Drawing only.
-    static let loftHeight: CGFloat = 40
-    static var loftLift: CGFloat { loftHeight * oblique }
+    nonisolated static let loftHeight: CGFloat = 40
+    /// nonisolated (with loftHeight and oblique): LmpCatPerch.position, a plain enum, reads it too; constants only.
+    nonisolated static var loftLift: CGFloat { loftHeight * oblique }
     private static let loftFloorPath: CGPath = {
         let p = CGMutablePath(); p.addLines(between: loftFloor); p.closeSubpath(); return p
     }()

@@ -336,6 +336,10 @@ struct ContentView: View {
             debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
             // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator).
             debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
+            // Plan 2 round 6: one expert game at the phone's own step, 3-minute cap, the report shared when done.
+            debugButton("Play Lab · quick") { PlayLab.nextRunIsQuick = true; scene.debugStartPlayLab(); setPaused(false) }
+            // Plan 2 round 12: one game of your own, watched by the lab (no robot), the report shared when it ends.
+            debugButton("Record me") { PlayLab.nextRunIsRecording = true; scene.debugStartPlayLab(); setPaused(false) }
             #endif
         }
     }

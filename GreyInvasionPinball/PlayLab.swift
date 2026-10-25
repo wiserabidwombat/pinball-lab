@@ -21,7 +21,9 @@
 // Unattended runs: launch the app with `-playlab <table>` (lamplight, greyinvasion, cthulhu, monsoon) and it opens
 // that table, runs the lab and quits when the report is saved. Options: `-playlab-games N` (per skill and pass,
 // default 2), `-playlab-hz 120|60|both` (default both), `-playlab-skills beginner,expert` (default all),
-// `-playlab-cap SECONDS` (a game that runs this long is closed early, default 480).
+// `-playlab-cap SECONDS` (a game that runs this long is closed early, default 480), `-playlab-plunge [REPEATS]` (plan 2
+// round 7a: the plunge sweep — no flipping, every served ball plunged at the next power of 0.20…1.00 by 0.05, REPEATS
+// balls per power (default 3), and what each plunge did recorded in the report's `plunges`).
 #if DEBUG
 import Foundation
 import CoreGraphics
@@ -59,6 +61,16 @@ nonisolated enum PlaySkill: String, CaseIterable, Codable {
 
     /// Round 6a: whether they tap a flipper to move the lit lanes under a ball heading into the top lanes.
     var changesLanes: Bool { aims }
+
+    /// Round 9: whether they let a fast crossing ball hit the resting flipper and bounce to the other side (a dead
+    /// bounce) instead of flipping at it.
+    var deadBounces: Bool { self == .expert }
+
+    /// Round 10: whether they pass a cradled ball to the other flipper when the wanted shot is over there.
+    var passes: Bool { self == .expert }
+
+    /// Round 11: whether they trap one ball on a flipper during multiball and play the other.
+    var trapsInMultiball: Bool { self == .expert }
 
     /// Beginners often hit both buttons at once.
     var flailChance: Double { self == .beginner ? 0.5 : 0 }
@@ -111,6 +123,9 @@ struct PlayRobotView {
     /// The shots the table wants, most wanted first.
     let wanted: [String]
     var lanes: Lanes? = nil
+    /// Round 7b: the plunger power (0–1) that puts the ball through the table's ringed skill-shot lane right now, or
+    /// nil when no ring is lit or that lane can't be reached from the plunger. From the table's plunge sweep.
+    var skillPlunge: CGFloat? = nil
 }
 
 /// One flipper as the robot knows it.
@@ -153,6 +168,10 @@ struct PlayRobotCommand {
     var aimedFrom: Int?
     /// Round 6a: this frame's press is a lane change (a tap to rotate the lit lanes), not a flip at a ball.
     var laneTap = false
+    /// Round 7b: this plunge went for the ringed lane (counted as an aim "skillShot").
+    var skillPlunge = false
+    /// Round 8b: shove the table this way (the host applies it through its own nudge, tilt rule included).
+    var nudge: Nudge.Direction? = nil
 }
 
 final class PlayRobot {
@@ -174,7 +193,11 @@ final class PlayRobot {
     private var trigger: [Double?]
     private var holdUntil: [TimeInterval]
     private var decidedCatch: [Bool?]
+    /// Round 9: per flipper, whether the ball now approaching is being left to bounce off the resting flipper.
+    private var decidedBounce: [Bool?]
     private var plungeAt: TimeInterval?
+    /// Round 7a: set by the lab in a plunge sweep — plunge the next served ball at exactly this power, never flip.
+    var sweepPower: CGFloat?
     /// Round 6a: lane changes — the tap being held (a couple of frames), which button, and the pause between taps.
     private var laneTapUntil: TimeInterval = -1
     private var laneTapRight = false
@@ -182,6 +205,22 @@ final class PlayRobot {
 
     private(set) var catches = 0
     private(set) var laneTaps = 0
+    /// Round 8b: nudges made, the expert's own count of them in the tilt window, and when the last one was.
+    private(set) var nudges = 0
+    /// Round 9: dead bounces — crossing balls left to hit the resting flipper and go across.
+    private(set) var bounces = 0
+    /// Round 10: post passes — the late-flip delays tried (seconds after the drop), the one in flight (which flipper
+    /// should receive it, by when, under which name) and the tally per delay: "pass@0.54" → [tried, made].
+    static let passLadder = [0.52, 0.54, 0.56]
+    private var pendingPass: (flipper: Int, until: TimeInterval, target: String)?
+    private(set) var passResults: [String: [Int]] = [:]
+    /// Round 11: multiball traps — whether the cradle in hand is being held because another ball is loose, and how
+    /// many such holds there were.
+    private var trapHeld = false
+    private(set) var traps = 0
+    private var nudgeTimes: [TimeInterval] = []
+    private var nudgeCooldownUntil: TimeInterval = -1
+    private(set) var lastNudgeAt: TimeInterval = -.infinity
 
     init(skill: PlaySkill, pass: PlayPass, flippers: [PlayRobotFlipper], ballRadius: CGFloat) {
         self.skill = skill
@@ -191,6 +230,7 @@ final class PlayRobot {
         trigger = Array(repeating: nil, count: flippers.count)
         holdUntil = Array(repeating: -1, count: flippers.count)
         decidedCatch = Array(repeating: nil, count: flippers.count)
+        decidedBounce = Array(repeating: nil, count: flippers.count)
     }
 
     /// What the robot is doing (for the drain log).
@@ -235,10 +275,27 @@ final class PlayRobot {
         guard span.contains(b.position.x) else { return false }
         // Round 4e: only the crossing ball is refused — low (below pivot height + 20) and moving in from the tip side
         // at speed. Inlane feeds (slow, at the pivot end) and balls dropping from above are caught as before.
+        return !isCrossing(b, f) && b.velocity.dy < 80
+    }
+
+    /// A ball coming across low and fast from the other flipper's side (round 4e's crossing ball; round 9's dead-bounce
+    /// candidate).
+    private func isCrossing(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
         let towardPivot = f.pointsLeft ? b.velocity.dx > 0 : b.velocity.dx < 0
         let low = b.position.y < f.pivot.y + 20
-        let crossing = low && towardPivot && abs(b.velocity.dx) > 200 && abs(b.velocity.dx) > abs(b.velocity.dy)
-        return !crossing && b.velocity.dy < 80
+        return low && towardPivot && abs(b.velocity.dx) > 200 && abs(b.velocity.dx) > abs(b.velocity.dy)
+    }
+
+    /// Round 9: is a dead bounce the better play for a crossing ball at flipper i? Yes when the OTHER lower flipper
+    /// has the table's most wanted shot and this one doesn't (the bounce delivers the ball there), or when the ball
+    /// is too fast to catch anyway (a flip would only clip it off the raised tip).
+    private func bounceWorthIt(_ i: Int, ball b: PlayRobotView.Ball, wanted: [String]) -> Bool {
+        if hypot(b.velocity.dx, b.velocity.dy) >= 1100 { return true }
+        guard let want = wanted.first,
+              let other = flippers.indices.first(where: { $0 != i && !flippers[$0].upper }) else { return false }
+        let mine = flippers[i].shots(for: pass).contains { $0.name == want }
+        let theirs = flippers[other].shots(for: pass).contains { $0.name == want }
+        return theirs && !mine
     }
 
     /// While catching: the ball is still over the flipper (not past the tip into the gap, not gone).
@@ -260,11 +317,22 @@ final class PlayRobot {
             if plungeAt == nil { plungeAt = now + Double.random(in: 0.5...1.2, using: &rng) }
             if let at = plungeAt, now >= at {
                 plungeAt = nil
-                cmd.plunge = skill.plungePower(&rng)
+                if sweepPower == nil, skill.aims, let p = view.skillPlunge {
+                    // Round 7b: go for the ringed lane. The window per lane is ~0.02 of the pull; the expert's hand is
+                    // steadier than the advanced player's.
+                    let sigma: CGFloat = skill == .expert ? 0.01 : 0.02
+                    let u1 = CGFloat.random(in: 0.0001...1, using: &rng), u2 = CGFloat.random(in: 0...1, using: &rng)
+                    let noise = sigma * (-2 * log(u1)).squareRoot() * cos(2 * .pi * u2)
+                    cmd.plunge = min(1, max(0.1, p + noise))
+                    cmd.skillPlunge = true
+                } else {
+                    cmd.plunge = sweepPower ?? skill.plungePower(&rng)
+                }
             }
         } else {
             plungeAt = nil
         }
+        if sweepPower != nil { return cmd }   // round 7a: the plunge sweep never flips
 
         let free = view.balls.filter { !$0.isHeld && !$0.onPlunger }
         let lowerFree = free.filter { !$0.isUpper }
@@ -293,7 +361,19 @@ final class PlayRobot {
                 mode = .catching(flipper: i, since: since, steadySince: nil)
             }
         case .cradled(let i, let dropAt, let target, let delay):
-            if now >= dropAt {
+            // Round 11: multiball sense. The expert keeps the trapped ball while another lower ball is loose — the
+            // other flipper plays that one — unless the table's most wanted shot is this flipper's. On release the
+            // shot is picked afresh (the table may have moved on while the ball waited).
+            let f = flippers[i]
+            let anotherLoose = lowerFree.contains { hypot($0.position.x - f.cradle.x, $0.position.y - f.cradle.y) > 40 }
+            let wantedHere = view.wanted.first.map { w in f.shots(for: pass).contains { $0.name == w } } ?? false
+            if skill.trapsInMultiball, anotherLoose, !wantedHere {
+                if !trapHeld { trapHeld = true; traps += 1 }
+                pressed[i] = true
+                mode = .cradled(flipper: i, dropAt: max(dropAt, now + 0.3), target: target, delay: delay)
+            } else if now >= dropAt {
+                var (target, delay) = (target, delay)
+                if trapHeld { trapHeld = false; (target, delay) = pickShot(f, wanted: view.wanted) }
                 mode = .dropped(flipper: i, flipAt: now + max(0.05, delay + gauss(skill.timingSigma)), target: target)
             } else {
                 pressed[i] = true
@@ -301,11 +381,31 @@ final class PlayRobot {
         case .dropped(let i, let flipAt, let target):
             if now >= flipAt {
                 pressed[i] = true
-                if target != "none" { cmd.aimedAt = target; cmd.aimedFrom = i }   // a flipper with no shots just flips
+                if target.hasPrefix("pass@") {
+                    // Round 10: a pass, scored by the robot itself (did the other flipper get it?), not as an aim.
+                    passResults[target, default: [0, 0]][0] += 1
+                    if let j = flippers.indices.first(where: { $0 != i && !flippers[$0].upper }) {
+                        pendingPass = (j, now + 3, target)
+                    }
+                } else if target != "none" { cmd.aimedAt = target; cmd.aimedFrom = i }   // a flipper with no shots just flips
                 mode = .shooting(flipper: i, until: now + 0.35)
             }
         case .shooting(let i, let until):
             if now < until { pressed[i] = true } else { mode = .free }
+        }
+
+        // Round 10: did the pass arrive? Made when the ball is caught by, or settles over, the other flipper in time.
+        if let pp = pendingPass {
+            let f = flippers[pp.flipper]
+            var caught = false
+            if case .catching(let k, _, _) = mode, k == pp.flipper { caught = true }
+            if case .cradled(let k, _, _, _) = mode, k == pp.flipper { caught = true }
+            if caught || lowerFree.contains(where: { inZone($0, f, height: 60) && hypot($0.velocity.dx, $0.velocity.dy) < 160 }) {
+                passResults[pp.target, default: [0, 0]][1] += 1
+                pendingPass = nil
+            } else if now > pp.until {
+                pendingPass = nil
+            }
         }
 
         // Reactive flips (and starting a catch) for every flipper not busy with an aimed shot.
@@ -321,11 +421,24 @@ final class PlayRobot {
             guard let b = approaching.min(by: { $0.position.y < $1.position.y }) else {
                 trigger[i] = nil
                 decidedCatch[i] = nil
+                decidedBounce[i] = nil
+                continue
+            }
+            // Round 9: the dead bounce. A ball coming across low and fast is left to hit the resting flipper and
+            // bounce to the other side — hands off this flipper until the ball has left its zone.
+            if skill.deadBounces, !f.upper, busy == nil, decidedBounce[i] == nil {
+                let bounce = isCrossing(b, f) && bounceWorthIt(i, ball: b, wanted: view.wanted)
+                decidedBounce[i] = bounce
+                if bounce { bounces += 1 }
+            }
+            if decidedBounce[i] == true {
+                trigger[i] = nil
+                decidedCatch[i] = nil
                 continue
             }
             // A catch? Only one lower ball in play, not too fast, and nothing else going on.
             if busy == nil, decidedCatch[i] == nil {
-                let calm = f.upper || lowerFree.count == 1
+                let calm = f.upper || lowerFree.count == 1 || skill.trapsInMultiball   // round 11: the expert traps
                 decidedCatch[i] = calm && hypot(b.velocity.dx, b.velocity.dy) < 1100 && catchable(b, f)
                     && Double.random(in: 0..<1, using: &rng) < skill.catchChance
             }
@@ -386,19 +499,82 @@ final class PlayRobot {
                 }
             }
         }
+
+        // Round 8b: the nudge.
+        if skill.aims, let direction = nudgeDecision(lowerFree, now: now) { cmd.nudge = direction }
         return cmd
+    }
+
+    /// Round 8b: a free lower ball on its way out gets a shove. Down the outlane side of a flipper, above the lane
+    /// guide (where the ball still chooses between the outlane and the inlane): toward the centre. Into the centre
+    /// gap, slowly: back toward the nearer flipper, straight up when it's dead centre. The advanced player reacts
+    /// late (only near the guide) and can tilt; the expert reacts higher up and never makes the third nudge in 3 s.
+    private func nudgeDecision(_ lowerFree: [PlayRobotView.Ball], now: TimeInterval) -> Nudge.Direction? {
+        guard now >= nudgeCooldownUntil else { return nil }
+        guard let left = flippers.first(where: { $0.name == "left" }),
+              let right = flippers.first(where: { $0.name == "right" }) else { return nil }
+        let py = max(left.pivot.y, right.pivot.y)
+        let centreX = (left.restTip.x + right.restTip.x) / 2
+        let gapHalf = max(0, (right.restTip.x - left.restTip.x) / 2 - ballRadius)
+        let outlaneTop: CGFloat = skill == .expert ? 460 : 340        // above py: how early the player reacts
+        // 8b′: the advanced player can't watch a multiball; the expert can.
+        if skill != .expert, lowerFree.count > 1 { return nil }
+        var choice: Nudge.Direction?
+        for b in lowerFree where b.velocity.dy < -30 {
+            let x = b.position.x, y = b.position.y
+            // 8b′: the outlane proper only (x more than 110 pt outside a pivot — the inlane is nearer the flipper and a
+            // shove there just skips the ball off the tip), from the guide post's height up.
+            if y > py + 240, y < py + outlaneTop {
+                if x < left.pivot.x - 110 { choice = .right; break }       // the left outlane
+                if x > right.pivot.x + 110 { choice = .left; break }       // the right outlane
+            }
+            if y > py - 30, y < py + 60, abs(x - centreX) < gapHalf, hypot(b.velocity.dx, b.velocity.dy) < 220 {
+                choice = abs(x - centreX) < 10 ? .up : (x < centreX ? .left : .right)
+                break
+            }
+        }
+        guard let direction = choice else { return nil }
+        if skill == .expert {
+            nudgeTimes = nudgeTimes.filter { now - $0 < Nudge.window }
+            if nudgeTimes.count >= Nudge.tiltAt - 1 { return nil }         // the next one would tilt
+            nudgeTimes.append(now)
+        }
+        nudgeCooldownUntil = now + (skill == .expert ? 0.6 : 1.5)
+        nudges += 1
+        lastNudgeAt = now
+        return direction
     }
 
     /// The shot to try from a cradle: the most wanted one this flipper has (if they aim), else one at random.
     private func pickShot(_ f: PlayRobotFlipper, wanted: [String]) -> (String, Double) {
         let shots = f.shots(for: pass)
         if skill.aims {
+            // Round 10: the post pass. The expert, holding the ball on the wrong flipper (the MOST wanted shot is the
+            // other lower flipper's and not this one's), flips late to loft the ball across instead of settling for a
+            // lesser shot from here. Checked before the wanted loop (10′): the loop always finds a fallback.
+            if skill.passes, !f.upper, let w = wanted.first, !shots.contains(where: { $0.name == w }),
+               let other = flippers.first(where: { $0.name != f.name && !$0.upper }),
+               other.shots(for: pass).contains(where: { $0.name == w }) {
+                let d = nextPassDelay()
+                return ("pass@" + String(format: "%.2f", d), d)
+            }
             for w in wanted { if let s = shots.first(where: { $0.name == w }) { return (s.name, s.delay) } }
         }
         // No cradle shots from this flipper (Monsoon's upper flipper: the Shot Lab found only slivers there): just flip
         // it off the cradle somewhere, as a player would, without scoring an aim.
         let s = shots.randomElement(using: &rng) ?? (name: "none", delay: Double.random(in: 0.28...0.42, using: &rng))
         return (s.name, s.delay)
+    }
+}
+
+extension PlayRobot {
+    /// Round 10: the pass delay to try next — each rung of the ladder twice, then the one with the best rate.
+    fileprivate func nextPassDelay() -> Double {
+        let ladder = PlayRobot.passLadder
+        func stats(_ d: Double) -> [Int] { passResults["pass@" + String(format: "%.2f", d)] ?? [0, 0] }
+        if let d = ladder.first(where: { stats($0)[0] < 2 }) { return d }
+        func rate(_ d: Double) -> Double { let s = stats(d); return s[0] > 0 ? Double(s[1]) / Double(s[0]) : 0 }
+        return ladder.max(by: { rate($0) < rate($1) }) ?? 0.54
     }
 }
 
@@ -442,6 +618,8 @@ nonisolated struct PlayDrain: Codable {
     /// the drain and what the robot was holding.
     var path: [[Double]] = []
     var after: [String] = []
+    /// Round 8b: the robot nudged within 1.5 s before the ball went.
+    var nudged = false
 }
 
 /// A screenshot the lab took.
@@ -463,6 +641,10 @@ nonisolated struct PlayGame: Codable {
     var ballsPlayed = 0
     var catches = 0
     var laneTaps = 0                    // round 6a: flipper taps made to move the lit lanes under a ball
+    var nudges = 0                      // round 8b: nudges the robot made
+    var tilts = 0                       // round 8b: TILT banners (flippers dead for the rest of that ball)
+    var bounces = 0                     // round 9: dead bounces (a crossing ball left to bounce off the resting flipper)
+    var traps = 0                       // round 11: multiball traps (a cradle held while another ball was loose)
     var banners: [String: Int] = [:]
     var shots: [String: Int] = [:]
     var aims: [String: [Int]] = [:]     // target → [tried, made]
@@ -473,6 +655,19 @@ nonisolated struct PlayGame: Codable {
     var tracks: [PlayTrack] = []
     var captures: [PlayCapture] = []
     var drains: [PlayDrain] = []
+    var plunges: [PlayPlunge] = []      // round 7a: the plunge sweep's record of every plunge (empty in normal runs)
+}
+
+/// Round 7a: what one plunge did — for the sweep that maps plunger power to the top lanes / skill shot per table.
+nonisolated struct PlayPlunge: Codable {
+    var at: Double              // seconds into the game
+    var power: Double           // 0–1
+    var event: String           // the first shot event within 4 s ("" if none)
+    var lane: Int               // the top lane the ball crossed first (index into the host's lanes), -1 if none seen
+    var litLane: Int            // the lane that was lit at the plunge (one lit lane = the skill target), -1 if n/a
+    var peakY: Double           // the highest the ball got in 4 s
+    var skillShot: Bool         // the table's SKILL SHOT objective fired while watching
+    var drained: Bool           // the ball was lost within the watch
 }
 
 // MARK: - Host
@@ -517,10 +712,52 @@ struct PlayLabConfig {
     /// A shot track records the ball every `trackEvery` frames, for at most `trackSeconds` after the flip.
     var trackEvery = 2
     var trackSeconds: TimeInterval = 3.5
+    /// Plan 2 round 1: which build played. `-playlab-build` is written by tools/playlab_run.sh at build time (git hash,
+    /// dirty files, branch); the rest the app reads about itself, so a phone run is identified too.
+    var build = PlayLabBuild.current(fromArguments: nil)
+    /// Plan 2 round 6: play at the display's own physics step (speed 1) instead of the Simulator's scaled passes —
+    /// the phone is the real thing. The pass label is picked from the display's refresh rate.
+    var nativeSpeed = false
+    /// Round 6: open the share sheet with the report when it is saved (the phone's Documents folder is otherwise
+    /// out of reach).
+    var shareOnSave = false
+    /// Round 12: no robot — the lab only watches while YOU play (drains, shots, objectives, catches), and the game is
+    /// labelled "you" in the report, so tools/playlab_calibrate.py can say which robot you play like.
+    var recording = false
+
+    /// Round 12, the "Record me" button: one game of your own, at the phone's own step, a 15-minute cap, the report
+    /// shared when it ends.
+    static var recording: PlayLabConfig {
+        var c = PlayLabConfig.quick
+        c.maxGameSeconds = 900
+        c.recording = true
+        return c
+    }
+    /// Round 7a: the plunge sweep — no flipping; every served ball is plunged at the next power in `plungePowers`
+    /// (each repeated `plungeRepeats` times, in order), and what it did is recorded.
+    var plungeSweep = false
+    var plungePowers: [CGFloat] = stride(from: 0.20, through: 1.001, by: 0.025).map { CGFloat($0) }
+    var plungeRepeats = 2   // the Simulator is deterministic at a fixed step: a finer power grid beats repeats
+
+    /// Round 6, the "Play Lab · quick" button: one expert game, 120 Hz (or the phone's own rate), a 3-minute cap, a
+    /// few screenshots, the report shared when done — a rule change checked in three minutes without the Mac.
+    static var quick: PlayLabConfig {
+        var c = PlayLabConfig()
+        c.gamesPerSkill = 1
+        c.skills = [.expert]
+        let fps = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen.maximumFramesPerSecond }.max() ?? 60
+        c.passes = [fps >= 100 ? .hz120 : .hz60]
+        c.maxGameSeconds = 180
+        c.maxCapturesPerGame = 4
+        c.nativeSpeed = true
+        c.shareOnSave = true
+        return c
+    }
 
     static func fromLaunchArguments() -> PlayLabConfig {
         var c = PlayLabConfig()
         let d = UserDefaults.standard
+        c.build = PlayLabBuild.current(fromArguments: d.string(forKey: "playlab-build"))
         if let n = d.object(forKey: "playlab-games") as? String, let v = Int(n), v > 0 { c.gamesPerSkill = v }
         if let hz = d.string(forKey: "playlab-hz") {
             switch hz { case "120": c.passes = [.hz120]; case "60": c.passes = [.hz60]; default: break }
@@ -530,7 +767,43 @@ struct PlayLabConfig {
             if !picked.isEmpty { c.skills = picked }
         }
         if let cap = d.object(forKey: "playlab-cap") as? String, let v = Double(cap), v > 30 { c.maxGameSeconds = v }
+        if let r = d.object(forKey: "playlab-plunge") as? String {
+            c.plungeSweep = true
+            c.plungeRepeats = max(1, Int(r) ?? 2)
+            c.skills = [.expert]
+            // Three balls per game on every table; a short cap, since an unflipped ball rarely lives long.
+            c.gamesPerSkill = (c.plungePowers.count * c.plungeRepeats + 2) / 3
+            c.maxGameSeconds = 240
+            c.maxCapturesPerGame = 0
+        }
         return c
+    }
+}
+
+/// What was built and where it ran, for the report header: a run is only comparable with another when this matches.
+struct PlayLabBuild: Codable {
+    /// From the runner: "c6650e8 · dirty: MonTableScene.swift · main · 2026-10-23 21:10" (nil on a phone build).
+    let id: String?
+    /// The app's own facts: CFBundleVersion, when the executable was written (= built), and what ran it.
+    let bundleVersion: String
+    let builtAt: String
+    let device: String
+
+    static func current(fromArguments id: String?) -> PlayLabBuild {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = "\(info["CFBundleShortVersionString"] ?? "?") (\(info["CFBundleVersion"] ?? "?"))"
+        var built = "?"
+        if let exe = Bundle.main.executableURL,
+           let date = (try? FileManager.default.attributesOfItem(atPath: exe.path))?[.modificationDate] as? Date {
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd HH:mm"
+            built = f.string(from: date)
+        }
+        let env = ProcessInfo.processInfo.environment
+        let device = env["SIMULATOR_HOST_HOME"] != nil
+            ? "simulator " + (env["SIMULATOR_DEVICE_NAME"] ?? "")
+            : UIDevice.current.model + " " + UIDevice.current.systemVersion
+        return PlayLabBuild(id: id, bundleVersion: version, builtAt: built, device: device.trimmingCharacters(in: .whitespaces))
     }
 }
 
@@ -550,6 +823,12 @@ final class PlayLab {
         let variant: Int
     }
 
+    /// Round 6: set by a view's "Play Lab · quick" button just before it calls the host's debugStartPlayLab(), so the
+    /// hosts (which construct the lab with the default config) need no change. Consumed by init.
+    static var nextRunIsQuick = false
+    /// Round 12: set by a view's "Record me" button the same way.
+    static var nextRunIsRecording = false
+
     private unowned let host: PlayLabHost
     let config: PlayLabConfig
     let plan: [Plan]
@@ -558,6 +837,8 @@ final class PlayLab {
     private(set) var current: PlayGame?
     private(set) var robot: PlayRobot?
     private var pendingAim: (target: String, until: TimeInterval)?
+    /// Round 7b: a skill plunge is an aim at "skillShot", made if the objective fires within 4 s.
+    private var pendingSkill: TimeInterval?
     private var gameStart: TimeInterval = 0
     private let startedAt = CACurrentMediaTime()
     private var frames = 0
@@ -572,14 +853,30 @@ final class PlayLab {
     private var ballCount = 0
     private var lowBall: (x: CGFloat, speed: CGFloat, at: TimeInterval, mode: String)?
     private var lastPlunge: (at: TimeInterval, power: CGFloat)?
+    /// Round 7a: the plunge sweep — which scheduled plunge is next, and the plunge being watched (index into
+    /// current.plunges, until when, the ball's last y so a lane crossing is seen).
+    private var plungeIndex = 0
+    private var watching: (index: Int, until: TimeInterval, lastY: CGFloat?)?
     /// Round 4c: where the lowest free ball has been (every 3rd frame, ~2 s) and the recent shot events, for the
     /// drain log.
     private var lowPath: [(x: CGFloat, y: CGFloat, at: TimeInterval, buttons: Double)] = []
     private var recentShots: [(name: String, at: TimeInterval)] = []
     private var lastButtons = 0.0
 
-    init(host: PlayLabHost, config: PlayLabConfig = .fromLaunchArguments()) {
+    init(host: PlayLabHost, config given: PlayLabConfig? = nil) {
         self.host = host
+        let config: PlayLabConfig
+        if let given {
+            config = given
+        } else if PlayLab.nextRunIsQuick {
+            PlayLab.nextRunIsQuick = false
+            config = .quick
+        } else if PlayLab.nextRunIsRecording {
+            PlayLab.nextRunIsRecording = false
+            config = .recording
+        } else {
+            config = .fromLaunchArguments()
+        }
         self.config = config
         var plan: [Plan] = []
         var k = 0
@@ -598,11 +895,12 @@ final class PlayLab {
     var isDone: Bool { index >= plan.count }
 
     /// The physics speed for the game in progress (1 between games).
-    var physicsSpeed: CGFloat { index < plan.count ? plan[index].pass.physicsSpeed : 1 }
+    var physicsSpeed: CGFloat { index < plan.count && !config.nativeSpeed ? plan[index].pass.physicsSpeed : 1 }
 
     var progressText: String {
         guard index < plan.count else { return "PLAY LAB DONE" }
         let p = plan[index]
+        if config.recording { return "RECORDING YOU · \(p.pass.label) · play as you always do" }
         return "PLAY LAB · \(p.skill.rawValue.uppercased()) · \(p.pass.label) · GAME \(index + 1)/\(plan.count)"
     }
 
@@ -611,14 +909,19 @@ final class PlayLab {
         guard index < plan.count else { return }
         let p = plan[index]
         let label = host.playLabStartGame(variant: p.variant)
-        robot = PlayRobot(skill: p.skill, pass: p.pass, flippers: host.playLabFlippers, ballRadius: host.playLabBallRadius)
-        current = PlayGame(skill: p.skill.rawValue, pass: p.pass.rawValue, physicsStepMs: p.pass.stepMs, variant: label)
+        robot = config.recording ? nil
+            : PlayRobot(skill: p.skill, pass: p.pass, flippers: host.playLabFlippers, ballRadius: host.playLabBallRadius)
+        current = PlayGame(skill: config.recording ? "you" : p.skill.rawValue, pass: p.pass.rawValue,
+                           physicsStepMs: p.pass.stepMs, variant: label)
+        humanCatches = 0
+        humanCradle = [:]
         pendingAim = nil
         gameStart = now
         track = nil
         ballCount = 0
         lowBall = nil
         lastPlunge = nil
+        watching = nil
         lowPath.removeAll()
         recentShots.removeAll()
         captureQueue.removeAll()
@@ -632,21 +935,89 @@ final class PlayLab {
     func isTimeUp(now: TimeInterval) -> Bool { now - gameStart > config.maxGameSeconds }
 
     /// One frame of play: the robot looks and decides. Returns nil between games.
+    /// Round 12: catches made by a human — a lower ball resting at a flipper's cradle (within 26 pt, under 60 pt/s)
+    /// for 0.3 s counts once, until the ball leaves the cradle again.
+    private var humanCatches = 0
+    private var humanCradle: [Int: (since: TimeInterval, counted: Bool)] = [:]
+
+    private func watchHumanCatches(_ view: PlayRobotView) {
+        for (i, f) in host.playLabFlippers.enumerated() {
+            let resting = view.balls.first { b in
+                !b.isHeld && !b.onPlunger && b.isUpper == f.upper
+                    && hypot(b.position.x - f.cradle.x, b.position.y - f.cradle.y) < 26
+                    && hypot(b.velocity.dx, b.velocity.dy) < 60
+            }
+            guard resting != nil else { humanCradle[i] = nil; continue }
+            var c = humanCradle[i] ?? (view.now, false)
+            if !c.counted, view.now - c.since >= 0.3 { humanCatches += 1; c.counted = true }
+            humanCradle[i] = c
+        }
+    }
+
     func frame(_ view: PlayRobotView) -> PlayRobotCommand? {
         frames += 1
-        guard current != nil, let robot else { return nil }
+        guard current != nil else { return nil }
+        if config.recording {
+            // Round 12: only watching. The host gets no command, so the flippers stay with the player.
+            takeQueuedCaptures()
+            noteDrains(view, mode: "you")
+            watchHumanCatches(view)
+            return nil
+        }
+        guard let robot else { return nil }
         takeQueuedCaptures()
         stepTrack(view)
         noteDrains(view, mode: robot.modeName)
+        if config.plungeSweep {
+            robot.sweepPower = config.plungePowers[(plungeIndex / config.plungeRepeats) % config.plungePowers.count]
+            watchPlunge(view)
+        }
         let cmd = robot.step(view)
         lastButtons = (cmd.left ? 1 : 0) + (cmd.right ? 2 : 0)
-        if let power = cmd.plunge { lastPlunge = (view.now, power) }
+        if let power = cmd.plunge {
+            lastPlunge = (view.now, power)
+            if cmd.skillPlunge {
+                current?.aims["skillShot", default: [0, 0]][0] += 1
+                pendingSkill = view.now + 4
+            }
+            if config.plungeSweep, var g = current {
+                let lit = view.lanes.map { l in l.lit.filter { $0 }.count == 1 ? (l.lit.firstIndex(of: true) ?? -1) : -1 } ?? -1
+                g.plunges.append(PlayPlunge(at: (view.now - gameStart).rounded(), power: (Double(power) * 100).rounded() / 100,
+                                            event: "", lane: -1, litLane: lit, peakY: 0, skillShot: false, drained: false))
+                current = g
+                watching = (g.plunges.count - 1, view.now + 4, nil)
+                plungeIndex += 1
+            }
+        }
         if let target = cmd.aimedAt {
             current?.aims[target, default: [0, 0]][0] += 1
             pendingAim = (target, view.now + config.aimWindow)
             startTrack(view, target: target, flipper: cmd.aimedFrom ?? 0)
         }
         return cmd
+    }
+
+    // MARK: Plunge sweep (round 7a)
+
+    /// Follows the plunged ball for 4 s: its peak, the first top lane it crosses (the host's lanes), a drain.
+    private func watchPlunge(_ view: PlayRobotView) {
+        guard let w = watching, w.index < (current?.plunges.count ?? 0) else { return }
+        let i = w.index
+        if view.now > w.until { watching = nil; return }
+        let free = view.balls.filter { !$0.isHeld && !$0.onPlunger && !$0.isUpper }
+        guard let b = free.max(by: { $0.position.y < $1.position.y }) else {
+            // No free ball a second after the plunge: it drained (the next ball may already sit on the plunger).
+            if view.now > w.until - 3 { current?.plunges[i].drained = true; watching = nil }
+            return
+        }
+        let y = b.position.y
+        if Double(y) > current!.plunges[i].peakY { current?.plunges[i].peakY = Double(y.rounded()) }
+        // A lane crossing in either direction: up from the plunge, or down from the top arch after an orbit ride.
+        if let lanes = view.lanes, current!.plunges[i].lane < 0, let last = w.lastY, (last - lanes.y) * (y - lanes.y) <= 0, last != y,
+           lanes.xs.count >= 2, b.position.x > lanes.xs.min()! - 24, b.position.x < lanes.xs.max()! + 24 {
+            current?.plunges[i].lane = lanes.xs.indices.min(by: { abs(lanes.xs[$0] - b.position.x) < abs(lanes.xs[$1] - b.position.x) })!
+        }
+        watching = (i, w.until, y)
     }
 
     // MARK: Shot tracks
@@ -721,7 +1092,8 @@ final class PlayLab {
                                          plunge: lastPlunge.map { (Double($0.power) * 100).rounded() / 100 } ?? -1,
                                          mode: low.mode,
                                          path: lowPath.map { [Double($0.x.rounded()), Double($0.y.rounded()), $0.buttons] },
-                                         after: recentShots.filter { now - $0.at <= 4 }.map(\.name)))
+                                         after: recentShots.filter { now - $0.at <= 4 }.map(\.name),
+                                         nudged: now - (robot?.lastNudgeAt ?? -.infinity) < 1.5))
         lowBall = nil
         lowPath.removeAll()
     }
@@ -787,6 +1159,10 @@ final class PlayLab {
     func shot(_ name: String, now: TimeInterval) {
         guard current != nil else { return }
         current?.shots[name, default: 0] += 1
+        if let w = watching, w.index < (current?.plunges.count ?? 0), current!.plunges[w.index].event.isEmpty,
+           !["bumper", "sling", "dustDevil", "spinner"].contains(name) {   // round 7a: the first real event after the plunge
+            current?.plunges[w.index].event = name
+        }
         recentShots.append((name, now))
         if recentShots.count > 12 { recentShots.removeFirst() }
         // An event named after the target with a suffix ("windowSeatRepeat" for "windowSeat") is the same shot made
@@ -801,6 +1177,11 @@ final class PlayLab {
     /// One of the table's objectives happened.
     func objective(_ name: String, now: TimeInterval) {
         guard current != nil else { return }
+        if name == "skillShot", let w = watching, w.index < (current?.plunges.count ?? 0) { current?.plunges[w.index].skillShot = true }
+        if name == "skillShot", let until = pendingSkill, now <= until {
+            current?.aims["skillShot", default: [0, 0]][1] += 1
+            pendingSkill = nil
+        }
         current?.objectiveCounts[name, default: 0] += 1
         if current?.objectives[name] == nil {
             current?.objectives[name] = (now - gameStart).rounded()
@@ -824,8 +1205,13 @@ final class PlayLab {
         g.seconds = (now - gameStart).rounded()
         g.endedBy = endedBy
         g.ballsPlayed = ballsPlayed
-        g.catches = robot?.catches ?? 0
+        g.catches = robot?.catches ?? humanCatches
         g.laneTaps = robot?.laneTaps ?? 0
+        g.nudges = robot?.nudges ?? 0
+        g.tilts = g.banners["TILT"] ?? 0
+        g.bounces = robot?.bounces ?? 0
+        g.traps = robot?.traps ?? 0
+        for (k, v) in robot?.passResults ?? [:] { g.aims[k] = v }      // round 10: "pass@0.54" → [tried, made]
         g.extras = host.playLabEndGame()
         games.append(g)
         current = nil
@@ -858,6 +1244,7 @@ final class PlayLab {
         struct Report: Codable {
             let table: String
             let date: String
+            let build: PlayLabBuild
             let fps: Double
             let gamesPerSkill: Int
             let maxGameSeconds: Double
@@ -875,11 +1262,16 @@ final class PlayLab {
                                     restAngle: Double(f.restAngle), pointsLeft: f.pointsLeft, upper: f.upper,
                                     shots120: s120, shots60: s60))
         }
-        let report = Report(table: host.playLabTableName, date: stamp,
+        let report = Report(table: host.playLabTableName, date: stamp, build: config.build,
                             fps: real > 0 ? (Double(frames) / real * 10).rounded() / 10 : 0,
                             gamesPerSkill: config.gamesPerSkill, maxGameSeconds: config.maxGameSeconds,
                             objectives: host.playLabObjectives, flippers: flippers, games: games)
-        return LabFiles.write(report, prefix: "playlab", table: host.playLabTableName, stamp: stamp)
+        let name = LabFiles.write(report, prefix: "playlab", table: host.playLabTableName, stamp: stamp)
+        if config.shareOnSave, name.hasSuffix(".json") {
+            let url = LabFiles.folder.appendingPathComponent(name)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { LabFiles.share(url) }
+        }
+        return name
     }
 
     /// Launched with `-playlab`: quit once the report is saved, so a script running the Simulator can move on.
@@ -903,6 +1295,19 @@ enum LabFiles {
     static func fileStem(prefix: String, table: String, stamp: String) -> String {
         let slug = String(table.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" })
         return "\(prefix)-\(slug)-" + stamp.replacingOccurrences(of: ":", with: "-")
+    }
+
+    /// Round 6: the share sheet for a report saved on the phone (AirDrop it to the Mac, save it to Files, …).
+    static func share(_ url: URL) {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let window = (scenes.first { $0.activationState == .foregroundActive } ?? scenes.first)?.keyWindow,
+              let root = window.rootViewController else { return }
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = top.view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 1, height: 1)
+        top.present(sheet, animated: true)
     }
 
     /// Writes a file into a subfolder of the lab folder (screenshots).

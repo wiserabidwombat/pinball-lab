@@ -140,6 +140,8 @@ final class TableScene: SKScene {
 
     // Input
     private var activeTouches: [UITouch: Control] = [:]
+    /// Round 8: the nudge and the tilt (shared rule in Nudge.swift); input from a flick of a flipper finger or the pad.
+    private let nudge = Nudge()
     private var plungerStartY: CGFloat = 0     // screen points (UIKit, y grows downward)
     private var plungerPull: CGFloat = 0
     // Game controller (LabGamepad): the flippers it holds, whether it's pulling the plunger and how far at most,
@@ -773,7 +775,7 @@ final class TableScene: SKScene {
     /// A lit kickback fires a ball that is draining down the left outlane straight back up it.
     /// One save, then it must be relit, even in multiball.
     private func updateKickback() {
-        guard kickbackLit else { return }
+        guard kickbackLit, !nudge.tilted else { return }      // round 8b′: no kickback while tilted
         for ball in balls where ball.isOnFloor {
             guard let body = ball.physicsBody else { continue }
             let p = ball.position
@@ -1199,6 +1201,7 @@ final class TableScene: SKScene {
         setGate(closed: false)
         ballLaunched = false
         wasOnPlunger = false
+        if nudge.tilted { nudge.newBall(); updateFlippers() } else { nudge.newBall() }   // round 8: a tilt ends here
         launchedAt = nil
         if !rollovers.isEmpty {
             setSkillLane(Int.random(in: 0..<rollovers.count))   // skill shot: plunge into the ringed lane
@@ -1288,6 +1291,7 @@ final class TableScene: SKScene {
                 plungerPull = 0
             } else {
                 activeTouches[touch] = p.x < view.bounds.midX ? .left : .right
+                nudge.swipeBegan(touch, at: p)
             }
         }
         updateFlippers()
@@ -1301,11 +1305,20 @@ final class TableScene: SKScene {
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let view else { return }
-        for touch in touches where activeTouches[touch] == .plunger {
-            // Screen points dragged down → world points at the current zoom, so the plunger tracks the finger.
-            let dragged = (touch.location(in: view).y - plungerStartY) * cameraRig.node.yScale
-            plungerPull = min(max(dragged, 0), TableLayout.plungerMaxPull)
-            plunger.position.y = TableLayout.plungerRestPosition.y - plungerPull
+        for touch in touches {
+            let p = touch.location(in: view)
+            switch activeTouches[touch] {
+            case .plunger:
+                // Screen points dragged down → world points at the current zoom, so the plunger tracks the finger.
+                let dragged = (p.y - plungerStartY) * cameraRig.node.yScale
+                plungerPull = min(max(dragged, 0), TableLayout.plungerMaxPull)
+                plunger.position.y = TableLayout.plungerRestPosition.y - plungerPull
+            case .left, .right:
+                // Round 8: a quick flick of a flipper finger nudges the table.
+                if let direction = nudge.swipeMoved(touch, to: p) { applyNudge(direction) }
+            case nil:
+                break
+            }
         }
     }
 
@@ -1319,6 +1332,7 @@ final class TableScene: SKScene {
 
     private func endTouches(_ touches: Set<UITouch>) {
         for touch in touches {
+            nudge.swipeEnded(touch)
             if activeTouches.removeValue(forKey: touch) == .plunger {
                 releasePlunger()
             }
@@ -1336,6 +1350,7 @@ final class TableScene: SKScene {
         left = left || robotLeft
         right = right || robotRight
         #endif
+        if nudge.tilted { left = false; right = false }      // round 8: tilted — dead flippers until the next ball
         // Lane change: each new flipper press shifts the lit U-F-O lanes that way.
         if left && !leftFlipper.isPressed { rotateLanes(by: -1); sfx(.flipper) }
         if right && !rightFlipper.isPressed { rotateLanes(by: 1); sfx(.flipper) }
@@ -1399,6 +1414,30 @@ final class TableScene: SKScene {
     }
 
     /// Drops every held touch: flippers fall, the plunger returns without firing.
+    /// Round 8: a nudge, from a flick of a flipper finger or the pad. Every free floor ball gets the kick; the rule in
+    /// Nudge decides the warning and the tilt (the flippers are dead until the next ball is served).
+    private func applyNudge(_ direction: Nudge.Direction) {
+        guard !isAttractMode, !game.isGameOver else { return }
+        let free = balls.filter { $0.isOnFloor && $0.heldIn == nil && !isOnPlunger($0) }
+        let outcome = nudge.nudge(direction, at: gameTime, balls: free.compactMap { $0.physicsBody })
+        Nudge.haptic(for: outcome)
+        switch outcome {
+        case .ignored:
+            return
+        case .nudged:
+            cameraRig.jolt(direction.unit, strength: Nudge.joltNudge)
+        case .warning:
+            cameraRig.jolt(direction.unit, strength: Nudge.joltWarning)
+            cameraRig.shake(strength: 4, duration: 0.3)
+            showBanner("TILT WARNING")
+        case .tilt:
+            cameraRig.jolt(direction.unit, strength: Nudge.joltTilt, duration: 0.35)
+            cameraRig.shake(strength: 8, duration: 0.7)
+            showBanner("TILT")
+            updateFlippers()                                 // the flippers drop
+        }
+    }
+
     private func releaseAllControls() {
         activeTouches.removeAll()
         padLeft = false
@@ -1429,6 +1468,7 @@ final class TableScene: SKScene {
     private func updateGamepad() {
         let pad = LabGamepad.shared.state
         if !pad.aDown { padAArmed = true }
+        if let direction = pad.nudge { applyNudge(direction) }    // round 8
         if pad.left != padLeft || pad.right != padRight {
             padLeft = pad.left
             padRight = pad.right
@@ -1524,7 +1564,7 @@ final class TableScene: SKScene {
         if !drained.isEmpty {
             let rightOutlane = drained.contains { $0.inRightOutlane }
             drained.forEach { removeBall($0) }
-            if multiballActive, now < multiballSaveUntil {
+            if !nudge.tilted, multiballActive, now < multiballSaveUntil {   // round 8b′: a tilt ends the saves
                 // Mothership ball save: each drained ball comes back out of the Hangar.
                 if pendingReleases == 0 { nextReleaseAt = now + 0.5 }
                 pendingReleases += drained.count
@@ -1533,14 +1573,14 @@ final class TableScene: SKScene {
             if balls.isEmpty, pendingReleases == 0 {
                 setSkillLane(nil)
                 lastShotAt = nil
-                if !shieldsUpNow, outlaneSaveLit, rightOutlane {
+                if !nudge.tilted, !shieldsUpNow, outlaneSaveLit, rightOutlane {
                     // Right outlane save (M7 v5): used up; the ball comes back, nothing lost.
                     outlaneSaveLit = false
                     game.ballSaved()
                     showBanner("OUTLANE SAVE"); sfx(.ballSave)
                     bigHaptic.impactOccurred()
                     nextBallAt = now + 0.8
-                } else if shieldsUpNow {
+                } else if shieldsUpNow, !nudge.tilted {
                     // Shields Up: this ball comes back once, nothing lost.
                     shieldsUsed = true
                     game.ballSaved()
@@ -1832,8 +1872,11 @@ extension TableScene: PlayLabHost {
                                isHeld: b.heldIn != nil, onPlunger: isOnPlunger(b), id: ObjectIdentifier(b).hashValue)
         }, wanted: robotWanted(), lanes: lanesResetAt == nil && !rollovers.isEmpty
             ? PlayRobotView.Lanes(xs: rollovers.map { $0.position.x }, y: rollovers[0].position.y, lit: rollovers.map { $0.isLit })
-            : nil)
+            : nil,
+           // Round 7b: the plunge sweep of 2026-10-24 (both rates): lane 2 at 0.63, lane 1 at 0.65, lane 0 unreachable.
+           skillPlunge: skillLane.flatMap { [1: 0.65, 2: 0.63][$0] })
         guard let cmd = lab.frame(view) else { return }
+        if let direction = cmd.nudge { applyNudge(direction) }       // round 8b: the robot nudges
         if cmd.left != robotLeft || cmd.right != robotRight {
             robotLeft = cmd.left
             robotRight = cmd.right

@@ -15,7 +15,7 @@ Too-hard flags (first-guess thresholds; tune them as the tables teach us):
   - an objective reached at one physics rate but never at the other (plays differently on 60 Hz phones)
   - a shot the experts aim for 8+ times and make under 15% of the time (unless listed with --precise)
 """
-import json, sys, argparse, collections, statistics, os, html, math
+import json, sys, argparse, collections, statistics, os, html, math, random
 
 SKILLS = ["beginner", "intermediate", "advanced", "expert"]
 OUTCOME_COLOR = {"made": "#2e9e4e", "miss": "#8a8a8a", "drain": "#d1403a"}
@@ -66,6 +66,76 @@ def classify_drain(dr, flippers):
     return "centre", held
 
 
+# ---------------------------------------------------------------- bands (plan 2, round 2)
+# Two games per cell swing a lot. Every headline number carries a 95 % band so a change is only read as a change when
+# it is bigger than the band. Score and drains/min: bootstrap over games (resample the games of a cell with
+# replacement, 500 times, take the 2.5 and 97.5 percentiles); ball life: the same over the drains; aim rates: Wilson.
+
+def boot(fn, items, reps=500, seed=7):
+    """(lo, hi) of fn(resampled items), or (None, None) when there is nothing to resample."""
+    if not items:
+        return (None, None)
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(reps):
+        pick = [items[rng.randrange(len(items))] for _ in items]
+        v = fn(pick)
+        if v is not None:
+            vals.append(v)
+    if not vals:
+        return (None, None)
+    vals.sort()
+    return vals[int(0.025 * len(vals))], vals[min(len(vals) - 1, int(0.975 * len(vals)))]
+
+
+def rate_band(gs):
+    """Drains per minute over games gs, with a 95 % band: the bootstrap over games widened by the Poisson band (so one
+    game still gets a band). Returns (rate, lo, hi)."""
+    n = sum(len(g.get("drains", [])) for g in gs)
+    minutes = sum(g["seconds"] for g in gs) / 60
+    if not minutes:
+        return (0, 0, 0)
+    rate = n / minutes
+    lo, hi = boot(lambda pick: sum(len(g.get("drains", [])) for g in pick) / (sum(g["seconds"] for g in pick) / 60)
+                  if sum(g["seconds"] for g in pick) else None, gs)
+    plo, phi = max(0, n - 1.96 * math.sqrt(n)) / minutes, (n + 1.96 * math.sqrt(n)) / minutes
+    return (rate, min(plo, lo if lo is not None else plo), max(phi, hi if hi is not None else phi))
+
+
+def wilson(k, n, z=1.96):
+    """95 % band on a share k/n."""
+    if not n:
+        return (0, 1)
+    p = k / n
+    den = 1 + z * z / n
+    mid = (p + z * z / (2 * n)) / den
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
+    return (max(0, mid - half), min(1, mid + half))
+
+
+def pm(v, lo, hi, digits=1):
+    """'1.4 ±0.5' (the half-width of the band)."""
+    if lo is None or hi is None:
+        return f"{v:.{digits}f}"
+    return f"{v:.{digits}f} ±{(hi - lo) / 2:.{digits}f}"
+
+
+def build_line(d):
+    """'c6650e8 · clean · main · 2026-10-23 21:10 · 1.0 (12) · simulator iPhone 17 Pro Max', or what an older report has."""
+    b = d.get("build")
+    if not b:
+        return "unknown (report predates build identity)"
+    parts = [b.get("id") or "no runner id (phone build?)", b.get("bundleVersion", ""), "built " + b.get("builtAt", "?"),
+             b.get("device", "")]
+    return " · ".join(p for p in parts if p)
+
+
+def build_key(d):
+    """The part of the build identity two reports must share to be comparable: the runner id, else the build time."""
+    b = d.get("build") or {}
+    return b.get("id") or b.get("builtAt") or "unknown"
+
+
 def analyze(d, precise=()):
     games = d.get("games", d.get("evenings", []))
     for g in games:
@@ -84,14 +154,19 @@ def analyze(d, precise=()):
         for s in SKILLS:
             gs = by.get((p, s), [])
             if gs:
-                rows.append(dict(pass_=p, skill=s, games=len(gs), score=mean([g["score"] for g in gs]),
+                slo, shi = boot(lambda pick: mean([g["score"] for g in pick]), gs) if len(gs) >= 2 else (None, None)
+                rows.append(dict(pass_=p, skill=s, games=len(gs), score=mean([g["score"] for g in gs]), score_lo=slo, score_hi=shi,
                                  minutes=mean([g["seconds"] for g in gs]) / 60, balls=mean([g["ballsPlayed"] for g in gs]),
                                  catches=mean([g["catches"] for g in gs]),
                                  lane_taps=mean([g.get("laneTaps", 0) for g in gs]),
+                                 nudges=mean([g.get("nudges", 0) for g in gs]),
+                                 tilts=mean([g.get("tilts", 0) for g in gs]),
+                                 bounces=mean([g.get("bounces", 0) for g in gs]),
+                                 traps=mean([g.get("traps", 0) for g in gs]),
                                  extras={k: mean([g.get("extras", {}).get(k, 0) for g in gs]) for k in extras},
                                  ends=[g["endedBy"] for g in gs]))
 
-    # Objective grid: (name, pass, skill) → (share, median seconds)
+    # Objective grid: (name, pass, skill) → (share, median seconds, games that reached it, games)
     grid = {}
     for name in names:
         for p in passes:
@@ -100,7 +175,7 @@ def analyze(d, precise=()):
                 if not gs:
                     continue
                 hit = [g["objectives"][name] for g in gs if name in g.get("objectives", {})]
-                grid[(name, p, s)] = (len(hit) / len(gs), median(hit) if hit else None)
+                grid[(name, p, s)] = (len(hit) / len(gs), median(hit) if hit else None, len(hit), len(gs))
 
     # Aims per pass × skill: target → [tried, made]
     aims = {}
@@ -137,10 +212,12 @@ def analyze(d, precise=()):
             kinds = collections.Counter(classify_drain(dr, d.get("flippers", []))[0] for dr in ds)
             held = sum(1 for dr in ds if classify_drain(dr, d.get("flippers", []))[1])
             minutes = sum(g["seconds"] for g in by.get((p, sk), [])) / 60
+            per_min, pm_lo, pm_hi = rate_band(by.get((p, sk), []))
+            life_lo, life_hi = boot(lambda pick: median([dr["life"] for dr in pick]), ds)
             drain_rows.append(dict(
-                fed=", ".join(f"{k} {n}" for k, n in fed.most_common(3)), per_min=len(ds) / minutes if minutes else 0,
-                kinds=", ".join(f"{k} {n}" for k, n in kinds.most_common()), held=held,
-                pass_=p, skill=sk, n=len(ds), life=median([dr["life"] for dr in ds]),
+                fed=", ".join(f"{k} {n}" for k, n in fed.most_common(3)), per_min=per_min, per_min_lo=pm_lo, per_min_hi=pm_hi,
+                kinds=", ".join(f"{k} {n}" for k, n in kinds.most_common()), held=held, games=len(by.get((p, sk), [])),
+                pass_=p, skill=sk, n=len(ds), life=median([dr["life"] for dr in ds]), life_lo=life_lo, life_hi=life_hi,
                 early_full=sum(1 for dr in ds if dr["life"] <= 6 and dr["plunge"] >= 0.9),
                 early_soft=sum(1 for dr in ds if dr["life"] <= 6 and 0 <= dr["plunge"] < 0.9),
                 catching=sum(1 for dr in ds if dr["mode"] in ("catching", "cradled")),
@@ -181,7 +258,45 @@ def analyze(d, precise=()):
             else:
                 flags.append(f"shot '{k}' made {m}/{t} ({m / t:.0%}) by experts")
 
+    # Round 7a: the plunge sweep — per pass, power → what the plunges did.
+    plunge_rows = []
+    for p in passes:
+        by_power = collections.defaultdict(list)
+        for g in games:
+            if g["pass"] == p:
+                for pl in g.get("plunges", []):
+                    by_power[pl["power"]].append(pl)
+        for power in sorted(by_power):
+            pls = by_power[power]
+            plunge_rows.append(dict(
+                pass_=p, power=power, n=len(pls),
+                events=collections.Counter(pl["event"] or "(none)" for pl in pls),
+                lanes=collections.Counter(pl["lane"] for pl in pls),
+                skill=sum(1 for pl in pls if pl["skillShot"]), drained=sum(1 for pl in pls if pl["drained"]),
+                peak=median([pl["peakY"] for pl in pls])))
+    # The power bands per lane: runs of consecutive powers whose plunges mostly (≥ half) crossed that lane.
+    plunge_bands = []
+    for p in passes:
+        prows = [r for r in plunge_rows if r["pass_"] == p]
+        lanes = sorted({l for r in prows for l in r["lanes"] if l >= 0})
+        for lane in lanes:
+            run = []
+            for r in prows + [None]:
+                hit = r is not None and r["lanes"][lane] * 2 >= r["n"]
+                if hit:
+                    run.append(r)
+                elif run:
+                    plunge_bands.append((p, lane, run[0]["power"], run[-1]["power"], sum(x["lanes"][lane] for x in run), sum(x["n"] for x in run)))
+                    run = []
+
+    # Tightness: the widest drains/min half-width among the advanced/expert rows — what `--tightness` and the sweep's
+    # UNTIL_TIGHT loop look at. A cell with no drains yet counts as untight (inf).
+    tight = [(r["per_min_hi"] - r["per_min_lo"]) / 2 for r in drain_rows if r["skill"] in ("advanced", "expert")]
+    good_cells = [(p, s) for p in passes for s in ("advanced", "expert") if by.get((p, s))]
+    tightness = max(tight) if tight and len(tight) == len(good_cells) else float("inf")
+
     return dict(games=games, passes=passes, objectives=objectives, names=names, extras=extras, rows=rows, grid=grid,
+                tightness=tightness, plunge_rows=plunge_rows, plunge_bands=plunge_bands,
                 aims=aims, banners=banners, shots=shots, objs=objs, incidents=incidents, captures=captures,
                 tracks=tracks, track_rows=track_rows, flags=flags, notes=notes, drain_rows=drain_rows, no60=no60,
                 drains=drains, flippers=d.get("flippers", []))
@@ -264,14 +379,16 @@ def tracks_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
 def print_text(d, a, report_path, checks):
     games, passes, extras = a["games"], a["passes"], a["extras"]
     print(f"{d['table']} · {d['date']} · {len(games)} games · {d['fps']} fps · passes {', '.join(passes)}")
-    print(f"\n{'pass':7}{'skill':13}{'games':>6}{'score':>10}{'min':>6}{'balls':>6}{'catch':>6}{'lanes':>6}"
+    print(f"build: {build_line(d)}")
+    print(f"\n{'pass':7}{'skill':13}{'games':>6}{'score':>10}{'min':>6}{'balls':>6}{'catch':>6}{'lanes':>6}{'nudge':>6}{'tilt':>5}{'bounce':>7}{'trap':>5}"
           + "".join(f"{k[:7]:>8}" for k in extras) + "  end")
     for r in a["rows"]:
         print(f"{r['pass_']:7}{r['skill']:13}{r['games']:>6}{r['score']:>10,.0f}{r['minutes']:>6.1f}{r['balls']:>6.1f}"
-              f"{r['catches']:>6.1f}{r['lane_taps']:>6.1f}" + "".join(f"{r['extras'][k]:>8.1f}" for k in extras)
-              + "  " + ",".join(e[:4] for e in r["ends"]))
+              f"{r['catches']:>6.1f}{r['lane_taps']:>6.1f}{r['nudges']:>6.1f}{r['tilts']:>5.1f}{r['bounces']:>7.1f}{r['traps']:>5.1f}" + "".join(f"{r['extras'][k]:>8.1f}" for k in extras)
+              + "  " + ",".join(e[:4] for e in r["ends"])
+              + (f"  score ±{(r['score_hi'] - r['score_lo']) / 2:,.0f}" if r["score_lo"] is not None else ""))
     if a["names"]:
-        print("\nObjectives reached (share of games · median seconds to the first):")
+        print("\nObjectives reached (games that reached it / games · median seconds to the first):")
         print(f"{'objective':15}" + "".join(f"{p + ' ' + s[:3]:>12}" for p in passes for s in SKILLS))
         for name in a["names"]:
             row = f"{name:15}"
@@ -281,8 +398,8 @@ def print_text(d, a, report_path, checks):
                     if cell is None:
                         row += f"{'-':>12}"
                     else:
-                        share, med = cell
-                        row += f"{f'{share:4.0%} {med:4.0f}s' if med is not None else f'{share:4.0%}      ':>12}"
+                        share, med, k, n = cell
+                        row += f"{f'{k}/{n} {med:4.0f}s' if med is not None else f'{k}/{n}      ':>12}"
             print(row)
         for o in a["objectives"]:
             print(f"  {o['name']:15} {o['text']}")
@@ -308,9 +425,21 @@ def print_text(d, a, report_path, checks):
     if a["drain_rows"]:
         print("\nDrains (median ball life · within 6 s of a full / soft plunge · while catching · while shooting · median speed · button held · how · fed by):")
         for r in a["drain_rows"]:
-            print(f"  {r['pass_']:7}{r['skill']:13}{r['n']:3} drains ({r['per_min']:.1f}/min)  life {r['life']:5.1f}s  early full {r['early_full']:2} soft {r['early_soft']:2}"
+            print(f"  {r['pass_']:7}{r['skill']:13}{r['n']:3} drains ({pm(r['per_min'], r['per_min_lo'], r['per_min_hi'])}/min)  life {pm(r['life'], r['life_lo'], r['life_hi'])}s  early full {r['early_full']:2} soft {r['early_soft']:2}"
                   f"  catching {r['catching']:2}  shooting {r['shooting']:2}  speed {r['speed']:4.0f}  held {r['held']:2}"
                   f"  how: {r['kinds']}  fed by: {r['fed']}")
+        print(f"  bands are 95 % (bootstrap over games / drains); widest advanced/expert drains/min half-width: "
+              + (f"±{a['tightness']:.2f}" if a["tightness"] != float("inf") else "n/a (a good robot has no drains yet)"))
+    if a["plunge_rows"]:
+        print("\nPlunge sweep (power → first event · top lane crossed · skill shots · drained · median peak y):")
+        for r in a["plunge_rows"]:
+            ev = ", ".join(f"{k} {n}" for k, n in r["events"].most_common())
+            ln = ", ".join(f"lane {k} ×{n}" if k >= 0 else f"no lane ×{n}" for k, n in sorted(r["lanes"].items()))
+            print(f"  {r['pass_']:7}{r['power']:5.2f}  n {r['n']:2}  {ev:40}  {ln:34}  skill {r['skill']}  drained {r['drained']}  peak {r['peak']:.0f}")
+        if a["plunge_bands"]:
+            print("  Bands (powers whose plunges mostly crossed the lane):")
+            for p, lane, lo, hi, made, n in a["plunge_bands"]:
+                print(f"    {p:7}lane {lane}: {lo:.2f}–{hi:.2f} ({made}/{n})")
     print("\nToo hard:" if a["flags"] else "\nToo hard: nothing flagged")
     for f in a["flags"]:
         print(f"  - {f}")
@@ -337,6 +466,7 @@ th{color:var(--dim);font-weight:600;font-size:13px;text-transform:uppercase;lett
 .flags{border-left:4px solid var(--bad)}.flags.ok{border-left-color:var(--good)}.flags li{margin:4px 0}
 .cell{display:inline-block;min-width:66px;padding:2px 6px;border-radius:5px;text-align:center;font-size:13px}
 .c0{background:#3a2426;color:#f0a8a8}.c1{background:#3b3324;color:#f0d6a0}.c2{background:#223a2a;color:#a8f0bb}.cn{color:var(--dim)}
+.unc{opacity:.55;border:1px dashed var(--dim)}
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}.gal figure{margin:0}
 .gal img{width:100%;border-radius:8px;border:1px solid var(--line);background:#000}.gal figcaption{font-size:12px;color:var(--dim);margin-top:4px}
 .tag{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--dim);margin-right:6px}
@@ -352,7 +482,9 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
     h = [f"<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
          f"<title>Play Lab · {e(d['table'])} · {e(d['date'])}</title><style>{CSS}</style></head><body><main>"]
     h.append(f"<h1>Play Lab · {e(d['table'])}</h1><div class='sub'>{e(d['date'])} · {len(games)} games · {d['fps']} fps · "
-             f"passes {', '.join(e(p) for p in passes)} · cap {d.get('maxGameSeconds', 480):.0f} s/game</div>")
+             f"passes {', '.join(e(p) for p in passes)} · cap {d.get('maxGameSeconds', 480):.0f} s/game</div>"
+             f"<div class='sub' title='which build played: git hash · dirty files · branch · built when · where it ran'>"
+             f"build {e(build_line(d))}</div>")
 
     # Flags first
     flags = a["flags"]
@@ -369,17 +501,23 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
     # Summary
     h.append("<h2>Games</h2><div class='panel'><table><tr><th>pass</th><th>skill</th><th>games</th><th>score</th><th>min</th>"
              "<th>balls</th><th>catches</th><th title='flipper taps that moved the lit lanes under a ball'>lane taps</th>"
+             "<th title='nudges the robot made (round 8b: advanced/expert shove a ball heading for an outlane or the centre gap)'>nudges</th>"
+             "<th title='TILT banners: a third nudge within 3 s, flippers dead for the rest of that ball'>tilts</th>"
+             "<th title='dead bounces (round 9: the expert lets a fast crossing ball hit the resting flipper and go across)'>bounces</th>"
+             "<th title='multiball traps (round 11: the expert holds one ball on a flipper while another is loose)'>traps</th>"
              + "".join(f"<th>{e(k)}</th>" for k in extras) + "<th>ended by</th></tr>")
     for r in a["rows"]:
-        h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['games']}</td><td>{r['score']:,.0f}</td>"
+        h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['games']}</td><td>{r['score']:,.0f}"
+                 + (f"<div class='small'>±{(r['score_hi'] - r['score_lo']) / 2:,.0f}</div>" if r["score_lo"] is not None else "") + "</td>"
                  f"<td>{r['minutes']:.1f}</td><td>{r['balls']:.1f}</td><td>{r['catches']:.1f}</td><td>{r['lane_taps']:.1f}</td>"
+                 f"<td>{r['nudges']:.1f}</td><td>{r['tilts']:.1f}</td><td>{r['bounces']:.1f}</td><td>{r['traps']:.1f}</td>"
                  + "".join(f"<td>{r['extras'][k]:.1f}</td>" for k in extras)
                  + f"<td>{e(', '.join(r['ends']))}</td></tr>")
     h.append("</table></div>")
 
     # Objective grid
     if a["names"]:
-        h.append("<h2>Objectives</h2><div class='panel small'>share of games the objective was reached · median seconds to the first time</div>"
+        h.append("<h2>Objectives</h2><div class='panel small'>games that reached the objective / games played · median seconds to the first time</div>"
                  "<div class='panel'><table><tr><th>objective</th>" + "".join(f"<th>{e(p)} {e(s)}</th>" for p in passes for s in SKILLS) + "</tr>")
         text = {o["name"]: o["text"] for o in a["objectives"]}
         for name in a["names"]:
@@ -390,9 +528,9 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
                     if cell is None:
                         h.append("<td><span class='cell cn'>–</span></td>")
                     else:
-                        share, med = cell
+                        share, med, k, n = cell
                         cls = "c2" if share >= 0.75 else "c1" if share > 0 else ("c0" if s in ("advanced", "expert") else "cn")
-                        h.append(f"<td><span class='cell {cls}'>{share:.0%}{f' · {med:.0f}s' if med is not None else ''}</span></td>")
+                        h.append(f"<td><span class='cell {cls}' title='{share:.0%} of games'>{k}/{n}{f' · {med:.0f}s' if med is not None else ''}</span></td>")
             h.append("</tr>")
         h.append("</table>")
         if a["objectives"]:
@@ -403,7 +541,8 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
     # Aims
     if a["aims"]:
         targets = sorted({k for tot in a["aims"].values() for k in tot})
-        h.append("<h2>Aim accuracy</h2><div class='panel small'>made / tried, flips from a caught ball (beginners never aim)</div>"
+        h.append("<h2>Aim accuracy</h2><div class='panel small'>made / tried, flips from a caught ball (beginners never aim) · "
+                 "hover for the 95 % band · dashed = too few tries to say (band wider than 50 points)</div>"
                  "<div class='panel'><table><tr><th>pass</th><th>skill</th>" + "".join(f"<th>{e(t)}</th>" for t in targets) + "</tr>")
         for (p, s), tot in a["aims"].items():
             if s == "beginner":
@@ -413,8 +552,10 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
                 if t in tot:
                     tried, made = tot[t]
                     pct = made / tried if tried else 0
+                    lo, hi = wilson(made, tried)
                     cls = "c2" if pct >= 0.5 else "c1" if pct >= 0.2 else "c0"
-                    h.append(f"<td><span class='cell {cls}'>{made}/{tried}</span></td>")
+                    unc = " unc" if hi - lo > 0.5 else ""
+                    h.append(f"<td><span class='cell {cls}{unc}' title='{pct:.0%}, 95 % band {lo:.0%}–{hi:.0%}'>{made}/{tried}</span></td>")
                 else:
                     h.append("<td><span class='cell cn'>–</span></td>")
             h.append("</tr>")
@@ -435,14 +576,35 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
         h.append("<h2>Drains</h2><div class='panel small'>every ball lost: median life since its plunge · lost within 6 s of a "
                  "full (≥ 0.9) or softer plunge · lost while the robot was catching/cradling or flipping an aimed shot · "
                  "median speed at the last sighting · a button held in the last second · how (from the path: outlane, "
-                 "a raised tip clipped it, rolled off a tip, centre) · the last shot event before it</div>"
+                 "a raised tip clipped it, rolled off a tip, centre) · the last shot event before it · ± is half of a 95 % band</div>"
                  "<div class='panel'><table><tr><th>pass</th><th>skill</th><th>drains</th><th>per min</th><th>life</th><th>early · full</th>"
                  "<th>early · soft</th><th>catching</th><th>shooting</th><th>speed</th><th>button held</th><th>how</th><th>last event before</th></tr>")
         for r in a["drain_rows"]:
-            h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['n']}</td><td>{r['per_min']:.1f}</td><td>{r['life']:.1f}s</td>"
+            h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['n']}</td>"
+                     f"<td title='95 % band (bootstrap over {r['games']} games, widened by Poisson)'>{pm(r['per_min'], r['per_min_lo'], r['per_min_hi'])}</td>"
+                     f"<td title='95 % band (bootstrap over the drains)'>{pm(r['life'], r['life_lo'], r['life_hi'], 0)} s</td>"
                      f"<td>{r['early_full']}</td><td>{r['early_soft']}</td><td>{r['catching']}</td><td>{r['shooting']}</td>"
                      f"<td>{r['speed']:.0f}</td><td>{r['held']}</td><td>{e(r['kinds'])}</td><td>{e(r['fed'])}</td></tr>")
         h.append("</table></div>")
+
+    # Plunge sweep (round 7a)
+    if a["plunge_rows"]:
+        h.append("<h2>Plunge sweep</h2><div class='panel small'>every served ball plunged at a scheduled power, no flipping: the first "
+                 "shot event, which top lane the ball crossed first (the host's lanes, left to right from 0), SKILL SHOT fired, "
+                 "drained within 4 s, and the median peak. Bands = runs of powers whose plunges mostly crossed a lane — the "
+                 "numbers the robot's plunge-for-target table is pasted from.</div>"
+                 "<div class='panel'><table><tr><th>pass</th><th>power</th><th>n</th><th>first event</th><th>lane</th><th>skill shot</th>"
+                 "<th>drained</th><th>peak y</th></tr>")
+        for r in a["plunge_rows"]:
+            ev = ", ".join(f"{k} {n}" for k, n in r["events"].most_common())
+            ln = ", ".join(f"{k} ×{n}" if k >= 0 else f"none ×{n}" for k, n in sorted(r["lanes"].items()))
+            h.append(f"<tr><td>{e(r['pass_'])}</td><td>{r['power']:.2f}</td><td>{r['n']}</td><td style='text-align:left'>{e(ev)}</td>"
+                     f"<td style='text-align:left'>{e(ln)}</td><td>{r['skill']}</td><td>{r['drained']}</td><td>{r['peak']:.0f}</td></tr>")
+        h.append("</table>")
+        if a["plunge_bands"]:
+            h.append("<ul class='small'>" + "".join(f"<li>{e(p)} · lane {lane}: {lo:.2f}–{hi:.2f} ({made}/{n})</li>"
+                                                      for p, lane, lo, hi, made, n in a["plunge_bands"]) + "</ul>")
+        h.append("</div>")
 
     # Incidents
     h.append(f"<h2>Watchdog</h2><div class='panel'>{len(a['incidents'])} incident(s)")
@@ -480,11 +642,16 @@ if __name__ == "__main__":
     ap.add_argument("--tracks", help="write the shot tracks as this SVG file")
     ap.add_argument("--html", nargs="?", const="", help="write the report as an HTML page (default: <stem>.html beside the JSON)")
     ap.add_argument("--map", help="a table picture to draw the tracks over")
+    ap.add_argument("--tightness", action="store_true",
+                    help="print only the widest advanced/expert drains/min half-width (inf if a good robot has no drains) and exit")
     ap.add_argument("--map-rect", nargs=4, type=float, metavar=("X", "Y", "W", "H"), default=[-40, -75, 680, 1405],
                     help="the world rect the picture covers (default: the 600x1300 tables' full art rect)")
     args = ap.parse_args()
     data = json.load(open(args.report))
     analysis = analyze(data, precise=set(args.precise))
+    if args.tightness:
+        print(f"{analysis['tightness']:.3f}" if analysis["tightness"] != float("inf") else "inf")
+        sys.exit(0)
     print_text(data, analysis, args.report, args.checks)
     if args.tracks:
         open(args.tracks, "w").write(tracks_svg(analysis, args.map, args.map_rect))

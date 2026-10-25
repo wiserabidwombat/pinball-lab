@@ -152,6 +152,8 @@ final class MonTableScene: SKScene {
 
     // Input
     private var activeTouches: [UITouch: Control] = [:]
+    /// Round 8: the nudge and the tilt (shared rule in Nudge.swift); input from a flick of a flipper finger or the pad.
+    private let nudge = Nudge()
     private var plungerStartY: CGFloat = 0
     private var plungerPull: CGFloat = 0
     // Game controller (LabGamepad): the flippers it holds, whether it's pulling the plunger and how far at most,
@@ -1411,7 +1413,7 @@ final class MonTableScene: SKScene {
     /// A lit kickback fires a ball draining down the left outlane straight back up it. Lit at the start of every
     /// ball; one save, then a full saguaro bank must relight it.
     private func updateKickback() {
-        guard kickbackLit else { return }
+        guard kickbackLit, !nudge.tilted else { return }      // round 8b′: no kickback while tilted
         for ball in balls where ball.isOnFloor {
             guard let body = ball.physicsBody else { continue }
             let p = ball.position
@@ -1689,6 +1691,7 @@ final class MonTableScene: SKScene {
     private func placeBallOnPlunger() {
         ballLaunched = false
         wasOnPlunger = false
+        if nudge.tilted { nudge.newBall(); updateFlippers() } else { nudge.newBall() }   // round 8: a tilt ends here
         let r = MonTableLayout.ballRadius
         let ball = MonBall(at: CGPoint(x: MonTableLayout.laneCenterX, y: MonTableLayout.plungerRestTop + r + 2))
         addChild(ball)
@@ -1835,6 +1838,7 @@ final class MonTableScene: SKScene {
                 plungerPull = 0
             } else {
                 activeTouches[touch] = p.x < view.bounds.midX ? .left : .right
+                nudge.swipeBegan(touch, at: p)
             }
         }
         updateFlippers()
@@ -1847,10 +1851,19 @@ final class MonTableScene: SKScene {
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let view else { return }
-        for touch in touches where activeTouches[touch] == .plunger {
-            let dragged = (touch.location(in: view).y - plungerStartY) * cameraRig.node.yScale
-            plungerPull = min(max(dragged, 0), MonTableLayout.plungerMaxPull)
-            plunger.position.y = MonTableLayout.plungerRestPosition.y - plungerPull
+        for touch in touches {
+            let p = touch.location(in: view)
+            switch activeTouches[touch] {
+            case .plunger:
+                let dragged = (p.y - plungerStartY) * cameraRig.node.yScale
+                plungerPull = min(max(dragged, 0), MonTableLayout.plungerMaxPull)
+                plunger.position.y = MonTableLayout.plungerRestPosition.y - plungerPull
+            case .left, .right:
+                // Round 8: a quick flick of a flipper finger nudges the table.
+                if let direction = nudge.swipeMoved(touch, to: p) { applyNudge(direction) }
+            case nil:
+                break
+            }
         }
     }
 
@@ -1864,6 +1877,7 @@ final class MonTableScene: SKScene {
 
     private func endTouches(_ touches: Set<UITouch>) {
         for touch in touches {
+            nudge.swipeEnded(touch)
             if activeTouches.removeValue(forKey: touch) == .plunger {
                 releasePlunger()
             }
@@ -1881,11 +1895,36 @@ final class MonTableScene: SKScene {
         left = left || robotLeft
         right = right || robotRight
         #endif
+        if nudge.tilted { left = false; right = false }      // round 8: tilted — dead flippers until the next ball
         if left && !leftFlipper.isPressed { rotateLanes(by: -1); sfx(.flipper) }
         if right && !rightFlipper.isPressed { rotateLanes(by: 1); sfx(.flipper) }
         leftFlipper.isPressed = left
         rightFlipper.isPressed = right
         upperFlipper?.isPressed = right
+    }
+
+    /// Round 8: a nudge, from a flick of a flipper finger or the pad. Every free floor ball gets the kick; the rule in
+    /// Nudge decides the warning and the tilt (the flippers are dead until the next ball is served).
+    private func applyNudge(_ direction: Nudge.Direction) {
+        guard !isAttractMode, !game.isGameOver else { return }
+        let free = balls.filter { $0.isOnFloor && $0.heldIn == nil && $0.ride == nil && !isOnPlunger($0) }
+        let outcome = nudge.nudge(direction, at: gameTime, balls: free.compactMap { $0.physicsBody })
+        Nudge.haptic(for: outcome)
+        switch outcome {
+        case .ignored:
+            return
+        case .nudged:
+            cameraRig.jolt(direction.unit, strength: Nudge.joltNudge)
+        case .warning:
+            cameraRig.jolt(direction.unit, strength: Nudge.joltWarning)
+            cameraRig.shake(strength: 4, duration: 0.3)
+            showBanner("TILT WARNING")
+        case .tilt:
+            cameraRig.jolt(direction.unit, strength: Nudge.joltTilt, duration: 0.35)
+            cameraRig.shake(strength: 8, duration: 0.7)
+            showBanner("TILT")
+            updateFlippers()                                 // the flippers drop
+        }
     }
 
     private func releaseAllControls() {
@@ -1917,6 +1956,7 @@ final class MonTableScene: SKScene {
     private func updateGamepad() {
         let pad = LabGamepad.shared.state
         if !pad.aDown { padAArmed = true }
+        if let direction = pad.nudge { applyNudge(direction) }    // round 8
         if pad.left != padLeft || pad.right != padRight {
             padLeft = pad.left
             padRight = pad.right
@@ -2021,7 +2061,7 @@ final class MonTableScene: SKScene {
         let drained = balls.filter { $0.position.y < -MonTableLayout.ballRadius * 3 }
         if !drained.isEmpty {
             drained.forEach { removeBall($0) }
-            if monsoonOn || superbloomOn, now < multiballSaveUntil {
+            if !nudge.tilted, monsoonOn || superbloomOn, now < multiballSaveUntil {   // round 8b′: a tilt ends the saves
                 // Monsoon's ball save: each lost ball comes back up out of the arroyo.
                 if pendingReleases == 0 { nextReleaseAt = now + 0.5 }
                 pendingReleases += drained.count
@@ -2030,14 +2070,14 @@ final class MonTableScene: SKScene {
             let rightOutlane = drained.contains { $0.inRightOutlane }
             if balls.isEmpty, nextBallAt == nil, pendingReleases == 0, bonusStart == nil {
                 setSkillLane(nil)
-                if ballSaveNow {
+                if ballSaveNow, !nudge.tilted {
                     // The ball save: once per player ball, on the plunger and for 10 s after launch.
                     ballSaveUsed = true
                     game.ballSaved()
                     showBanner("BALL SAVED"); sfx(.ballSave)
                     rampHaptic.impactOccurred()
                     nextBallAt = now + 0.8
-                } else if outlaneSaveLit, rightOutlane {
+                } else if outlaneSaveLit, rightOutlane, !nudge.tilted {
                     // Outlane save: used up; the ball comes back, nothing lost.
                     outlaneSaveLit = false
                     game.ballSaved()
@@ -2458,8 +2498,11 @@ extension MonTableScene: PlayLabHost {
                                id: ObjectIdentifier(b).hashValue)
         }, wanted: robotWanted(), lanes: lanesResetAt == nil && !rollovers.isEmpty
             ? PlayRobotView.Lanes(xs: rollovers.map { $0.position.x }, y: rollovers[0].position.y, lit: rollovers.map { $0.isLit })
-            : nil)
+            : nil,
+           // Round 7b: the plunge sweep of 2026-10-24 (both rates): lane 2 at 0.63, lane 1 at 0.65, lane 0 unreachable.
+           skillPlunge: skillLane.flatMap { [1: 0.65, 2: 0.63][$0] })
         guard let cmd = lab.frame(view) else { return }
+        if let direction = cmd.nudge { applyNudge(direction) }       // round 8b: the robot nudges
         if cmd.left != robotLeft || cmd.right != robotRight {
             robotLeft = cmd.left
             robotRight = cmd.right

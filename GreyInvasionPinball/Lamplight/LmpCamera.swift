@@ -13,6 +13,10 @@ final class LmpCameraRig {
     private var shakeLeft: TimeInterval = 0
     private var shakeDuration: TimeInterval = 0
     private var shakeStrength: CGFloat = 0
+    // Round 8: a directional lurch (the nudge) — the table jumps along the shove and springs back.
+    private var joltLeft: TimeInterval = 0
+    private var joltDuration: TimeInterval = 0
+    private var joltVector = CGVector.zero          // screen points the TABLE appears to move at the peak
 
     /// `strength` is the largest offset in SCREEN points. Skipped with Reduce Motion.
     func shake(strength: CGFloat, duration: TimeInterval = 0.3) {
@@ -22,6 +26,15 @@ final class LmpCameraRig {
         shakeStrength = strength
         shakeDuration = duration
         shakeLeft = duration
+    }
+
+    /// Round 8: the table lurches `strength` SCREEN points along `direction` (world axes) and springs back over
+    /// `duration`. Rides on top of any shake. Skipped with Reduce Motion.
+    func jolt(_ direction: CGVector, strength: CGFloat, duration: TimeInterval = 0.22) {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        joltVector = CGVector(dx: direction.dx * strength, dy: direction.dy * strength)
+        joltDuration = duration
+        joltLeft = duration
     }
 
     func install(in scene: SKScene) {
@@ -57,6 +70,14 @@ final class LmpCameraRig {
             shakeLeft = max(0, shakeLeft - TimeInterval(dt))
             let amount = shakeStrength * CGFloat(shakeLeft / max(shakeDuration, 0.001)) * node.xScale
             offset = CGPoint(x: .random(in: -1...1) * amount, y: .random(in: -1...1) * amount)
+        }
+        if joltLeft > 0 {
+            joltLeft = max(0, joltLeft - TimeInterval(dt))
+            let p = 1 - CGFloat(joltLeft / max(joltDuration, 0.001))          // 0 → 1 over the jolt
+            let a = sin(p * .pi) * (1 - 0.5 * p) * node.xScale
+            // the camera goes the other way, so the table jumps along the nudge and eases back
+            offset.x -= joltVector.dx * a
+            offset.y -= joltVector.dy * a
         }
         node.position = CGPoint(x: base.x + offset.x, y: base.y + offset.y)
     }

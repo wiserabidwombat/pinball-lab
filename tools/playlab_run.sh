@@ -7,6 +7,9 @@
 #   tools/playlab_run.sh lamplight 1 120            # 1 game per skill, 120 Hz only (~20 min)
 #   tools/playlab_run.sh lamplight 2 both expert    # one skill
 #   SKIP_BUILD=1 tools/playlab_run.sh lamplight     # reuse the last build
+#   tools/playlab_run.sh monsoon plunge [hz]        # plan 2 round 7a: the plunge sweep (33 powers × 2 balls per pass)
+#   BUILD_ONLY=1 tools/playlab_run.sh lamplight     # build (and write the build id), then stop — the sweep uses this
+#   DEVICE="iPhone 17 Pro Max · lab 2" tools/playlab_run.sh …   # another Simulator device (the sweep's --parallel clones)
 #
 # Tables: lamplight (more as they adopt PlayLabHost: greyinvasion, cthulhu, monsoon). Reports go to ShotLab/.
 set -euo pipefail
@@ -45,6 +48,22 @@ if [ -z "${SKIP_BUILD:-}" ]; then
   fi
   grep -E "warning:" "$DERIVED/build.log" | grep -v "appintentsmetadataprocessor" | head -10 || true
   echo "▶ Build OK"
+  # Plan 2 round 1: remember what was built, so every report names its commit (and whether the tree was dirty).
+  DIRTY=$(git status --porcelain --untracked-files=no 2>/dev/null | awk '{print $2}' | xargs -n1 basename 2>/dev/null | tr '\n' ',' | sed 's/,$//' || true)
+  if [ -n "$DIRTY" ]; then DIRTY="dirty: $DIRTY"; else DIRTY=clean; fi
+  printf '%s · %s · %s · %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo nogit)" \
+    "$DIRTY" "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')" \
+    "$(date '+%Y-%m-%d %H:%M')" > "$DERIVED/build-id.txt"
+fi
+BUILD_ID=$(cat "$DERIVED/build-id.txt" 2>/dev/null || echo "unknown build")
+if [ -n "${SKIP_BUILD:-}" ]; then
+  HEAD_NOW=$(git rev-parse --short HEAD 2>/dev/null || echo nogit)
+  case "$BUILD_ID" in "$HEAD_NOW"*) ;; *) BUILD_ID="$BUILD_ID · REUSED (HEAD now $HEAD_NOW)";; esac
+fi
+echo "▶ Build id: $BUILD_ID"
+if [ -n "${BUILD_ONLY:-}" ]; then
+  echo "▶ Build only — not launching"
+  exit 0
 fi
 APP=$(find "$DERIVED/Build/Products" -name "*.app" -path "*iphonesimulator*" | head -1)
 [ -n "$APP" ] || { echo "No .app built under $DERIVED"; exit 1; }
@@ -53,15 +72,52 @@ echo "▶ Installing $APP"
 xcrun simctl install "$UDID" "$APP"
 xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
 
-ARGS=(-playlab "$TABLE" -playlab-games "$GAMES" -playlab-hz "$HZ")
+if [ "$GAMES" = "plunge" ]; then
+  GAMES=22   # 33 powers × 2 balls = 66 plunges = 22 three-ball games per pass (for the budget below)
+  ARGS=(-playlab "$TABLE" -playlab-plunge 2 -playlab-hz "$HZ" -playlab-build "$BUILD_ID")
+  CAP=${CAP:-240}
+else
+  ARGS=(-playlab "$TABLE" -playlab-games "$GAMES" -playlab-hz "$HZ" -playlab-build "$BUILD_ID")
+fi
 [ -n "$SKILLS" ] && ARGS+=(-playlab-skills "$SKILLS")
 echo "▶ Launching the Play Lab: ${ARGS[*]} (the app quits by itself when the report is saved)"
-BEFORE=$(ls -t ShotLab/playlab-*.json 2>/dev/null | head -1 || true)
-# --console attaches to the app's stdout and returns when it exits.
-xcrun simctl launch --console "$UDID" "$BUNDLE" "${ARGS[@]}" | grep -E "LAB:|PLAY LAB" || true
+# Round 5: this table's reports only (other tables may be playing on other devices at the same time), and only one
+# written after this launch (a marker file's mtime).
+case "$TABLE" in
+  lamplight)    PAT="playlab-the-lamplight-*.json";;
+  greyinvasion) PAT="playlab-grey-invasion-*.json";;
+  cthulhu)      PAT="playlab-cthulhu-rising-*.json";;
+  *)            PAT="playlab-$TABLE-*.json";;
+esac
+MARKER="$DERIVED/launch-$TABLE.marker"
+touch "$MARKER"
+# Plan 2 round 4: the run gets a budget — the app's game cap (480 s unless CAP is set) × the games planned, plus 10 min
+# for serves, saves and screenshots. A run that hasn't quit by then has stalled (a hung app, a wedged Simulator): the
+# app is terminated, there is no report, and the runner exits 2 so a sweep can retry.
+NSK=4; [ -n "$SKILLS" ] && NSK=$(echo "$SKILLS" | tr ',' '\n' | grep -c .)
+NPASS=2; [ "$HZ" != "both" ] && NPASS=1
+BUDGET=$(( GAMES * NSK * NPASS * ${CAP:-480} + 600 ))
+echo "▶ Budget: $(( BUDGET / 60 )) min (the app is terminated if it hasn't quit by then)"
+# --console attaches to the app's stdout and returns when it exits; watched from here so it can be cut short.
+( xcrun simctl launch --console "$UDID" "$BUNDLE" "${ARGS[@]}" | grep -E "LAB:|PLAY LAB" || true ) &
+WATCH=$!
+T_LAUNCH=$(date +%s)
+STALLED=
+while kill -0 "$WATCH" 2>/dev/null; do
+  sleep 20
+  if [ $(( $(date +%s) - T_LAUNCH )) -gt "$BUDGET" ]; then
+    echo "▶ STALLED: the app hadn't quit after $(( BUDGET / 60 )) min — terminating it"
+    STALLED=1
+    xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
+    sleep 5
+    kill "$WATCH" 2>/dev/null || true
+    break
+  fi
+done
+wait "$WATCH" 2>/dev/null || true
 
-AFTER=$(ls -t ShotLab/playlab-*.json 2>/dev/null | head -1 || true)
-if [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
+AFTER=$(find ShotLab -maxdepth 1 -name "$PAT" ! -name "*-sweep.json" -newer "$MARKER" 2>/dev/null | head -1 || true)
+if [ -n "$AFTER" ]; then
   echo "▶ Report: $AFTER"
   STEM="${AFTER%.json}"
   # Shots meant to be hard on this table (an expert rate under 15% is noted, not flagged).
@@ -70,5 +126,6 @@ if [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
   echo "▶ Report page: $STEM.html (screenshots in $STEM/, tracks in $STEM-tracks.svg)"
   open "$STEM.html" 2>/dev/null || true
 else
-  echo "No new report in ShotLab/ (did the app quit early? check the Simulator)."
+  echo "No new report in ShotLab/ (${STALLED:+the run stalled and was terminated}${STALLED:-did the app quit early? check the Simulator})."
+  exit 2
 fi

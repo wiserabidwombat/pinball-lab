@@ -319,6 +319,7 @@ struct ContentView: View {
             overlayButton("Resume", prominent: true) { setPaused(false) }
                 .padding(.top, 8)
             cameraButton
+            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") { settings.improveOn.toggle() }
             volumeRow
             overlayButton("How to Play") { showHowTo = true }
             overlayButton("Settings") { showSettings = true }

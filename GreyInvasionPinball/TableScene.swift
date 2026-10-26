@@ -133,6 +133,10 @@ final class TableScene: SKScene {
     private var leftFlipper: Flipper!
     private var rightFlipper: Flipper!
     private var upperFlipper: Flipper!            // right side, on the right button
+    /// Improve mode (2026-10-26): the flip-spot coach marks on the resting lower flippers (Settings.improveOn).
+    private var coach: FlipCoach?
+    private var coachSixty = false
+    private var coachRateStreak = 0
     private var plunger: SKShapeNode!
     private var gate: SKShapeNode!
     private var gateClosed = false
@@ -258,6 +262,7 @@ final class TableScene: SKScene {
                                pivotRadius: TableLayout.upperFlipperPivotRadius,
                                tipRadius: TableLayout.upperFlipperTipRadius)
         upperFlipper.attach(to: self)
+        buildCoach()
         addWall(points: TableLayout.upperFlipperGuide)
 
         addPlunger()
@@ -1354,6 +1359,8 @@ final class TableScene: SKScene {
         // Lane change: each new flipper press shifts the lit U-F-O lanes that way.
         if left && !leftFlipper.isPressed { rotateLanes(by: -1); sfx(.flipper) }
         if right && !rightFlipper.isPressed { rotateLanes(by: 1); sfx(.flipper) }
+        if left && !leftFlipper.isPressed { coachFlip(0) }
+        if right && !rightFlipper.isPressed { coachFlip(1) }
         leftFlipper.isPressed = left
         rightFlipper.isPressed = right
         upperFlipper?.isPressed = right
@@ -1414,6 +1421,60 @@ final class TableScene: SKScene {
     }
 
     /// Drops every held touch: flippers fall, the plunger returns without firing.
+    // MARK: Improve mode (2026-10-26)
+
+    /// The flip-spot coach: the two lower flippers at rest with GI's Shot Lab bands (GiCoachBands). The upper flipper
+    /// has no Shot Lab sweep, so no marks.
+    private func buildCoach() {
+        let rest = TableLayout.flipperRestAngle
+        let lower = { (pivot: CGPoint, pointsLeft: Bool, b120: [FlipCoach.Band], b60: [FlipCoach.Band]) in
+            FlipCoach.Flipper(pivot: pivot, pointsLeft: pointsLeft, restAngle: rest,
+                              length: TableLayout.flipperLength, pivotRadius: TableLayout.flipperPivotRadius,
+                              tipRadius: TableLayout.flipperTipRadius, bands120: b120, bands60: b60)
+        }
+        let c = FlipCoach(flippers: [lower(TableLayout.leftFlipperPivot, false, GiCoachBands.left120, GiCoachBands.left60),
+                                     lower(TableLayout.rightFlipperPivot, true, GiCoachBands.right120, GiCoachBands.right60)],
+                          ballRadius: TableLayout.ballRadius)
+        c.isHidden = true
+        addChild(c)
+        coach = c
+    }
+
+    /// Shown while Improve is on in a real game (not on the menu, not for the lab robots).
+    private func updateCoachVisibility() {
+        guard let coach else { return }
+        var show = settings.improveOn && !isAttractMode
+        #if DEBUG
+        if playLab != nil || shotLab != nil { show = false }
+        #endif
+        coach.isHidden = !show
+    }
+
+    /// 60 Hz or 120 Hz bands: switches only after 30 frames in a row on the other side of 1/90 s, so one
+    /// hitch (or the clamped first frame after a pause) doesn't redraw every band and wipe a flash.
+    private func coachRateIsSixty(_ dt: CGFloat) -> Bool {
+        if (dt > 1.0 / 90) == coachSixty { coachRateStreak = 0; return coachSixty }
+        coachRateStreak += 1
+        if coachRateStreak >= 30 { coachSixty.toggle(); coachRateStreak = 0 }
+        return coachSixty
+    }
+
+    /// The lit arrows, by lamp name ("bank" is the fighter bank).
+    private func litShots() -> Set<String> {
+        Set(["hangar", "rightRamp", "leftRamp", "orbit", "abduction", "bank"].filter { name in
+            switch lamps.state(of: "arrow." + name) {
+            case .on?, .blink?, .fastBlink?: return true
+            default: return false
+            }
+        })
+    }
+
+    /// A flipper went up: the coach flashes the band the ball was in (0 left, 1 right).
+    private func coachFlip(_ index: Int) {
+        guard let coach, !coach.isHidden else { return }
+        coach.flipped(flipper: index, balls: balls.filter { $0.isOnFloor && $0.heldIn == nil }.map { $0.position })
+    }
+
     /// Round 8: a nudge, from a flick of a flipper finger or the pad. Every free floor ball gets the kick; the rule in
     /// Nudge decides the warning and the tilt (the flippers are dead until the next ball is served).
     private func applyNudge(_ direction: Nudge.Direction) {
@@ -1511,6 +1572,7 @@ final class TableScene: SKScene {
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
+        updateCoachVisibility()
         #if DEBUG
         if shotLab != nil {                     // Shot Lab: the robot's frame instead of a game frame
             updateShotLab(CGFloat(step), now: now)
@@ -1526,6 +1588,7 @@ final class TableScene: SKScene {
         let dt = CGFloat(step)
         lastStep = dt
         updateGamepad()
+        if let coach, !coach.isHidden { coach.update(lit: litShots(), sixty: coachRateIsSixty(dt)) }
         #if DEBUG
         updatePlayLab(now)
         #endif

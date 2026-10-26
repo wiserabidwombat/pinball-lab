@@ -7,6 +7,7 @@ private let soundVolumeKey = "soundVolume"
 private let hapticsOnKey = "hapticsOn"
 private let tipsOnKey = "tipsOn"
 private let bonusCountOnKey = "bonusCountOn"
+private let improveOnKey = "improveOn"
 
 /// Player settings, saved in UserDefaults: camera mode (milestone 2), multiball full-table view
 /// (milestone 5), and sound volume, haptics, tips and the bonus count (milestone 10).
@@ -45,6 +46,11 @@ final class GameSettings {
         didSet { UserDefaults.standard.set(bonusCountOn, forKey: bonusCountOnKey) }
     }
 
+    /// Improve mode (2026-10-26): the flip-spot coach marks on the flippers (pause card; off by default).
+    var improveOn: Bool {
+        didSet { UserDefaults.standard.set(improveOn, forKey: improveOnKey) }
+    }
+
     init() {
         let d = UserDefaults.standard
         cameraMode = CameraMode(rawValue: d.string(forKey: cameraModeKey) ?? "") ?? .flying
@@ -53,6 +59,7 @@ final class GameSettings {
         hapticsOn = d.object(forKey: hapticsOnKey) as? Bool ?? true
         tipsOn = d.object(forKey: tipsOnKey) as? Bool ?? true
         bonusCountOn = d.object(forKey: bonusCountOnKey) as? Bool ?? true
+        improveOn = d.object(forKey: improveOnKey) as? Bool ?? false
         Haptic.enabled = hapticsOn
     }
 }

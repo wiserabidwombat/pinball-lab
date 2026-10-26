@@ -290,6 +290,7 @@ struct CthTableView: View {
                 .padding(.top, 8)
             overlayButton("How to Play") { showHowTo = true }
             cameraButton
+            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") { settings.improveOn.toggle() }
             volumeRow
             overlayButton("Restart", action: startGame)
             overlayButton("Menu", action: goToMenu)

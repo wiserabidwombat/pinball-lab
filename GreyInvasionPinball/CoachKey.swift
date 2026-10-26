@@ -6,6 +6,7 @@ import SpriteKit
 /// time a table is played with Improve on, and from the pause card's "Colour Key" button.
 struct CoachKeyEntry: Identifiable {
     let label: String             // the band's label, e.g. "LIBRARY"
+    let shot: String              // the band's shot name (its lamp / the table's shot event), e.g. "library"
     let color: SKColor
     let flippers: String          // e.g. "Left & right flippers"
     var id: String { label }
@@ -26,7 +27,7 @@ enum CoachKey {
         }
         return order.compactMap { label in
             guard let band = first[label] else { return nil }
-            return CoachKeyEntry(label: label, color: band.color, flippers: describe(on[label] ?? []))
+            return CoachKeyEntry(label: label, shot: band.shot, color: band.color, flippers: describe(on[label] ?? []))
         }
     }
 
@@ -107,5 +108,36 @@ struct CoachKeyView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
             .environment(\.colorScheme, .dark)
         }
+    }
+}
+
+/// Improve mode's shot meter (2026-10-26): the pause card's "SHOTS THIS GAME" block — one cell per shot in the
+/// table's colour key, its count this game over its label in its colour.
+struct ShotMeterView: View {
+    let cells: [(label: String, count: Int, color: SKColor)]
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text("SHOTS THIS GAME")
+                .font(.orbitron(10))
+                .tracking(1.5)
+                .foregroundStyle(.white.opacity(0.55))
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 8) {
+                ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+                    VStack(spacing: 1) {
+                        Text("\(cell.count)")
+                            .font(.orbitron(18, .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(cell.count > 0 ? .white : .white.opacity(0.4))
+                        Text(cell.label)
+                            .font(.orbitron(9, .bold))
+                            .foregroundStyle(Color(uiColor: cell.color))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
     }
 }

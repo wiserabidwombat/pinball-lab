@@ -347,6 +347,9 @@ struct ContentView: View {
                 }
                 .padding(.top, 4)
             }
+            if let meter = scene.shotMeter {               // Improve mode: this game's made shots
+                ShotMeterView(cells: meter)
+            }
             overlayButton("Resume", prominent: true) { setPaused(false) }
                 .padding(.top, 8)
             cameraButton

@@ -339,6 +339,9 @@ struct LmpTableView: View {
                 }
                 .padding(.top, 4)
             }
+            if let meter = scene.shotMeter {               // Improve mode: this game's made shots
+                ShotMeterView(cells: meter)
+            }
             // M6 round 3: where the cat is and what she does there.
             VStack(spacing: 2) {
                 Text("The cat is \(game.catPerch.spot)")

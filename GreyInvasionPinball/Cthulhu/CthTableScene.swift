@@ -1423,7 +1423,7 @@ final class CthTableScene: SKScene {
     /// Improve mode: this game's made shots, one cell per shot in the colour key (nil while Improve is off).
     var shotMeter: [(label: String, count: Int, color: SKColor)]? {
         guard settings.improveOn else { return nil }
-        return CthCoachBands.key.map { (label: $0.label, count: shotCounts[$0.shot, default: 0], color: $0.color) }
+        return ShotMeter.cells(CthCoachBands.key, counts: shotCounts)
     }
 
     func newGame() {

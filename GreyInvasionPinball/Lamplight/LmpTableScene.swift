@@ -69,6 +69,8 @@ final class LmpTableScene: SKScene {
     /// Improve mode: the drain replay (a lost ball's last stretch, with its way out), and the camera pull-back for it.
     private var drainReplay: DrainReplay?
     private var replayCameraUntil: TimeInterval = 0
+    /// Improve mode: this game's made shots by name (the shot meter on the pause card), counted while Improve is on.
+    private var shotCounts: [String: Int] = [:]
     private var coachSixty = false
     private var coachRateStreak = 0
     private var cat: LmpCat!
@@ -1173,8 +1175,15 @@ final class LmpTableScene: SKScene {
     /// Improve mode: this game's drains by way out, for the pause card (nil while Improve is off).
     var drainTally: [(label: String, count: Int)]? { settings.improveOn ? drainReplay?.tallyColumns : nil }
 
+    /// Improve mode: this game's made shots, one cell per shot in the colour key (nil while Improve is off).
+    var shotMeter: [(label: String, count: Int, color: SKColor)]? {
+        guard settings.improveOn else { return nil }
+        return ShotMeter.cells(LmpCoachBands.key, counts: shotCounts)
+    }
+
     func newGame() {
         drainReplay?.resetTally()
+        shotCounts = [:]
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                              // a new game stops the Shot Lab
@@ -2461,6 +2470,8 @@ final class LmpTableScene: SKScene {
 extension LmpTableScene {
     /// A shot event for the Shot Lab; does nothing in normal play.
     fileprivate func shotEvent(_ name: String) {
+        // Improve mode's shot meter: counted in a real game with Improve on (the drain replay shows exactly then).
+        if drainReplay?.isHidden == false { shotCounts[name, default: 0] += 1 }
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
         playLab?.shot(name, now: gameTime)

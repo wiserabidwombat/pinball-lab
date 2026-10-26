@@ -6,7 +6,8 @@ import SpriteKit
 /// time a table is played with Improve on, and from the pause card's "Colour Key" button.
 struct CoachKeyEntry: Identifiable {
     let label: String             // the band's label, e.g. "LIBRARY"
-    let shot: String              // the band's shot name (its lamp / the table's shot event), e.g. "library"
+    let shots: [String]           // the bands' shot names under this label (lamps / shot events), e.g. ["library"];
+                                  // two for the Lamplight's LOOP (leftLoop from the right flipper, rightLoop from the left)
     let color: SKColor
     let flippers: String          // e.g. "Left & right flippers"
     var id: String { label }
@@ -19,15 +20,18 @@ enum CoachKey {
         var order: [String] = []
         var first: [String: FlipCoach.Band] = [:]
         var on: [String: [String]] = [:]
+        var shots: [String: [String]] = [:]
         for flipper in flippers {
             for band in flipper.bands {
                 if first[band.label] == nil { first[band.label] = band; order.append(band.label) }
                 if !(on[band.label] ?? []).contains(flipper.name) { on[band.label, default: []].append(flipper.name) }
+                if !(shots[band.label] ?? []).contains(band.shot) { shots[band.label, default: []].append(band.shot) }
             }
         }
         return order.compactMap { label in
             guard let band = first[label] else { return nil }
-            return CoachKeyEntry(label: label, shot: band.shot, color: band.color, flippers: describe(on[label] ?? []))
+            return CoachKeyEntry(label: label, shots: shots[label] ?? [band.shot], color: band.color,
+                                 flippers: describe(on[label] ?? []))
         }
     }
 
@@ -113,6 +117,15 @@ struct CoachKeyView: View {
 
 /// Improve mode's shot meter (2026-10-26): the pause card's "SHOTS THIS GAME" block — one cell per shot in the
 /// table's colour key, its count this game over its label in its colour.
+enum ShotMeter {
+    /// The meter's cells: each colour-key shot with the sum of its shot names' counts.
+    static func cells(_ key: [CoachKeyEntry], counts: [String: Int]) -> [(label: String, count: Int, color: SKColor)] {
+        key.map { entry in
+            (label: entry.label, count: entry.shots.reduce(0) { $0 + counts[$1, default: 0] }, color: entry.color)
+        }
+    }
+}
+
 struct ShotMeterView: View {
     let cells: [(label: String, count: Int, color: SKColor)]
 

@@ -71,6 +71,8 @@ final class MonTableScene: SKScene {
     /// Improve mode: the drain replay (a lost ball's last stretch, with its way out), and the camera pull-back for it.
     private var drainReplay: DrainReplay?
     private var replayCameraUntil: TimeInterval = 0
+    /// Improve mode: this game's made shots by name (the shot meter on the pause card), counted while Improve is on.
+    private var shotCounts: [String: Int] = [:]
     private var coachSixty = false
     private var coachRateStreak = 0
     private var ramps: [MonRamp] = []
@@ -1746,8 +1748,15 @@ final class MonTableScene: SKScene {
     /// Improve mode: this game's drains by way out, for the pause card (nil while Improve is off).
     var drainTally: [(label: String, count: Int)]? { settings.improveOn ? drainReplay?.tallyColumns : nil }
 
+    /// Improve mode: this game's made shots, one cell per shot in the colour key (nil while Improve is off).
+    var shotMeter: [(label: String, count: Int, color: SKColor)]? {
+        guard settings.improveOn else { return nil }
+        return ShotMeter.cells(MonCoachBands.key, counts: shotCounts)
+    }
+
     func newGame() {
         drainReplay?.resetTally()
+        shotCounts = [:]
         fpsLow = 0
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
@@ -2360,6 +2369,12 @@ final class MonTableScene: SKScene {
 extension MonTableScene {
     /// A shot event for the Shot Lab; does nothing in normal play.
     fileprivate func shotEvent(_ name: String) {
+        // Improve mode's shot meter: counted in a real game with Improve on (the drain replay shows exactly then),
+        // under the colour key's names ("standup" → "saguaros"), ("captiveTop" → "captive").
+        if drainReplay?.isHidden == false {
+            let aliases: [String: String] = ["standup": "saguaros", "captiveTop": "captive"]
+            shotCounts[aliases[name] ?? name, default: 0] += 1
+        }
         if Self.bonusShots.contains(name) { shotsThisBall += 1 }
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)

@@ -68,6 +68,9 @@ final class MonTableScene: SKScene {
     private var upperFlipper: MonFlipper!
     /// Improve mode (2026-10-26): the flip-spot coach marks on the resting flippers (Settings.improveOn).
     private var coach: FlipCoach?
+    /// Improve mode: the drain replay (a lost ball's last stretch, with its way out), and the camera pull-back for it.
+    private var drainReplay: DrainReplay?
+    private var replayCameraUntil: TimeInterval = 0
     private var coachSixty = false
     private var coachRateStreak = 0
     private var ramps: [MonRamp] = []
@@ -251,6 +254,7 @@ final class MonTableScene: SKScene {
         if shotLab != nil { return .topDown }
         #endif
         if isAttractMode { return .topDown }
+        if gameTime < replayCameraUntil { return .topDown }      // Improve: a drain replay is showing
         return (monsoonOn || superbloomOn) && settings.multiballFullTable ? .topDown : settings.cameraMode
     }
 
@@ -297,6 +301,16 @@ final class MonTableScene: SKScene {
                                   tipRadius: MonTableLayout.upperFlipperTipRadius)
         upperFlipper.attach(to: self)
         buildCoach()
+        // The ring just above the resting flipper tips (the heat maps' line); the exit read 25 pt above the outlane
+        // walls' bottom ends, outside the lane guides = an outlane.
+        let replay = DrainReplay(lossLineY: 190,
+                                 exits: DrainReplay.Exits(lineY: MonTableLayout.outlaneWallBottom + 25,
+                                                          leftOutlaneX: MonTableLayout.laneGuideX,
+                                                          rightOutlaneX: MonTableLayout.mirrored(CGPoint(x: MonTableLayout.laneGuideX, y: 0)).x))
+        replay.isHidden = true
+        replay.zPosition = 48.5                         // Monsoon's dimmer is 48 (over the wires): stay above it, under the banners
+        addChild(replay)
+        drainReplay = replay
         addWall(points: MonTableLayout.upperFlipperGuide)
 
         addPlunger()
@@ -1942,6 +1956,7 @@ final class MonTableScene: SKScene {
         if playLab != nil || shotLab != nil { show = false }
         #endif
         coach.isHidden = !show
+        drainReplay?.isHidden = !show
     }
 
     /// 60 Hz or 120 Hz bands: switches only after 30 frames in a row on the other side of 1/90 s, so one
@@ -2085,6 +2100,9 @@ final class MonTableScene: SKScene {
         lastStep = dt
         updateGamepad()
         if let coach, !coach.isHidden { coach.update(lit: litShots(), sixty: coachRateIsSixty(dt)) }
+        if let drainReplay, !drainReplay.isHidden {
+            drainReplay.record(balls.map { (id: ObjectIdentifier($0), position: $0.position) }, now: now)
+        }
         #if DEBUG
         updatePlayLab(now)
         #endif
@@ -2130,6 +2148,9 @@ final class MonTableScene: SKScene {
         // Drain: remove every ball off the bottom; a ball is lost only when none are left.
         let drained = balls.filter { $0.position.y < -MonTableLayout.ballRadius * 3 }
         if !drained.isEmpty {
+            if let drainReplay, !drainReplay.isHidden {
+                drained.forEach { drainReplay.drained(ObjectIdentifier($0), at: $0.position) }
+            }
             drained.forEach { removeBall($0) }
             if !nudge.tilted, monsoonOn || superbloomOn, now < multiballSaveUntil {   // round 8b′: a tilt ends the saves
                 // Monsoon's ball save: each lost ball comes back up out of the arroyo.
@@ -2139,6 +2160,9 @@ final class MonTableScene: SKScene {
             }
             let rightOutlane = drained.contains { $0.inRightOutlane }
             if balls.isEmpty, nextBallAt == nil, pendingReleases == 0, bonusStart == nil {
+                // Improve: the last ball is gone, so pull back to the full table for its replay (never while
+                // other balls are still in play or a ball save is firing one back).
+                if let drainReplay, !drainReplay.isHidden { replayCameraUntil = now + 3.0 }
                 setSkillLane(nil)
                 if ballSaveNow, !nudge.tilted {
                     // The ball save: once per player ball, on the plunger and for 10 s after launch.

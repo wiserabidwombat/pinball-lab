@@ -357,7 +357,11 @@ enum LmpTableLayout {
     /// right loop.
     static let mailSlotCenter = CGPoint(x: 380, y: 640)
     /// T5 M8 v3: 14 (was 12). Still clear of the ramp and right-loop shot lines by about 15 pt (Shot Lab crossings).
-    static let mailCaptureRadius: CGFloat = 14
+    /// 2026-10-26 (Aaron: the mail shot): 22. The 10-26 Shot Labs put the left flipper's ball path through y 640 moving
+    /// ~3,700 pt per second of flip delay, so a 14 pt catch was a ~7.6 ms window (the ramp's and the right loop's are
+    /// ~40 ms) — the last ramp sample passes 30 pt left of the slot and the first right-loop sample 28 pt right of it,
+    /// with only the mail sample between. 22 makes it ~12 ms and still leaves those two shot lines 6-8 pt clear.
+    static let mailCaptureRadius: CGFloat = 22
     /// T5 M8 v3: no speed gate any more (was 900, earlier 650). The soft-shot rule was for the upper flipper; the left
     /// flipper's shots cross the slot at 1450-2200 pt/s, so every one was refused.
     static let mailMaxSpeed: CGFloat = maxBallSpeed

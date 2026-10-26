@@ -2639,9 +2639,12 @@ extension LmpTableScene: PlayLabHost {
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
                                  // T5 M8 v13: centres from the Shot Lab sweep after the flip assist (2026-10-18T19-35)
-                                 shots: [("bookTarget", 0.322), ("fireplace", 0.307), ("ramp", 0.441), ("mail", 0.486),
+                                 // 2026-10-26: mail 0.486 → 0.467 (120 Hz) and 0.445 → 0.450 (60 Hz), the mail hits in the
+                                 // 10-26 Shot Labs (2026-10-26T15-20 and the books-down 16-23); 0.486 was 19 ms late, the
+                                 // robot's "1/18 mail aims" at 120 Hz.
+                                 shots: [("bookTarget", 0.322), ("fireplace", 0.307), ("ramp", 0.441), ("mail", 0.467),
                                          ("rightLoop", 0.502)],
-                                 shots60: [("bookTarget", 0.333), ("fireplace", 0.325), ("ramp", 0.425), ("mail", 0.445),
+                                 shots60: [("bookTarget", 0.333), ("fireplace", 0.325), ("ramp", 0.425), ("mail", 0.450),
                                            ("rightLoop", 0.490)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,

@@ -7,7 +7,7 @@ import SpriteKit
 /// (books down), the current table at both rates. The same spot near each pivot hits the book bank while it's up and
 /// goes into the fireplace once it's down, so each flipper has a BOOKS band and a FIREPLACE band over the same range;
 /// the scene lights one of them. Band names are the lamps' names.
-/// Left out: the loft's 120 Hz mail (8/18: the parked mail aim), the right 60 Hz mail near the pivot (15/42), the
+/// Left out: the loft's 120 Hz mail (8/18, a side route off the loft; the designed mail shot is the left flipper's), the right 60 Hz mail near the pivot (15/42), the
 /// loft's 60 Hz ramp (it overlaps the inner mail run), the left 60 Hz left loop (one loop per flipper), the cat.
 enum LmpCoachBands {
     private static let books = SKColor(red: 0.96, green: 0.56, blue: 0.40, alpha: 1)     // old leather and the fire
@@ -27,8 +27,12 @@ enum LmpCoachBands {
         [band("bookTarget", "BOOKS", from, to, books), band("fireplace", "FIREPLACE", from, to, books)]
     }
 
-    static let left120 = shelf(28.7, 45.6) + [band("ramp", "RAMP", 53.1, 61.5, ramp),
-                                              band("rightLoop", "LOOP", 65.7, 77.4, loop)]
+    /// MAIL (2026-10-26, after the slot's catch went 14 → 22): shotlab-the-lamplight-2026-10-26T19-55-10Z, 3/3 at 63.5–63.7.
+    /// It sits between the ramp's last sample (61.3) and the right loop's first (65.7), so those two bands stop
+    /// 1 pt short of their last samples to keep the three marks apart.
+    static let left120 = shelf(28.7, 45.6) + [band("ramp", "RAMP", 53.1, 60.8, ramp),
+                                              band("mail", "MAIL", 63.6, 63.6, mail),
+                                              band("rightLoop", "LOOP", 66.7, 77.4, loop)]
     static let right120 = shelf(28.7, 45.7) + [band("kettle", "KETTLE", 55.0, 63.5, kettle),
                                                band("leftLoop", "LOOP", 65.7, 77.4, loop)]
     static let loft120 = [band("windowSeat", "WINDOW", 39.6, 50.8, window)]

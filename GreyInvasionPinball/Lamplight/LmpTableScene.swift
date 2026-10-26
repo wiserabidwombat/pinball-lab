@@ -66,6 +66,9 @@ final class LmpTableScene: SKScene {
     private var loftFlipper: LmpFlipper!
     /// Improve mode (2026-10-26): the flip-spot coach marks on the resting flippers (Settings.improveOn).
     private var coach: FlipCoach?
+    /// Improve mode: the drain replay (a lost ball's last stretch, with its way out), and the camera pull-back for it.
+    private var drainReplay: DrainReplay?
+    private var replayCameraUntil: TimeInterval = 0
     private var coachSixty = false
     private var coachRateStreak = 0
     private var cat: LmpCat!
@@ -270,6 +273,7 @@ final class LmpTableScene: SKScene {
         // or more balls on the table (the Evening Rush, Festival Night) the camera eases out to the whole table, and
         // back to the player's setting when it's down to one.
         if isAttractMode || balls.count > 1 { return .topDown }
+        if gameTime < replayCameraUntil { return .topDown }      // Improve: a drain replay is showing
         return settings.cameraMode
     }
 
@@ -566,6 +570,16 @@ final class LmpTableScene: SKScene {
         loftFlipper.attach(to: self)
         loftFlipper.drawnLift = LmpTableLayout.loftLift                  // T5 M9 v3: on the raised loft
         buildCoach()
+        // The ring just above the resting flipper tips (the heat maps' line); the exit read 25 pt above the outlane
+        // wall's bottom end. The Lamplight has no left outlane (a deflector feeds the left inlane), so the left edge
+        // is off the table: a ball can only be read as RIGHT OUTLANE or CENTRE.
+        let replay = DrainReplay(lossLineY: 190,
+                                 exits: DrainReplay.Exits(lineY: LmpTableLayout.outlaneWallBottom + 25,
+                                                          leftOutlaneX: -1000,
+                                                          rightOutlaneX: LmpTableLayout.mirrored(CGPoint(x: LmpTableLayout.laneGuideX, y: 0)).x))
+        replay.isHidden = true
+        addChild(replay)
+        drainReplay = replay
         loftFlipper.physicsBody?.categoryBitMask = LmpPhysicsCategory.loftFlipper
         loftFlipper.physicsBody?.collisionBitMask = LmpPhysicsCategory.rampBall
 
@@ -1351,6 +1365,7 @@ final class LmpTableScene: SKScene {
         if playLab != nil || shotLab != nil { show = false }
         #endif
         coach.isHidden = !show
+        drainReplay?.isHidden = !show
     }
 
     /// 60 Hz or 120 Hz bands: switches only after 30 frames in a row on the other side of 1/90 s, so one
@@ -1502,6 +1517,9 @@ final class LmpTableScene: SKScene {
         updateAmbience(Float(step))
         updateGamepad()
         if let coach, !coach.isHidden { coach.update(lit: litShots(), sixty: coachRateIsSixty(dt)) }
+        if let drainReplay, !drainReplay.isHidden {
+            drainReplay.record(balls.map { (id: ObjectIdentifier($0), position: $0.position) }, now: now)
+        }
         #if DEBUG
         updatePlayLab(now)
         #endif
@@ -1535,6 +1553,9 @@ final class LmpTableScene: SKScene {
         // Drain: remove every ball off the bottom; a ball is lost only when none are left.
         let drained = balls.filter { $0.position.y < -LmpTableLayout.ballRadius * 3 }
         if !drained.isEmpty {
+            if let drainReplay, !drainReplay.isHidden {
+                drained.forEach { drainReplay.drained(ObjectIdentifier($0), at: $0.position) }
+            }
             drained.forEach { removeBall($0) }
             if !nudge.tilted, rushActive, now < rushSaveUntil {   // round 8b′: a tilt ends the saves
                 // M8 round 2: the Rush's ball save puts them straight back in.
@@ -1551,6 +1572,9 @@ final class LmpTableScene: SKScene {
                 sfx(.ballSave)                         // T5 M9 v41
             }
             if balls.isEmpty, rushBallsToServe == 0, nextBallAt == nil {
+                // Improve: the last ball is gone, so pull back to the full table for its replay (never while
+                // other balls are still in play or a ball save is putting one back).
+                if let drainReplay, !drainReplay.isHidden { replayCameraUntil = now + 3.0 }
                 cameraRig.shake(strength: 4, duration: 0.3)
                 sfx(.drain)
                 let bonusShown = payBonus()                // T5 M8 v26: before the ball count (and the best evening)

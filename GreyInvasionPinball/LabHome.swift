@@ -137,6 +137,7 @@ struct LabHomeView: View {
     @State private var story: LabTable?
     @State private var showCredits = false
     @State private var showSettings = false
+    @State private var showImproveWelcome = ImproveWelcome.shouldShow   // once: the Improve mode welcome card
 
     private static let ink = Color(red: 0.04, green: 0.04, blue: 0.09)
     static let background = LinearGradient(colors: [Color(red: 0.09, green: 0.07, blue: 0.20), ink],
@@ -190,6 +191,10 @@ struct LabHomeView: View {
                 .padding(.horizontal, 16)
                 .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity)
+            }
+
+            if showImproveWelcome {
+                ImproveWelcomeView { showImproveWelcome = false }
             }
         }
         .sheet(item: $story) { table in

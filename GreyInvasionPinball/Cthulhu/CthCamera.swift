@@ -97,7 +97,11 @@ final class CthCameraRig {
 
         case .flying, .wide:
             let visibleWidth = mode == .flying ? CameraTuning.flyingVisibleWidth : CameraTuning.wideVisibleWidth
-            let scale = visibleWidth / viewSize.width
+            // iPad (2026-10-25): the width rule alone shows only ~1/3 of the table's height on a 3:4 screen and
+            // a sliver in landscape, so a minimum visible height applies too. Phones (~9:19.5) already show
+            // more than the minimum, so their framing is unchanged.
+            let minVisibleHeight = mode == .flying ? CameraTuning.flyingMinVisibleHeight : CameraTuning.wideMinVisibleHeight
+            let scale = max(visibleWidth / viewSize.width, minVisibleHeight / viewSize.height)
             let visW = viewSize.width * scale
             let visH = viewSize.height * scale
             let minX = -m + visW / 2
@@ -117,7 +121,9 @@ final class CthCameraRig {
                     ty = b.y + look
                 }
             }
-            return (CGPoint(x: min(max(tx, minX), maxX), y: min(max(ty, minY), maxY)), scale)
+            // When the view is wider than the table (iPad Wide, landscape), keep the table centred.
+            let x = visW >= w + 2 * m ? w / 2 : min(max(tx, minX), maxX)
+            return (CGPoint(x: x, y: min(max(ty, minY), maxY)), scale)
         }
     }
 }

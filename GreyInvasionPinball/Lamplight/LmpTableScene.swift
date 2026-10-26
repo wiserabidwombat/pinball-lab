@@ -64,6 +64,10 @@ final class LmpTableScene: SKScene {
     private var spinner: LmpSpinner?
     private var lastSpinTickAt: TimeInterval = 0
     private var loftFlipper: LmpFlipper!
+    /// Improve mode (2026-10-26): the flip-spot coach marks on the resting flippers (Settings.improveOn).
+    private var coach: FlipCoach?
+    private var coachSixty = false
+    private var coachRateStreak = 0
     private var cat: LmpCat!
     private var catRoamAt: TimeInterval = 0
     private let lamps = LmpLampController()
@@ -561,6 +565,7 @@ final class LmpTableScene: SKScene {
         loftFlipper.zPosition = 20
         loftFlipper.attach(to: self)
         loftFlipper.drawnLift = LmpTableLayout.loftLift                  // T5 M9 v3: on the raised loft
+        buildCoach()
         loftFlipper.physicsBody?.categoryBitMask = LmpPhysicsCategory.loftFlipper
         loftFlipper.physicsBody?.collisionBitMask = LmpPhysicsCategory.rampBall
 
@@ -1305,9 +1310,77 @@ final class LmpTableScene: SKScene {
         if nudge.tilted { left = false; right = false }      // round 8: tilted — dead flippers until the next ball
         if left && !leftFlipper.isPressed { sfx(.flipper) }
         if right && !rightFlipper.isPressed { sfx(.flipper) }
+        if left && !leftFlipper.isPressed { coachFlip(0) }
+        if right && !rightFlipper.isPressed { coachFlip(1); coachFlip(2) }
         leftFlipper.isPressed = left
         rightFlipper.isPressed = right
         loftFlipper?.isPressed = right
+    }
+
+    // MARK: Improve mode (2026-10-26)
+
+    /// The flip-spot coach: the three flippers at rest with the Lamplight's Shot Lab bands (LmpCoachBands). The loft
+    /// flipper's marks draw lifted with its picture and over the loft art.
+    private func buildCoach() {
+        let rest = LmpTableLayout.flipperRestAngle
+        let lower = { (pivot: CGPoint, pointsLeft: Bool, b120: [FlipCoach.Band], b60: [FlipCoach.Band]) in
+            FlipCoach.Flipper(pivot: pivot, pointsLeft: pointsLeft, restAngle: rest,
+                              length: LmpTableLayout.flipperLength, pivotRadius: LmpTableLayout.flipperPivotRadius,
+                              tipRadius: LmpTableLayout.flipperTipRadius, bands120: b120, bands60: b60)
+        }
+        let loft = FlipCoach.Flipper(pivot: LmpTableLayout.loftFlipperPivot, pointsLeft: true, restAngle: rest,
+                                     length: LmpTableLayout.loftFlipperLength,
+                                     pivotRadius: LmpTableLayout.loftFlipperPivotRadius,
+                                     tipRadius: LmpTableLayout.loftFlipperTipRadius,
+                                     bands120: LmpCoachBands.loft120, bands60: LmpCoachBands.loft60,
+                                     drawnLift: LmpTableLayout.loftLift, zOffset: 16)   // 5 + 16: over the loft flipper (20)
+        let c = FlipCoach(flippers: [lower(LmpTableLayout.leftFlipperPivot, false, LmpCoachBands.left120, LmpCoachBands.left60),
+                                     lower(LmpTableLayout.rightFlipperPivot, true, LmpCoachBands.right120, LmpCoachBands.right60),
+                                     loft],
+                          ballRadius: LmpTableLayout.ballRadius)
+        c.isHidden = true
+        addChild(c)
+        coach = c
+    }
+
+    /// Shown while Improve is on in a real game (not on the menu, not for the lab robots).
+    private func updateCoachVisibility() {
+        guard let coach else { return }
+        var show = settings.improveOn && !isAttractMode
+        #if DEBUG
+        if playLab != nil || shotLab != nil { show = false }
+        #endif
+        coach.isHidden = !show
+    }
+
+    /// 60 Hz or 120 Hz bands: switches only after 30 frames in a row on the other side of 1/90 s, so one
+    /// hitch (or the clamped first frame after a pause) doesn't redraw every band and wipe a flash.
+    private func coachRateIsSixty(_ dt: CGFloat) -> Bool {
+        if (dt > 1.0 / 90) == coachSixty { coachRateStreak = 0; return coachSixty }
+        coachRateStreak += 1
+        if coachRateStreak >= 30 { coachSixty.toggle(); coachRateStreak = 0 }
+        return coachSixty
+    }
+
+    /// The lit shots by lamp name. The fireplace lamp lights the book bank while it's up and the fireplace once it's down
+    /// (LmpCoachBands draws both over the same spot).
+    private func litShots() -> Set<String> {
+        func isLit(_ name: String) -> Bool {
+            switch lamps.state(of: name) {
+            case .on?, .blink?, .fastBlink?: return true
+            default: return false
+            }
+        }
+        var lit = Set(["leftLoop", "rightLoop", "ramp", "kettle", "mail", "windowSeat"].filter(isLit))
+        if isLit("fireplace") { lit.insert(bookTargets.allSatisfy({ $0.isDown }) ? "fireplace" : "bookTarget") }
+        return lit
+    }
+
+    /// A flipper went up: the coach flashes the band the ball was in (0 left, 1 right on the floor; 2 the loft).
+    private func coachFlip(_ index: Int) {
+        guard let coach, !coach.isHidden else { return }
+        let onLoft = index == 2
+        coach.flipped(flipper: index, balls: balls.filter { $0.isUpper == onLoft && $0.heldIn == nil }.map { $0.position })
     }
 
     /// Round 8: a nudge, from a flick of a flipper finger or the pad. Every free floor ball gets the kick; the rule in
@@ -1411,6 +1484,7 @@ final class LmpTableScene: SKScene {
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
+        updateCoachVisibility()
         #if DEBUG
         if shotLab != nil {                        // Shot Lab: the robot's frame instead of a game frame
             sound.stopLoops()                      // T5 M9 v42: no ambience under the Shot Lab
@@ -1427,6 +1501,7 @@ final class LmpTableScene: SKScene {
         lastStep = dt
         updateAmbience(Float(step))
         updateGamepad()
+        if let coach, !coach.isHidden { coach.update(lit: litShots(), sixty: coachRateIsSixty(dt)) }
         #if DEBUG
         updatePlayLab(now)
         #endif

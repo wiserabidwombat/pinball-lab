@@ -29,6 +29,10 @@ final class FlipCoach: SKNode {
         let tipRadius: CGFloat
         let bands120: [Band]
         let bands60: [Band]
+        /// Drawn this much higher up the screen than the physics (the Lamplight's raised loft: LmpFlipper.drawnLift).
+        var drawnLift: CGFloat = 0
+        /// Added to the marks' zPosition (inside the coach's 5), for a flipper drawn over raised art (the loft: 20).
+        var zOffset: CGFloat = 0
     }
 
     private let flippers: [Flipper]
@@ -62,10 +66,23 @@ final class FlipCoach: SKNode {
             for band in sixty ? flipper.bands60 : flipper.bands120 {
                 let isLit = lit.contains(band.shot)
                 let node = segment(band, on: flipper)
-                node.alpha = isLit ? 1 : (lit.isEmpty ? 0.45 : 0.18)
+                // A dark, wider stroke under each mark so the colour reads on any floor art (light wood, sand, sky).
+                let backing = SKShapeNode(path: node.path ?? CGMutablePath())
+                backing.strokeColor = .black
+                backing.lineWidth = node.lineWidth + 3.5
+                backing.lineCap = .round
+                backing.zPosition = flipper.zOffset - 0.05
+                backing.alpha = isLit ? 0.7 : (lit.isEmpty ? 0.45 : 0.3)
+                addChild(backing)
+                node.zPosition = flipper.zOffset
+                node.alpha = isLit ? 1 : (lit.isEmpty ? 0.6 : 0.35)
                 addChild(node)
                 nodes.append((band, node))
-                if isLit { addChild(label(band, on: flipper)) }
+                if isLit {
+                    let text = label(band, on: flipper)
+                    addChild(labelShadow(text))
+                    addChild(text)
+                }
             }
             bandNodes.append(nodes)
         }
@@ -86,6 +103,7 @@ final class FlipCoach: SKNode {
             flash.lineCap = .round
             flash.glowWidth = 4
             flash.alpha = 0
+            flash.zPosition = entry.node.zPosition + 0.1
             addChild(flash)
             flash.run(.sequence([.fadeAlpha(to: 0.9, duration: 0.04), .wait(forDuration: 0.2),
                                  .fadeOut(withDuration: 0.25), .removeFromParent()]))
@@ -122,7 +140,7 @@ final class FlipCoach: SKNode {
     private func facePoint(_ f: Flipper, along a: CGFloat, lift: CGFloat) -> CGPoint {
         let (dir, n) = axes(f)
         let up = half(f, along: a) + lift
-        return CGPoint(x: f.pivot.x + dir.dx * a + n.dx * up, y: f.pivot.y + dir.dy * a + n.dy * up)
+        return CGPoint(x: f.pivot.x + dir.dx * a + n.dx * up, y: f.pivot.y + f.drawnLift + dir.dy * a + n.dy * up)
     }
 
     private func segment(_ band: Band, on f: Flipper) -> SKShapeNode {
@@ -138,15 +156,30 @@ final class FlipCoach: SKNode {
         return node
     }
 
+    /// A dark copy of a label, a point down-right, behind it (the same reason as the marks' backing stroke).
+    private func labelShadow(_ text: SKLabelNode) -> SKLabelNode {
+        let shadow = SKLabelNode(text: text.text)
+        shadow.fontName = text.fontName
+        shadow.fontSize = text.fontSize
+        shadow.fontColor = SKColor(white: 0, alpha: 0.85)
+        shadow.verticalAlignmentMode = .center
+        shadow.horizontalAlignmentMode = .center
+        shadow.position = CGPoint(x: text.position.x + 0.8, y: text.position.y - 0.8)
+        shadow.zRotation = text.zRotation
+        shadow.zPosition = text.zPosition - 0.05
+        return shadow
+    }
+
     private func label(_ band: Band, on f: Flipper) -> SKLabelNode {
         let mid = (along(f, distance: band.from) + along(f, distance: band.to)) / 2
         let text = SKLabelNode(text: band.label)
         text.fontName = "Menlo-Bold"
-        text.fontSize = 8
+        text.fontSize = 9
         text.fontColor = band.color
         text.verticalAlignmentMode = .center
         text.horizontalAlignmentMode = .center
         text.position = facePoint(f, along: mid, lift: 11)
+        text.zPosition = f.zOffset
         let (dir, _) = axes(f)
         text.zRotation = f.pointsLeft ? atan2(-dir.dy, -dir.dx) : atan2(dir.dy, dir.dx)   // along the arm, upright
         return text

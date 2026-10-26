@@ -21,6 +21,8 @@ final class DrainReplay: SKNode {
     /// ball that loiters under the flippers before it drains still shows how it got there and gets its label.
     private var exitCrossedAt: [ObjectIdentifier: TimeInterval] = [:]
     private let maxKeep: TimeInterval = 4
+    /// This game's drains by way out (the pause card's tally); the table clears it on a new game.
+    private var tally: [String: Int] = [:]
 
     /// Where a lost ball left the playfield: the line it's read on (going down) and the outlanes' inner edges.
     struct Exits {
@@ -76,6 +78,22 @@ final class DrainReplay: SKNode {
         trails = [:]
         exitCrossedAt = [:]
         removeAllChildren()
+    }
+
+    /// Start a new game's tally.
+    func resetTally() {
+        tally = [:]
+    }
+
+    /// The pause card's tally: one column per way out, left to right (a table without a left outlane leaves it
+    /// out). Nil without exits.
+    var tallyColumns: [(label: String, count: Int)]? {
+        guard let exits else { return nil }
+        var columns: [(label: String, count: Int)] = []
+        if exits.leftOutlaneX > -500 { columns.append(("LEFT", tally["LEFT OUTLANE", default: 0])) }
+        columns.append(("CENTRE", tally["CENTRE", default: 0]))
+        columns.append(("RIGHT", tally["RIGHT OUTLANE", default: 0]))
+        return columns
     }
 
     /// A ball drained: draw its last stretch, then fade it out.
@@ -134,6 +152,7 @@ final class DrainReplay: SKNode {
             let read = lastCrossing(trail, lineY: exits.lineY)
             let name = read.map { $0.x < exits.leftOutlaneX ? "LEFT OUTLANE"
                 : $0.x > exits.rightOutlaneX ? "RIGHT OUTLANE" : "CENTRE" } ?? "CENTRE"
+            tally[name, default: 0] += 1
             let anchor = ringAt ?? read ?? CGPoint(x: (exits.leftOutlaneX + exits.rightOutlaneX) / 2, y: lossLineY)
             let x = min(max(anchor.x, exits.leftOutlaneX + 46), exits.rightOutlaneX - 46)   // keep it on the table
             let at = CGPoint(x: x, y: anchor.y + 26)

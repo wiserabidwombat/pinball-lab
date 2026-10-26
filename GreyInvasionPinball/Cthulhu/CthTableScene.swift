@@ -1415,8 +1415,12 @@ final class CthTableScene: SKScene {
 
     private var isBallOnPlunger: Bool { plungerBall != nil }
 
+    /// Improve mode: this game's drains by way out, for the pause card (nil while Improve is off).
+    var drainTally: [(label: String, count: Int)]? { settings.improveOn ? drainReplay?.tallyColumns : nil }
+
     func newGame() {
         fpsLow = 0
+        drainReplay?.resetTally()
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                              // a new game (or Menu) stops the Shot Lab

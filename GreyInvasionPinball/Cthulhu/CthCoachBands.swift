@@ -24,4 +24,9 @@ enum CthCoachBands {
     static let left60 = [band(.library, 40, 41, library), band(.rightRamp, 51, 55, ramp), band(.sigil, 68, 72, sigil)]
     static let right60 = [band(.library, 40, 41, library), band(.orbit, 59, 72, orbit)]
     static let upper60 = [band(.lagoon, 22, 28, lagoon)]
+
+    /// The colour key (CoachKey): every shot with a mark, and the flippers it's on.
+    static var key: [CoachKeyEntry] {
+        CoachKey.entries([("left", left120 + left60), ("right", right120 + right60), ("upper", upper120 + upper60)])
+    }
 }

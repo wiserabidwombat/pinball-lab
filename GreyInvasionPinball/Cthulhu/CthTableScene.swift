@@ -253,7 +253,12 @@ final class CthTableScene: SKScene {
                                   tipRadius: CthTableLayout.upperFlipperTipRadius)
         upperFlipper.attach(to: self)
         buildCoach()
-        let replay = DrainReplay(lossLineY: 190)       // just above the resting flipper tips (the heat maps' line)
+        // The ring just above the resting flipper tips (the heat maps' line); the exit read 25 pt above the outlane
+        // walls' bottom ends, outside the lane guides = an outlane.
+        let replay = DrainReplay(lossLineY: 190,
+                                 exits: DrainReplay.Exits(lineY: CthTableLayout.outlaneWallBottom + 25,
+                                                          leftOutlaneX: CthTableLayout.laneGuideX,
+                                                          rightOutlaneX: CthTableLayout.mirrored(CGPoint(x: CthTableLayout.laneGuideX, y: 0)).x))
         replay.isHidden = true
         addChild(replay)
         drainReplay = replay

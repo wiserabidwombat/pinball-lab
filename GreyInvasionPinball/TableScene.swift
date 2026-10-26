@@ -135,6 +135,9 @@ final class TableScene: SKScene {
     private var upperFlipper: Flipper!            // right side, on the right button
     /// Improve mode (2026-10-26): the flip-spot coach marks on the resting lower flippers (Settings.improveOn).
     private var coach: FlipCoach?
+    /// Improve mode: the drain replay (a lost ball's last stretch, with its way out), and the camera pull-back for it.
+    private var drainReplay: DrainReplay?
+    private var replayCameraUntil: TimeInterval = 0
     private var coachSixty = false
     private var coachRateStreak = 0
     private var plunger: SKShapeNode!
@@ -225,6 +228,7 @@ final class TableScene: SKScene {
         if shotLab != nil { return .topDown }
         #endif
         if multiballActive && settings.multiballFullTable { return .topDown }
+        if gameTime < replayCameraUntil { return .topDown }      // Improve: a drain replay is showing
         return settings.cameraMode
     }
 
@@ -263,6 +267,15 @@ final class TableScene: SKScene {
                                tipRadius: TableLayout.upperFlipperTipRadius)
         upperFlipper.attach(to: self)
         buildCoach()
+        // The ring just above the resting flipper tips (the heat maps' line); the exit read 25 pt above the outlane
+        // walls' bottom ends, outside the lane guides = an outlane.
+        let replay = DrainReplay(lossLineY: 190,
+                                 exits: DrainReplay.Exits(lineY: TableLayout.outlaneWallBottom + 25,
+                                                          leftOutlaneX: TableLayout.laneGuideX,
+                                                          rightOutlaneX: TableLayout.mirrored(CGPoint(x: TableLayout.laneGuideX, y: 0)).x))
+        replay.isHidden = true
+        addChild(replay)
+        drainReplay = replay
         addWall(points: TableLayout.upperFlipperGuide)
 
         addPlunger()
@@ -1448,6 +1461,7 @@ final class TableScene: SKScene {
         if playLab != nil || shotLab != nil { show = false }
         #endif
         coach.isHidden = !show
+        drainReplay?.isHidden = !show
     }
 
     /// 60 Hz or 120 Hz bands: switches only after 30 frames in a row on the other side of 1/90 s, so one
@@ -1589,6 +1603,9 @@ final class TableScene: SKScene {
         lastStep = dt
         updateGamepad()
         if let coach, !coach.isHidden { coach.update(lit: litShots(), sixty: coachRateIsSixty(dt)) }
+        if let drainReplay, !drainReplay.isHidden {
+            drainReplay.record(balls.map { (id: ObjectIdentifier($0), position: $0.position) }, now: now)
+        }
         #if DEBUG
         updatePlayLab(now)
         #endif
@@ -1626,6 +1643,9 @@ final class TableScene: SKScene {
         let drained = balls.filter { $0.position.y < -TableLayout.ballRadius * 3 }
         if !drained.isEmpty {
             let rightOutlane = drained.contains { $0.inRightOutlane }
+            if let drainReplay, !drainReplay.isHidden {
+                drained.forEach { drainReplay.drained(ObjectIdentifier($0), at: $0.position) }
+            }
             drained.forEach { removeBall($0) }
             if !nudge.tilted, multiballActive, now < multiballSaveUntil {   // round 8b′: a tilt ends the saves
                 // Mothership ball save: each drained ball comes back out of the Hangar.
@@ -1634,6 +1654,9 @@ final class TableScene: SKScene {
                 showBanner("BALL SAVED"); sfx(.ballSave)
             }
             if balls.isEmpty, pendingReleases == 0 {
+                // Improve: the last ball is gone, so pull back to the full table for its replay (never while
+                // other balls are still in play or a ball save is firing one back).
+                if let drainReplay, !drainReplay.isHidden { replayCameraUntil = now + 3.0 }
                 setSkillLane(nil)
                 lastShotAt = nil
                 if !nudge.tilted, !shieldsUpNow, outlaneSaveLit, rightOutlane {

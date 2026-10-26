@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var showSettings = false      // M10: the settings card (from the menu or pause)
     @State private var showCredits = false       // M10 round 2: fonts, sounds and art credits
     @State private var showHowTo = false         // M10 v11: How to Play (menu and pause)
+    @State private var showCoachKey = false      // Improve mode: the colour key (first time with Improve on, and the pause card)
     @Environment(\.scenePhase) private var scenePhase
 
     private static let alienGreen = Color(red: 0.35, green: 0.95, blue: 0.55)
@@ -66,6 +67,13 @@ struct ContentView: View {
             if showHowTo {
                 HowToPlayView { showHowTo = false }
             }
+
+            if showCoachKey {
+                CoachKeyView(table: "Grey Invasion", entries: GiCoachBands.key) {
+                    showCoachKey = false
+                    CoachKey.markSeen("greyInvasion")
+                }
+            }
         }
         .background(Color.black)
         .statusBarHidden()
@@ -105,6 +113,7 @@ struct ContentView: View {
 
     private func startGame() {
         scene.newGame()
+        if settings.improveOn, !CoachKey.seen("greyInvasion") { showCoachKey = true }   // Improve was already on: show the key once
         screen = .playing
         setPaused(false)
     }
@@ -119,6 +128,7 @@ struct ContentView: View {
     // Game controller (Pinball Lab): A = Play on the menu, Resume when paused, Play Again after a game;
     // Menu = pause / resume while playing. Ignored while a card is open over the table.
     private func gamepadA() {
+        if showCoachKey { showCoachKey = false; CoachKey.markSeen("greyInvasion"); return }
         guard !(showHowTo || showSettings || showCredits) else { return }
         switch screen {
         case .menu:
@@ -340,7 +350,13 @@ struct ContentView: View {
             overlayButton("Resume", prominent: true) { setPaused(false) }
                 .padding(.top, 8)
             cameraButton
-            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") { settings.improveOn.toggle() }
+            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") {
+                settings.improveOn.toggle()
+                if settings.improveOn, !CoachKey.seen("greyInvasion") { showCoachKey = true }   // the first time it's on here
+            }
+            if settings.improveOn {
+                overlayButton("Colour Key") { showCoachKey = true }
+            }
             volumeRow
             overlayButton("How to Play") { showHowTo = true }
             overlayButton("Settings") { showSettings = true }

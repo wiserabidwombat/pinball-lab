@@ -39,4 +39,9 @@ enum LmpCoachBands {
     static let right60 = shelf(28.7, 42.2) + [band("kettle", "KETTLE", 49.2, 53.0, kettle),
                                               band("leftLoop", "LOOP", 61.2, 65.8, loop)]
     static let loft60 = [band("mail", "MAIL", 31.0, 31.0, mail), band("windowSeat", "WINDOW", 36.8, 47.5, window)]
+
+    /// The colour key (CoachKey): every shot with a mark, and the flippers it's on.
+    static var key: [CoachKeyEntry] {
+        CoachKey.entries([("left", left120 + left60), ("right", right120 + right60), ("loft", loft120 + loft60)])
+    }
 }

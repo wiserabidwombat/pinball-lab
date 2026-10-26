@@ -30,4 +30,9 @@ enum MonCoachBands {
     static let right60 = [band("arroyo", "ARROYO", 40.5, 40.6, arroyo), band("lane", "LANES", 43.9, 43.9, lane),
                           band("orbit", "ORBIT", 58.8, 63.3, orbit)]
     static let upper60 = [band("lane", "LANES", 26.9, 33.3, lane), band("arroyo", "ARROYO", 38.8, 38.8, arroyo)]
+
+    /// The colour key (CoachKey): every shot with a mark, and the flippers it's on.
+    static var key: [CoachKeyEntry] {
+        CoachKey.entries([("left", left120 + left60), ("right", right120 + right60), ("upper", upper120 + upper60)])
+    }
 }

@@ -14,6 +14,7 @@ struct LmpTableView: View {
     @State private var isPaused = false
     @State private var showCollection = false      // M6 round 2: the collection book
     @State private var showHowTo = false           // T5 M9 v44: How to Play (menu and pause), a picture per goal
+    @State private var showCoachKey = false      // Improve mode: the colour key (first time with Improve on, and the pause card)
     @Environment(\.scenePhase) private var scenePhase
 
     /// Lamp amber, the table's accent (the warm light in the shop window).
@@ -53,6 +54,13 @@ struct LmpTableView: View {
 
             if showHowTo {
                 LmpHowToPlayView { showHowTo = false }
+            }
+
+            if showCoachKey {
+                CoachKeyView(table: "The Lamplight", entries: LmpCoachBands.key) {
+                    showCoachKey = false
+                    CoachKey.markSeen("lamplight")
+                }
             }
         }
         .fullScreenCover(isPresented: $showCollection) {
@@ -102,6 +110,7 @@ struct LmpTableView: View {
 
     private func startGame() {
         scene.newGame()
+        if settings.improveOn, !CoachKey.seen("lamplight") { showCoachKey = true }   // Improve was already on: show the key once
         screen = .playing
         setPaused(false)
     }
@@ -114,6 +123,7 @@ struct LmpTableView: View {
     }
 
     private func gamepadA() {
+        if showCoachKey { showCoachKey = false; CoachKey.markSeen("lamplight"); return }
         guard !showCollection, !showHowTo else { return }
         switch screen {
         case .menu:
@@ -362,7 +372,13 @@ struct LmpTableView: View {
             overlayButton("Resume", prominent: true) { setPaused(false) }
                 .padding(.top, 8)
             cameraButton
-            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") { settings.improveOn.toggle() }
+            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") {
+                settings.improveOn.toggle()
+                if settings.improveOn, !CoachKey.seen("lamplight") { showCoachKey = true }   // the first time it's on here
+            }
+            if settings.improveOn {
+                overlayButton("Colour Key") { showCoachKey = true }
+            }
             volumeRow
             overlayButton("How to Play") { showHowTo = true }
             overlayButton("Restart", action: startGame)

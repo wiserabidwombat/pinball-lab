@@ -31,4 +31,9 @@ enum GiCoachBands {
                          band("bank", "BANK", 67.6, 72.2, bank)]
     static let right60 = [band("abduction", "LOCK", 34.6, 34.7, lock), band("hangar", "HANGAR", 40.5, 40.6, hangar),
                           band("leftRamp", "L RAMP", 43.6, 55.0, leftRamp), band("orbit", "ORBIT", 58.7, 72.4, orbit)]
+
+    /// The colour key (CoachKey): every shot with a mark, and the flippers it's on.
+    static var key: [CoachKeyEntry] {
+        CoachKey.entries([("left", left120 + left60), ("right", right120 + right60)])
+    }
 }

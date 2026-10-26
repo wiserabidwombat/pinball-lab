@@ -14,6 +14,7 @@ struct MonTableView: View {
     @State private var screen: Screen = .menu
     @State private var isPaused = false
     @State private var showHowTo = false         // polish round 1: How to Play (menu and pause)
+    @State private var showCoachKey = false      // Improve mode: the colour key (first time with Improve on, and the pause card)
     @Environment(\.scenePhase) private var scenePhase
 
     /// Storm-light gold, the table's accent (the light breaking through in the painting).
@@ -54,6 +55,13 @@ struct MonTableView: View {
             if showHowTo {
                 MonHowToPlayView { showHowTo = false }
             }
+
+            if showCoachKey {
+                CoachKeyView(table: "Monsoon", entries: MonCoachBands.key) {
+                    showCoachKey = false
+                    CoachKey.markSeen("monsoon")
+                }
+            }
         }
         .background(Color.black)
         .statusBarHidden()
@@ -89,6 +97,7 @@ struct MonTableView: View {
 
     private func startGame() {
         scene.newGame()
+        if settings.improveOn, !CoachKey.seen("monsoon") { showCoachKey = true }   // Improve was already on: show the key once
         screen = .playing
         setPaused(false)
     }
@@ -101,6 +110,7 @@ struct MonTableView: View {
     }
 
     private func gamepadA() {
+        if showCoachKey { showCoachKey = false; CoachKey.markSeen("monsoon"); return }
         guard !showHowTo else { return }
         switch screen {
         case .menu:
@@ -308,7 +318,13 @@ struct MonTableView: View {
                 .padding(.top, 8)
             overlayButton("How to Play") { showHowTo = true }
             cameraButton
-            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") { settings.improveOn.toggle() }
+            overlayButton("Improve: \(settings.improveOn ? "On" : "Off")") {
+                settings.improveOn.toggle()
+                if settings.improveOn, !CoachKey.seen("monsoon") { showCoachKey = true }   // the first time it's on here
+            }
+            if settings.improveOn {
+                overlayButton("Colour Key") { showCoachKey = true }
+            }
             volumeRow
             overlayButton("Restart", action: startGame)
             overlayButton("Menu", action: goToMenu)

@@ -308,6 +308,27 @@ struct LmpTableView: View {
                 .font(.orbitron(17))
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.75))
+            if let tally = scene.drainTally {              // Improve mode: where this game's balls went
+                VStack(spacing: 4) {
+                    Text("DRAINS THIS GAME")
+                        .font(.orbitron(10))
+                        .tracking(1.5)
+                        .foregroundStyle(.white.opacity(0.55))
+                    HStack(spacing: 22) {
+                        ForEach(Array(tally.enumerated()), id: \.offset) { _, column in
+                            VStack(spacing: 1) {
+                                Text("\(column.count)")
+                                    .font(.orbitron(20, .bold))
+                                    .monospacedDigit()
+                                Text(column.label)
+                                    .font(.orbitron(10))
+                                    .foregroundStyle(.white.opacity(0.6))
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
             // M6 round 3: where the cat is and what she does there.
             VStack(spacing: 2) {
                 Text("The cat is \(game.catPerch.spot)")

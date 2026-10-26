@@ -1256,7 +1256,11 @@ final class TableScene: SKScene {
 
     private var isBallOnPlunger: Bool { plungerBall != nil }
 
+    /// Improve mode: this game's drains by way out, for the pause card (nil while Improve is off).
+    var drainTally: [(label: String, count: Int)]? { settings.improveOn ? drainReplay?.tallyColumns : nil }
+
     func newGame() {
+        drainReplay?.resetTally()
         fpsLow = 0                                 // the frame-rate counter's "low" is per game
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }

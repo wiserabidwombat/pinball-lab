@@ -66,6 +66,10 @@ final class MonTableScene: SKScene {
     private var isBuilt = false
     // The upper table (milestone 3)
     private var upperFlipper: MonFlipper!
+    /// Improve mode (2026-10-26): the flip-spot coach marks on the resting flippers (Settings.improveOn).
+    private var coach: FlipCoach?
+    private var coachSixty = false
+    private var coachRateStreak = 0
     private var ramps: [MonRamp] = []
     private var scoops: [MonScoop] = []
     private var arroyoScoop: MonScoop?
@@ -292,6 +296,7 @@ final class MonTableScene: SKScene {
                                   pivotRadius: MonTableLayout.upperFlipperPivotRadius,
                                   tipRadius: MonTableLayout.upperFlipperTipRadius)
         upperFlipper.attach(to: self)
+        buildCoach()
         addWall(points: MonTableLayout.upperFlipperGuide)
 
         addPlunger()
@@ -1898,9 +1903,72 @@ final class MonTableScene: SKScene {
         if nudge.tilted { left = false; right = false }      // round 8: tilted — dead flippers until the next ball
         if left && !leftFlipper.isPressed { rotateLanes(by: -1); sfx(.flipper) }
         if right && !rightFlipper.isPressed { rotateLanes(by: 1); sfx(.flipper) }
+        if left && !leftFlipper.isPressed { coachFlip(0) }
+        if right && !rightFlipper.isPressed { coachFlip(1); coachFlip(2) }
         leftFlipper.isPressed = left
         rightFlipper.isPressed = right
         upperFlipper?.isPressed = right
+    }
+
+    // MARK: Improve mode (2026-10-26)
+
+    /// The flip-spot coach: the three flippers at rest with Monsoon's Shot Lab bands (MonCoachBands).
+    private func buildCoach() {
+        let rest = MonTableLayout.flipperRestAngle
+        let lower = { (pivot: CGPoint, pointsLeft: Bool, b120: [FlipCoach.Band], b60: [FlipCoach.Band]) in
+            FlipCoach.Flipper(pivot: pivot, pointsLeft: pointsLeft, restAngle: rest,
+                              length: MonTableLayout.flipperLength, pivotRadius: MonTableLayout.flipperPivotRadius,
+                              tipRadius: MonTableLayout.flipperTipRadius, bands120: b120, bands60: b60)
+        }
+        let upper = FlipCoach.Flipper(pivot: MonTableLayout.upperFlipperPivot, pointsLeft: true, restAngle: rest,
+                                      length: MonTableLayout.upperFlipperLength,
+                                      pivotRadius: MonTableLayout.upperFlipperPivotRadius,
+                                      tipRadius: MonTableLayout.upperFlipperTipRadius,
+                                      bands120: MonCoachBands.upper120, bands60: MonCoachBands.upper60)
+        let c = FlipCoach(flippers: [lower(MonTableLayout.leftFlipperPivot, false, MonCoachBands.left120, MonCoachBands.left60),
+                                     lower(MonTableLayout.rightFlipperPivot, true, MonCoachBands.right120, MonCoachBands.right60),
+                                     upper],
+                          ballRadius: MonTableLayout.ballRadius)
+        c.isHidden = true
+        addChild(c)
+        coach = c
+    }
+
+    /// Shown while Improve is on in a real game (not on the menu, not for the lab robots).
+    private func updateCoachVisibility() {
+        guard let coach else { return }
+        var show = settings.improveOn && !isAttractMode
+        #if DEBUG
+        if playLab != nil || shotLab != nil { show = false }
+        #endif
+        coach.isHidden = !show
+    }
+
+    /// 60 Hz or 120 Hz bands: switches only after 30 frames in a row on the other side of 1/90 s, so one
+    /// hitch (or the clamped first frame after a pause) doesn't redraw every band and wipe a flash.
+    private func coachRateIsSixty(_ dt: CGFloat) -> Bool {
+        if (dt > 1.0 / 90) == coachSixty { coachRateStreak = 0; return coachSixty }
+        coachRateStreak += 1
+        if coachRateStreak >= 30 { coachSixty.toggle(); coachRateStreak = 0 }
+        return coachSixty
+    }
+
+    /// The lit arrows (by lamp name), plus "lane" while a raindrop lane is still dark (the upper flipper's shot).
+    private func litShots() -> Set<String> {
+        var lit = Set(["orbit", "mesaRamp", "saguaros", "captive", "arroyo"].filter { name in
+            switch lamps.state(of: "arrow." + name) {
+            case .on?, .blink?, .fastBlink?: return true
+            default: return false
+            }
+        })
+        if lanesResetAt == nil, rollovers.contains(where: { !$0.isLit }) { lit.insert("lane") }
+        return lit
+    }
+
+    /// A flipper went up: the coach flashes the band the ball was in (0 left, 1 right, 2 upper).
+    private func coachFlip(_ index: Int) {
+        guard let coach, !coach.isHidden else { return }
+        coach.flipped(flipper: index, balls: balls.filter { $0.isOnFloor && $0.heldIn == nil }.map { $0.position })
     }
 
     /// Round 8: a nudge, from a flick of a flipper finger or the pad. Every free floor ball gets the kick; the rule in
@@ -1999,6 +2067,7 @@ final class MonTableScene: SKScene {
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
+        updateCoachVisibility()
         #if DEBUG
         if shotLab != nil {                        // Shot Lab: the robot's frame instead of a game frame
             MonLoop.allCases.forEach { sound.setLoop($0, target: 0) }
@@ -2015,6 +2084,7 @@ final class MonTableScene: SKScene {
         let dt = CGFloat(step)
         lastStep = dt
         updateGamepad()
+        if let coach, !coach.isHidden { coach.update(lit: litShots(), sixty: coachRateIsSixty(dt)) }
         #if DEBUG
         updatePlayLab(now)
         #endif

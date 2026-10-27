@@ -14,6 +14,9 @@ struct LmpTableView: View {
     @State private var isPaused = false
     @State private var showCollection = false      // M6 round 2: the collection book
     @State private var showHowTo = false           // T5 M9 v44: How to Play (menu and pause), a picture per goal
+    @AppStorage("skUseSKView") private var useSKView = false      // iPad pacing: debug, force SpriteKit's own loop
+    @State private var pacingScene: SKScene?                        // iPad pacing: the bare test scene, while open
+    @State private var pacingUsesRenderer = false
     @State private var showCoachKey = false      // Improve mode: the colour key (first time with Improve on, and the pause card)
     @Environment(\.scenePhase) private var scenePhase
 
@@ -34,7 +37,7 @@ struct LmpTableView: View {
 
     var body: some View {
         ZStack {
-            SpriteView(scene: scene, preferredFramesPerSecond: 120, options: [])
+            TableSKView(scene: scene, preferredFramesPerSecond: DisplayRate.max)   // 120 or the screen's 60; SKRenderer on devices (iPad pacing)
                 .ignoresSafeArea()
 
             if screen == .playing {
@@ -62,6 +65,14 @@ struct LmpTableView: View {
                     CoachKey.markSeen("lamplight")
                 }
             }
+
+            #if DEBUG
+            if let pacingScene {
+                PacingTestView(scene: pacingScene, useRenderer: pacingUsesRenderer)
+                    .ignoresSafeArea()
+                    .onTapGesture { self.pacingScene = nil }
+            }
+            #endif
         }
         .fullScreenCover(isPresented: $showCollection) {
             LmpCollectionView { showCollection = false }
@@ -79,7 +90,7 @@ struct LmpTableView: View {
             // Launched with `-playlab lamplight`: run the Play Lab unattended (the scene quits the app when it's done).
             if PlayLab.launchTable == "lamplight" {
                 Task { @MainActor in
-                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }   // the scene is built in didMove
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }   // the scene is built in didMove
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
@@ -89,7 +100,7 @@ struct LmpTableView: View {
             // `-shotlab lamplight [-shotlab-scenario booksdown] [-shotlab-flippers left,right]`: the Shot Lab sweep.
             if PlayLab.launchTable == nil, ShotLab.launchTable == "lamplight" {
                 Task { @MainActor in
-                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
@@ -399,6 +410,11 @@ struct LmpTableView: View {
             debugButton("Play Lab · quick") { PlayLab.nextRunIsQuick = true; scene.debugStartPlayLab(); setPaused(false) }
             // Plan 2 round 12: one game of your own, watched by the lab (no robot), the report shared when it ends.
             debugButton("Record me") { PlayLab.nextRunIsRecording = true; scene.debugStartPlayLab(); setPaused(false) }
+            // iPad pacing (2026-10-26): the frame loop (SKRenderer fixes the iPad's 40 fps; SKView is SpriteKit's own),
+            // for the next table opened; and the bare pacing test through either loop (watch the Metal HUD's FPS).
+            debugButton("Loop: \(useSKView ? "SKView" : "SKRenderer") · next open") { useSKView.toggle() }
+            debugButton("Pacing test · SKView") { pacingUsesRenderer = false; pacingScene = BlankPacingScene(load: 400, title: "SKView") }
+            debugButton("Pacing test · SKRenderer") { pacingUsesRenderer = true; pacingScene = BlankPacingScene(load: 400, title: "SKRenderer") }
             #endif
         }
     }

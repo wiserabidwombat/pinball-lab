@@ -14,7 +14,7 @@ import Foundation
 ///
 /// The scene uses .resizeFill, so `size` is the view in points and the camera
 /// decides which part of the world is on screen.
-final class TableScene: SKScene {
+final class TableScene: SKScene, RendererHostedScene {
     private enum Control { case left, right, plunger }
 
     private let game: GameState
@@ -146,6 +146,8 @@ final class TableScene: SKScene {
     private var gate: SKShapeNode!
     private var gateClosed = false
     private var isBuilt = false
+    /// iPad pacing (2026-10-26): the SKRenderer host's view, the touch surface when `view` is nil (TableSKView).
+    weak var hostView: UIView?
 
     // Input
     private var activeTouches: [UITouch: Control] = [:]
@@ -1317,7 +1319,7 @@ final class TableScene: SKScene {
     // MARK: - Input
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view, !isAttractMode else { return }
+        guard let view = view ?? hostView, !isAttractMode else { return }
         for touch in touches {
             let p = touch.location(in: view)   // screen points: the camera moves the table
             if isBallOnPlunger,
@@ -1341,7 +1343,7 @@ final class TableScene: SKScene {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view else { return }
+        guard let view = view ?? hostView else { return }
         for touch in touches {
             let p = touch.location(in: view)
             switch activeTouches[touch] {

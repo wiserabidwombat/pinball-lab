@@ -20,7 +20,7 @@ import UIKit
 import CoreGraphics
 import Foundation
 
-final class MonTableScene: SKScene {
+final class MonTableScene: SKScene, RendererHostedScene {
     private enum Control { case left, right, plunger }
 
     private let game: MonGameState
@@ -64,6 +64,8 @@ final class MonTableScene: SKScene {
     private var topGateFlap: SKNode?
     private var topGateClosedAngle: CGFloat = 0
     private var isBuilt = false
+    /// iPad pacing (2026-10-26): the SKRenderer host's view, the touch surface when `view` is nil (TableSKView).
+    weak var hostView: UIView?
     // The upper table (milestone 3)
     private var upperFlipper: MonFlipper!
     /// Improve mode (2026-10-26): the flip-spot coach marks on the resting flippers (Settings.improveOn).
@@ -1859,7 +1861,7 @@ final class MonTableScene: SKScene {
     // MARK: - Input
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view, !isAttractMode else { return }
+        guard let view = view ?? hostView, !isAttractMode else { return }
         for touch in touches {
             let p = touch.location(in: view)   // screen points: the camera moves the table
             if isBallOnPlunger,
@@ -1882,7 +1884,7 @@ final class MonTableScene: SKScene {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view else { return }
+        guard let view = view ?? hostView else { return }
         for touch in touches {
             let p = touch.location(in: view)
             switch activeTouches[touch] {

@@ -5,7 +5,7 @@ import UIKit
 
 /// The table: walls, flippers, plunger, drain, the scoring elements —
 /// planet bumpers, slingshots, top lanes, asteroid drop targets and the wormhole.
-final class OrbitTableScene: SKScene {
+final class OrbitTableScene: SKScene, RendererHostedScene {
     private enum Control { case left, right, plunger }
 
     private let game: OrbitGameState
@@ -14,6 +14,8 @@ final class OrbitTableScene: SKScene {
     private var rightFlipper: OrbitFlipper!
     private var plunger: SKShapeNode!
     private var isBuilt = false
+    /// iPad pacing (2026-10-26): the SKRenderer host's view, the touch surface when `view` is nil (TableSKView).
+    weak var hostView: UIView?
 
     // Scoring elements
     private var slingshots: [OrbitSlingshot] = []
@@ -360,7 +362,7 @@ final class OrbitTableScene: SKScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
-            let p = touch.location(in: self)
+            let p = scenePoint(of: touch)
             if isBallOnPlunger,
                !activeTouches.values.contains(.plunger),
                OrbitTableLayout.plungerZone.contains(p) {
@@ -376,10 +378,22 @@ final class OrbitTableScene: SKScene {
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches where activeTouches[touch] == .plunger {
-            let y = touch.location(in: self).y
+            let y = scenePoint(of: touch).y
             plungerPull = min(max(plungerStartY - y, 0), OrbitTableLayout.plungerMaxPull)
             plunger.position.y = OrbitTableLayout.plungerRestPosition.y - plungerPull
         }
+    }
+
+    /// The touch in scene coordinates. SpriteKit's own conversion needs an SKView; under the SKRenderer host
+    /// (iPad pacing, 2026-10-26) the .aspectFit scene is centred on the camera and scaled to fit the view.
+    private func scenePoint(of touch: UITouch) -> CGPoint {
+        if view != nil { return touch.location(in: self) }
+        guard let hostView else { return .zero }
+        let p = touch.location(in: hostView)
+        let b = hostView.bounds
+        let s = min(b.width / size.width, b.height / size.height)
+        let c = camera?.position ?? CGPoint(x: size.width / 2, y: size.height / 2)
+        return CGPoint(x: c.x + (p.x - b.midX) / s, y: c.y - (p.y - b.midY) / s)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {

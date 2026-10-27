@@ -9,7 +9,7 @@ import UIKit
 import CoreGraphics
 import Foundation
 
-final class CthTableScene: SKScene {
+final class CthTableScene: SKScene, RendererHostedScene {
     private enum Control { case left, right, plunger }
 
     private let game: CthGameState
@@ -55,6 +55,8 @@ final class CthTableScene: SKScene {
     private var launchGateFlap: SKNode?
     private var launchGateClosedAngle: CGFloat = 0
     private var isBuilt = false
+    /// iPad pacing (2026-10-26): the SKRenderer host's view, the touch surface when `view` is nil (TableSKView).
+    weak var hostView: UIView?
     /// Milestone 2: the lower table is a baked Blender render (cth_lower.png); false if it's missing.
     private var hasLowerArt = false
     /// Milestone 8: the upper table is baked too (cth_upper.png); then the top walls hide under it.
@@ -102,6 +104,8 @@ final class CthTableScene: SKScene {
     private let lamps = CthLampController()
     /// General illumination (M6 v2): a black sprite on the camera that dips the whole table on a drain.
     private let dimmer = SKSpriteNode(color: .black, size: CGSize(width: 10, height: 10))
+    /// iPad polish: the blurred table art behind everything (fills the sides in iPad landscape).
+    private let backdrop = TableBackdrop(imageNamed: "cth_upper")
     /// The Ritual multiball (M7 v3): balls still to fire up out of the Library, when, and the ball save.
     private var multiballOn = false
     private var pendingReleases = 0
@@ -201,6 +205,7 @@ final class CthTableScene: SKScene {
         dimmer.alpha = 0
         dimmer.zPosition = 40                      // over the table, under the debug tag
         cameraRig.node.addChild(dimmer)
+        if let backdrop { cameraRig.node.addChild(backdrop) }
         buildTable()
         addBuildTag()
         placeBallOnPlunger()
@@ -225,6 +230,7 @@ final class CthTableScene: SKScene {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
         dimmer.size = size
+        backdrop?.fit(size)
         placeBuildTag()
     }
 
@@ -1488,7 +1494,7 @@ final class CthTableScene: SKScene {
     // MARK: - Input
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view, !isAttractMode else { return }
+        guard let view = view ?? hostView, !isAttractMode else { return }
         for touch in touches {
             let p = touch.location(in: view)   // screen points: the camera moves the table
             if isBallOnPlunger,
@@ -1511,7 +1517,7 @@ final class CthTableScene: SKScene {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view else { return }
+        guard let view = view ?? hostView else { return }
         for touch in touches {
             let p = touch.location(in: view)
             switch activeTouches[touch] {

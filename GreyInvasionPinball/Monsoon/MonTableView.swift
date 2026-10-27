@@ -34,7 +34,7 @@ struct MonTableView: View {
 
     var body: some View {
         ZStack {
-            SpriteView(scene: scene, preferredFramesPerSecond: 120, options: [])
+            TableSKView(scene: scene, preferredFramesPerSecond: DisplayRate.max)   // 120 or the screen's 60; SKRenderer on devices (iPad pacing)
                 .ignoresSafeArea()
 
             if screen == .playing {
@@ -76,7 +76,7 @@ struct MonTableView: View {
             // Launched with `-playlab monsoon`: run the Play Lab unattended (the scene quits the app when done).
             if PlayLab.launchTable == "monsoon" {
                 Task { @MainActor in
-                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }   // built in didMove
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }   // built in didMove
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)

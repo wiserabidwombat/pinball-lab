@@ -26,7 +26,7 @@ import UIKit
 import CoreGraphics
 import Foundation
 
-final class LmpTableScene: SKScene {
+final class LmpTableScene: SKScene, RendererHostedScene {
     private enum Control { case left, right, plunger }
 
     private let game: LmpGameState
@@ -170,6 +170,8 @@ final class LmpTableScene: SKScene {
     private var topGateFlap: SKNode?                 // T5 M9 v10
     private var topGateClosedAngle: CGFloat = 0
     private var isBuilt = false
+    /// iPad pacing (2026-10-26): the SKRenderer host's view, the touch surface when `view` is nil (TableSKView).
+    weak var hostView: UIView?
     private let hitHaptic = Haptic(style: .medium)
 
     // Input
@@ -1273,7 +1275,7 @@ final class LmpTableScene: SKScene {
     // MARK: - Input
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view, !isAttractMode, !isLabRunning else { return }
+        guard let view = view ?? hostView, !isAttractMode, !isLabRunning else { return }
         for touch in touches {
             let p = touch.location(in: view)   // screen points: the camera moves the table
             if isBallOnPlunger,
@@ -1296,7 +1298,7 @@ final class LmpTableScene: SKScene {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let view else { return }
+        guard let view = view ?? hostView else { return }
         for touch in touches {
             let p = touch.location(in: view)
             switch activeTouches[touch] {

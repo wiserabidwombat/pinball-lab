@@ -28,13 +28,10 @@ struct OrbitTableView: View {
 
     var body: some View {
         ZStack {
-            SpriteView(
-                scene: scene,
-                preferredFramesPerSecond: 60,   // Pinball Lab: Orbit was built and tuned at 60 fps; keep its physics as they were
-                options: [],   // draw children in order (layered sprites rely on it)
-                debugOptions: debugOptions
-            )
-            .ignoresSafeArea()
+            // Pinball Lab: Orbit was built and tuned at 60 fps; keep its physics as they were. iPad pacing (2026-10-26):
+            // our own host (SKRenderer on devices) in place of SpriteView; children draw in order.
+            TableSKView(scene: scene, preferredFramesPerSecond: 60)
+                .ignoresSafeArea()
 
             if screen == .playing {
                 playingOverlay
@@ -114,14 +111,6 @@ struct OrbitTableView: View {
     private func setPaused(_ paused: Bool) {
         isPaused = paused
         scene.isGamePaused = paused
-    }
-
-    private var debugOptions: SpriteView.DebugOptions {
-        #if DEBUG
-        return [.showsFPS]
-        #else
-        return []
-        #endif
     }
 
     // MARK: - In-game HUD

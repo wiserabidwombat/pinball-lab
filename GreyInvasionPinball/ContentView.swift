@@ -33,13 +33,9 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            SpriteView(
-                scene: scene,
-                preferredFramesPerSecond: 120,
-                options: [],   // draw children in order (layered sprites rely on it)
-                debugOptions: debugOptions
-            )
-            .ignoresSafeArea()
+            // iPad pacing (2026-10-26): our own host (SKRenderer on devices) in place of SpriteView; children draw in order.
+            TableSKView(scene: scene, preferredFramesPerSecond: DisplayRate.max)   // 120, or the screen's own 60 (iPad Air)
+                .ignoresSafeArea()
 
             if screen == .playing {
                 playingOverlay
@@ -91,7 +87,7 @@ struct ContentView: View {
             // Launched with `-playlab greyinvasion`: run the Play Lab unattended (the scene quits the app when done).
             if PlayLab.launchTable == "greyinvasion" {
                 Task { @MainActor in
-                    while scene.view == nil { try? await Task.sleep(for: .milliseconds(100)) }   // built in didMove
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }   // built in didMove
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
@@ -146,14 +142,6 @@ struct ContentView: View {
     private func setPaused(_ paused: Bool) {
         isPaused = paused
         scene.isGamePaused = paused
-    }
-
-    private var debugOptions: SpriteView.DebugOptions {
-        #if DEBUG
-        return [.showsFPS]
-        #else
-        return []
-        #endif
     }
 
     // MARK: - In-game HUD (the LED strip replaces this in milestone 7)

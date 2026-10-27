@@ -98,13 +98,18 @@ def main(argv):
     print(f"{table} · you: {m_you['games']} game(s), {m_you['minutes']:.1f} min at {pass_} ({os.path.basename(argv[0])})")
     print(f"robots: {', '.join(sources)} — games per skill: " + ", ".join(f"{s} {m_rob[s]['games']}" for s in SKILLS))
     print()
-    print(f"{'measure':16}{'you':>9}" + "".join(f"{s:>13}" for s in SKILLS))
+    print(f"{'measure':16}{'you':>9}" + "".join(f"{s:>13}" for s in SKILLS) + "   nearest")
     dist = {s: 0.0 for s in SKILLS}
     for k in keys:
         vals = [m_rob[s][k] for s in SKILLS]
         spread = statistics.pstdev(vals) or (abs(statistics.mean(vals)) * 0.25 or 1.0)
-        line = f"{k:16}{m_you[k]:>9.2f}" + "".join(f"{v:>13.2f}" for v in vals)
+        near_k = min(SKILLS, key=lambda s: abs(m_you[k] - m_rob[s][k]))
+        line = f"{k:16}{m_you[k]:>9.2f}" + "".join(f"{v:>13.2f}" for v in vals) + f"   {near_k}"
+        if k == "score/min":
+            line += "  (shown, not scored: the robots loop for points)"
         print(line)
+        if k == "score/min":
+            continue
         for s in SKILLS:
             dist[s] += ((m_you[k] - m_rob[s][k]) / spread) ** 2
     order = sorted(SKILLS, key=lambda s: dist[s])
@@ -112,6 +117,15 @@ def main(argv):
     print("distance        " + "".join(f"{dist[s] ** 0.5:>13.2f}" for s in SKILLS))
     nearest, second = order[0], order[1]
     print(f"\nYou play most like the {nearest.upper()} robot (then {second}).")
+    # The two halves of pinball, said plainly: keeping the ball, and working it.
+    keep = min(SKILLS, key=lambda s: abs(m_you["drains/min"] - m_rob[s]["drains/min"]) / (m_rob[s]["drains/min"] or 1)
+               + abs(m_you["ball life s"] - m_rob[s]["ball life s"]) / (m_rob[s]["ball life s"] or 1))
+    work = min(SKILLS, key=lambda s: abs(m_you["catches/min"] - m_rob[s]["catches/min"]) / (m_rob[s]["catches/min"] or 1)
+               + abs(m_you["shots/min"] - m_rob[s]["shots/min"]) / (m_rob[s]["shots/min"] or 1))
+    best_keep = min(SKILLS, key=lambda s: m_rob[s]["drains/min"])
+    better = " — better than every robot" if m_you["drains/min"] < m_rob[best_keep]["drains/min"] else ""
+    print(f"Keeping the ball (drains/min, ball life): like the {keep}{better}. "
+          f"Working it (catches/min, shots/min): like the {work}.")
 
     # A stand-in skill: interpolate between the two nearest robots by their distances.
     d0, d1 = dist[nearest] ** 0.5, dist[second] ** 0.5

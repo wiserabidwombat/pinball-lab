@@ -436,6 +436,23 @@ final class PlayRobot {
                 decidedCatch[i] = nil
                 continue
             }
+            // Round 9b (interim, from the table agent's 60 Hz read): a ball that has rolled onto the face near the
+            // pivot (an inlane feed) is not flipped there — a flip at the pivot barely lifts it and it falls back down
+            // the middle. Players who catch cradle it; the rest let it roll out past mid-face before flipping.
+            let alongFace = ((b.position.x - f.pivot.x) * (f.restTip.x - f.pivot.x) + (b.position.y - f.pivot.y) * (f.restTip.y - f.pivot.y))
+                / max(f.length * f.length, 1)
+            let onFace = Self.distance(b.position, toSegment: f.pivot, f.restTip) - ballRadius < 30   // near the face, not just touching
+            let towardTip = f.pointsLeft ? b.velocity.dx < 0 : b.velocity.dx > 0
+            if onFace, towardTip, alongFace < 0.45 {
+                if busy == nil, skill.catchChance > 0, f.upper || lowerFree.count == 1 || skill.trapsInMultiball {
+                    mode = .catching(flipper: i, since: now, steadySince: nil)
+                    pressed[i] = true
+                    decidedCatch[i] = nil
+                    break
+                }
+                trigger[i] = nil
+                continue
+            }
             // A catch? Only one lower ball in play, not too fast, and nothing else going on.
             if busy == nil, decidedCatch[i] == nil {
                 let calm = f.upper || lowerFree.count == 1 || skill.trapsInMultiball   // round 11: the expert traps

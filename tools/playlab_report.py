@@ -374,6 +374,67 @@ def tracks_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------- heat maps (round 13)
+
+SKILL_COLOR = {"beginner": "#4f8dd6", "intermediate": "#3fc1c9", "advanced": "#f2c14e", "expert": "#ffffff", "you": "#ff7ac6"}
+FLIPPER_LINE_Y = 190      # just above the resting tips on the 600x1300 tables: below it the ball is on its way out
+
+
+def lost_point(path):
+    """Where a drain path last crossed the flipper line heading down (the point of no return), else its last point."""
+    pts = [(q[0], q[1]) for q in path]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if y0 >= FLIPPER_LINE_Y > y1 and y0 != y1:
+            t = (y0 - FLIPPER_LINE_Y) / (y0 - y1)
+            return (x0 + (x1 - x0) * t, FLIPPER_LINE_Y)
+    return pts[-1]
+
+
+def heat_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
+    """Two panels per pass: where balls were lost (by skill) and where aimed shots ended (by outcome)."""
+    X, Y, W, H = map_rect
+    passes = a["passes"]
+    drains = [(p, sk, dr) for p, sk, dr in a.get("drains", []) if len(dr.get("path", [])) >= 2]
+    tracks = [(p, sk, t) for p, sk, t in a.get("tracks", []) if len(t.get("points", [])) >= 1]
+    panels = [(p, kind) for p in passes for kind in ("lost", "shots")]
+    if not drains and not tracks:
+        return ""
+    panel_w, gap = W, 60
+    attrs = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'
+    style = ' style="width:100%;height:auto"' if inline else ''
+    out = [f'<svg {attrs} viewBox="0 0 {len(panels) * (panel_w + gap)} {H + 60}" font-family="Helvetica, Arial" '
+           f'font-size="22"{style}>', "<defs>"]
+    for name, color in list(SKILL_COLOR.items()) + [("made", OUTCOME_COLOR.get("made", "#4caf50")),
+                                                   ("miss", OUTCOME_COLOR.get("miss", "#9e9e9e")),
+                                                   ("drain", OUTCOME_COLOR.get("drain", "#d1403a"))]:
+        out.append(f'<radialGradient id="heat-{name}"><stop offset="0" stop-color="{color}" stop-opacity="0.55"/>'
+                   f'<stop offset="1" stop-color="{color}" stop-opacity="0"/></radialGradient>')
+    out.append("</defs>")
+    for i, (p, kind) in enumerate(panels):
+        ox = i * (panel_w + gap)
+        out.append(f'<g transform="translate({ox},0)">')
+        out.append(f'<rect x="0" y="40" width="{W}" height="{H}" fill="#101010"/>')
+        if map_file:
+            out.append(f'<image xlink:href="{html.escape(map_file)}" x="0" y="40" width="{W}" height="{H}" opacity="0.6"/>')
+        out.append(f'<rect x="{0 - X}" y="{40 + (Y + H - 1300)}" width="600" height="1300" fill="none" stroke="#555" stroke-width="2"/>')
+        fg = "#ddd" if inline else "#222"
+        if kind == "lost":
+            items = [(sk, lost_point(dr["path"]), f"{sk} at {dr['at']:.0f}s") for pp, sk, dr in drains if pp == p]
+            out.append(f'<text x="8" y="28" fill="{fg}">{p} · where balls were lost · {len(items)} · '
+                       'beginner blue, intermediate teal, advanced yellow, expert white</text>')
+            for sk, (x, y), tip in items:
+                out.append(f'<circle cx="{x - X:.0f}" cy="{40 + (Y + H - y):.0f}" r="34" fill="url(#heat-{sk if sk in SKILL_COLOR else "expert"})"><title>{tip}</title></circle>')
+        else:
+            items = [(t["outcome"], t["points"][-1], f"{sk} → {t['target']}: {t['outcome']}") for pp, sk, t in tracks if pp == p]
+            out.append(f'<text x="8" y="28" fill="{fg}">{p} · where aimed shots ended · {len(items)} · made green, miss grey, drain red</text>')
+            for oc, (x, y), tip in items:
+                key = oc if oc in ("made", "miss", "drain") else "miss"
+                out.append(f'<circle cx="{x - X:.0f}" cy="{40 + (Y + H - y):.0f}" r="30" fill="url(#heat-{key})"><title>{tip}</title></circle>')
+        out.append("</g>")
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 # ---------------------------------------------------------------- text
 
 def print_text(d, a, report_path, checks):
@@ -570,6 +631,11 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
         for fl, tg, made, miss, drain in a["track_rows"]:
             h.append(f"<tr><td>{e(fl)}</td><td>{e(tg)}</td><td>{made}</td><td>{miss}</td><td>{drain}</td></tr>")
         h.append("</table></div><div class='panel'>" + tracks_svg(a, map_file, map_rect, inline=True) + "</div>")
+    heat = heat_svg(a, map_file, map_rect, inline=True)
+    if heat:
+        h.append("<h2>Heat maps</h2><div class='panel small'>round 13 · per pass: where balls were lost (the point where each "
+                 "drain path crossed the flipper line, coloured by skill) and where aimed shots ended (coloured by outcome); "
+                 "hover a blob</div><div class='panel'>" + heat + "</div>")
 
     # Drains (round 4b)
     if a["drain_rows"]:
@@ -640,6 +706,7 @@ if __name__ == "__main__":
     ap.add_argument("--checks", nargs="*", default=[])
     ap.add_argument("--precise", nargs="*", default=[], help="shots meant to be hard: an expert rate under 15% is noted, not flagged")
     ap.add_argument("--tracks", help="write the shot tracks as this SVG file")
+    ap.add_argument("--heat", help="round 13: write the heat maps (balls lost / shot ends, per pass) as this SVG file")
     ap.add_argument("--html", nargs="?", const="", help="write the report as an HTML page (default: <stem>.html beside the JSON)")
     ap.add_argument("--map", help="a table picture to draw the tracks over")
     ap.add_argument("--tightness", action="store_true",
@@ -656,6 +723,9 @@ if __name__ == "__main__":
     if args.tracks:
         open(args.tracks, "w").write(tracks_svg(analysis, args.map, args.map_rect))
         print(f"\nTracks drawn to {args.tracks}")
+    if args.heat:
+        open(args.heat, "w").write(heat_svg(analysis, args.map, args.map_rect))
+        print(f"\nHeat maps drawn to {args.heat}")
     if args.html is not None:
         out = args.html or os.path.splitext(args.report)[0] + ".html"
         write_html(data, analysis, args.report, out, args.checks, args.map, args.map_rect)

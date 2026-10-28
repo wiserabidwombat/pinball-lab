@@ -146,10 +146,19 @@ struct PlayRobotFlipper {
     /// Round 4b: the same for the 60 Hz pass, whose windows differ (the Shot Lab's 60 Hz strip). A shot left out
     /// here has no 60 Hz window: the robot doesn't try it on that pass and the report says so. Empty = use `shots`.
     var shots60: [(name: String, delay: Double)] = []
+    /// Round 9b: the inlane Shot Lab's windows (round 15) — for a ball rolling onto this flipper from the inlane, the
+    /// shot made by a flip with the ball `lo`…`hi` pt from the pivot, per pass. Empty = no live catch here (the robot
+    /// flips a feed at mid-face without aiming).
+    var inlane: [(name: String, lo: CGFloat, hi: CGFloat)] = []
+    var inlane60: [(name: String, lo: CGFloat, hi: CGFloat)] = []
 
     /// The shots the robot can aim at on a pass.
     func shots(for pass: PlayPass) -> [(name: String, delay: Double)] {
         pass == .hz60 && !shots60.isEmpty ? shots60 : shots
+    }
+
+    func inlane(for pass: PlayPass) -> [(name: String, lo: CGFloat, hi: CGFloat)] {
+        pass == .hz60 && !inlane60.isEmpty ? inlane60 : inlane
     }
 
     /// The resting flipper's tip.
@@ -195,6 +204,11 @@ final class PlayRobot {
     private var decidedCatch: [Bool?]
     /// Round 9: per flipper, whether the ball now approaching is being left to bounce off the resting flipper.
     private var decidedBounce: [Bool?]
+    /// Round 9b: per flipper, the inlane feed in hand — the shot chosen for it and how far along the face (pt from
+    /// the pivot) the ball must be when the flip goes.
+    private var inlaneTarget: [(name: String, along: CGFloat)?]
+    /// Round 9b: live catches — inlane feeds flipped on the fly at a measured window.
+    private(set) var liveCatches = 0
     private var plungeAt: TimeInterval?
     /// Round 7a: set by the lab in a plunge sweep — plunge the next served ball at exactly this power, never flip.
     var sweepPower: CGFloat?
@@ -231,6 +245,7 @@ final class PlayRobot {
         holdUntil = Array(repeating: -1, count: flippers.count)
         decidedCatch = Array(repeating: nil, count: flippers.count)
         decidedBounce = Array(repeating: nil, count: flippers.count)
+        inlaneTarget = Array(repeating: nil, count: flippers.count)
     }
 
     /// What the robot is doing (for the drain log).
@@ -422,6 +437,7 @@ final class PlayRobot {
                 trigger[i] = nil
                 decidedCatch[i] = nil
                 decidedBounce[i] = nil
+                inlaneTarget[i] = nil
                 continue
             }
             // Round 9: the dead bounce. A ball coming across low and fast is left to hit the resting flipper and
@@ -436,22 +452,64 @@ final class PlayRobot {
                 decidedCatch[i] = nil
                 continue
             }
-            // Round 9b (interim, from the table agent's 60 Hz read): a ball that has rolled onto the face near the
-            // pivot (an inlane feed) is not flipped there — a flip at the pivot barely lifts it and it falls back down
-            // the middle. Players who catch cradle it; the rest let it roll out past mid-face before flipping.
-            let alongFace = ((b.position.x - f.pivot.x) * (f.restTip.x - f.pivot.x) + (b.position.y - f.pivot.y) * (f.restTip.y - f.pivot.y))
-                / max(f.length * f.length, 1)
-            let onFace = Self.distance(b.position, toSegment: f.pivot, f.restTip) - ballRadius < 30   // near the face, not just touching
+            // Round 9b: the live catch. An inlane feed — a slow ball near the face, rolling from the pivot end toward
+            // the tip. The inlane Shot Lab (round 15) measured it: a press with the ball in the crook (< 30 pt from
+            // the pivot) lifts it weakly and it falls back down the middle (held up, the flipper then leaves the gap
+            // open: the "library · 1105" drains); a flip with the ball 30–75 pt out makes the shot whose window it is
+            // in; past ~80 pt it is off the tip. So: hands off until the ball reaches the chosen window, then flip.
+            // 9b″: a feed is known by where it comes from — above the pivot on the inlane side, dropping toward the
+            // tip (it arrives at ~850 pt/s down the slant); `proj` is the ball's projection along the resting face,
+            // negative in the crook, growing as it rolls out (its distance from the pivot shrinks first, so it can't
+            // be the trigger). Dribbling balls already on the face don't qualify and keep the old reactive flip.
+            let along = hypot(b.position.x - f.pivot.x, b.position.y - f.pivot.y)
+            let proj = ((b.position.x - f.pivot.x) * (f.restTip.x - f.pivot.x) + (b.position.y - f.pivot.y) * (f.restTip.y - f.pivot.y))
+                / max(f.length, 1)
             let towardTip = f.pointsLeft ? b.velocity.dx < 0 : b.velocity.dx > 0
-            if onFace, towardTip, alongFace < 0.45 {
-                if busy == nil, skill.catchChance > 0, f.upper || lowerFree.count == 1 || skill.trapsInMultiball {
-                    mode = .catching(flipper: i, since: now, steadySince: nil)
+            let inlaneSide = f.pointsLeft ? b.position.x > f.pivot.x + 4 : b.position.x < f.pivot.x - 4
+            let fromInlane = inlaneSide && b.position.y > f.pivot.y + 8 && b.velocity.dy < 0
+            if inlaneTarget[i] == nil, !f.upper, fromInlane, towardTip, along < 60, hypot(b.velocity.dx, b.velocity.dy) < 1200 {
+                // First sight of a feed: choose the window (the table's wanted shot if this flipper has one for a
+                // feed, else the first measured one), and turn this player's timing error into distance along the
+                // face (the ball rolls out at ~450 pt/s there). Windows under 30 pt are the crook: never used.
+                // 9b‴: live-flip only at the table's WANTED shot when this flipper has a feed window for it; a catcher
+                // otherwise raises at the cradle point (38 pt, past the crook) and holds — the normal catch — and the
+                // rest flip at mid-face.
+                let windows = f.inlane(for: pass).filter { $0.lo >= 30 }
+                let pick = windows.first(where: { w in view.wanted.contains(w.name) })
+                let noise = CGFloat(gauss(skill.timingSigma)) * 450
+                let calm = lowerFree.count == 1 || skill.trapsInMultiball
+                if let w = pick, skill.aims {
+                    inlaneTarget[i] = (w.name, (w.lo + w.hi) / 2 + noise)
+                } else if busy == nil, skill.catchChance > 0, calm, Double.random(in: 0..<1, using: &rng) < skill.catchChance {
+                    inlaneTarget[i] = ("catch", max(32, 38 + noise))
+                } else {
+                    inlaneTarget[i] = ("none", 42 + noise)         // mid-face, clear of the crook (no aim)
+                }
+            }
+            if let t = inlaneTarget[i] {
+                if !towardTip || b.velocity.dy > 200 || proj > 95 {
+                    inlaneTarget[i] = nil                           // the feed is over (bounced off, past the tip)
+                } else if proj >= t.along, t.name == "catch", busy == nil {
+                    mode = .catching(flipper: i, since: now, steadySince: nil)   // 9b‴: raise at the cradle point and hold
                     pressed[i] = true
+                    inlaneTarget[i] = nil
+                    trigger[i] = nil
                     decidedCatch[i] = nil
                     break
+                } else if proj >= t.along {
+                    holdUntil[i] = now + 0.22
+                    pressed[i] = true
+                    liveCatches += 1
+                    if t.name != "none" && t.name != "catch" { cmd.aimedAt = t.name; cmd.aimedFrom = i }
+                    inlaneTarget[i] = nil
+                    trigger[i] = nil
+                    decidedCatch[i] = nil
+                    continue
+                } else {
+                    trigger[i] = nil                                // hands off: the ball is still in the crook
+                    decidedCatch[i] = nil
+                    continue
                 }
-                trigger[i] = nil
-                continue
             }
             // A catch? Only one lower ball in play, not too fast, and nothing else going on.
             if busy == nil, decidedCatch[i] == nil {
@@ -662,6 +720,7 @@ nonisolated struct PlayGame: Codable {
     var tilts = 0                       // round 8b: TILT banners (flippers dead for the rest of that ball)
     var bounces = 0                     // round 9: dead bounces (a crossing ball left to bounce off the resting flipper)
     var traps = 0                       // round 11: multiball traps (a cradle held while another ball was loose)
+    var liveCatches = 0                 // round 9b: inlane feeds flipped on the fly at a measured window
     var banners: [String: Int] = [:]
     var shots: [String: Int] = [:]
     var aims: [String: [Int]] = [:]     // target → [tried, made]
@@ -1228,6 +1287,7 @@ final class PlayLab {
         g.tilts = g.banners["TILT"] ?? 0
         g.bounces = robot?.bounces ?? 0
         g.traps = robot?.traps ?? 0
+        g.liveCatches = robot?.liveCatches ?? 0
         for (k, v) in robot?.passResults ?? [:] { g.aims[k] = v }      // round 10: "pass@0.54" → [tried, made]
         g.extras = host.playLabEndGame()
         games.append(g)

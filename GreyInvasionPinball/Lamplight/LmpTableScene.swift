@@ -2560,8 +2560,13 @@ extension LmpTableScene: ShotLabHost {
         let l = LmpTableLayout.leftFlipperPivot, r = LmpTableLayout.rightFlipperPivot
         let lf = LmpTableLayout.loftFlipperPivot
         // T5 M6 v6: no upper flipper any more.
-        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: cradle(l, along: 40, above: 14, pointsLeft: false)),
-                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: cradle(r, along: 40, above: 14, pointsLeft: true)),
+        // Round 15: the inlane and drop starts for the lower pair (the left inlane is fed by the deflector, the right
+        // one by the right wire; both run 54–88 / 480–514 like the other tables).
+        let ix = LmpTableLayout.laneGuideX + 17, iy = LmpTableLayout.laneGuideTop + 10
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: cradle(l, along: 40, above: 14, pointsLeft: false),
+                                    starts: ShotLab.lowerStarts(pivot: l, pointsLeft: false, inlaneX: ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: cradle(r, along: 40, above: 14, pointsLeft: true),
+                                    starts: ShotLab.lowerStarts(pivot: r, pointsLeft: true, inlaneX: LmpTableLayout.mirrorSum - ix, inlaneTopY: iy)),
                 ShotLab.FlipperSpec(name: "loft", pivot: lf,
                                     cradle: cradle(lf, along: LmpTableLayout.loftFlipperLength / 2, above: 17,
                                                    pointsLeft: true))]
@@ -2582,6 +2587,12 @@ extension LmpTableScene: ShotLabHost {
         addChild(ball)
         balls.append(ball)
         if point.y > LmpTableLayout.loftBottomY, point.x < LmpTableLayout.loftRightX { ball.setUpper(true) }
+    }
+
+    /// Round 15: a moving start (the inlane and drop starts; floor balls only).
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector) {
+        shotLabPlaceBall(at: point)
+        balls.last?.physicsBody?.velocity = velocity
     }
 
     func shotLabResetTable() {
@@ -2658,11 +2669,18 @@ extension LmpTableScene: PlayLabHost {
                                  shots: [("bookTarget", 0.322), ("fireplace", 0.307), ("ramp", 0.441), ("mail", 0.467),
                                          ("rightLoop", 0.502)],
                                  shots60: [("bookTarget", 0.333), ("fireplace", 0.325), ("ramp", 0.425), ("mail", 0.450),
-                                           ("rightLoop", 0.490)]),
+                                           ("rightLoop", 0.490)],
+                                 // Round 9b: inlane feeds (shotlab-the-lamplight-inlane-2026-10-27T21-30-34Z): the shot a flip
+                                 // makes with the ball this far (pt) from the pivot. Thin here: the Lamplight's feeds scatter
+                                 // (mail by the side route at many spots). The 60 Hz bookTarget (the crook) is left out.
+                                 inlane: [("ramp", 30, 38), ("mail", 61, 65)],
+                                 inlane60: [("mail", 32, 37), ("cat", 40, 44), ("fireplace", 61, 67)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: LmpTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
                                  shots: [("bookTarget", 0.322), ("fireplace", 0.307), ("kettle", 0.433), ("leftLoop", 0.494)],
-                                 shots60: [("bookTarget", 0.334), ("fireplace", 0.325), ("kettle", 0.416), ("leftLoop", 0.459)]),
+                                 shots60: [("bookTarget", 0.334), ("fireplace", 0.325), ("kettle", 0.416), ("leftLoop", 0.459)],
+                                 inlane: [("kettle", 30, 45), ("leftLoop", 48, 56)],
+                                 inlane60: [("mail", 32, 38), ("leftLoop", 40, 46)]),
                 PlayRobotFlipper(name: "loft", pivot: specs[2].pivot, length: LmpTableLayout.loftFlipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: true,
                                  shots: [("windowSeat", 0.345)], shots60: [("windowSeat", 0.332)])]

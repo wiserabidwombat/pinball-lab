@@ -606,6 +606,7 @@ final class TableScene: SKScene, RendererHostedScene {
             physicsWorld.speed = 1
             shotLabResetTable()
             game.status = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+            ShotLab.quitIfLaunchedForLab()          // round 15b: launched by tools/shotlab_run.sh → quit
         }
     }
     #endif
@@ -1841,8 +1842,13 @@ extension TableScene: ShotLabHost {
         let l = TableLayout.leftFlipperPivot
         let left = CGPoint(x: l.x + along * cos(up) - above * sin(up), y: l.y + along * sin(up) + above * cos(up))
         let right = CGPoint(x: TableLayout.mirrorSum - left.x, y: left.y)
-        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left),
-                ShotLab.FlipperSpec(name: "right", pivot: TableLayout.rightFlipperPivot, cradle: right)]
+        // Round 15: the inlane and drop starts for the lower pair (the inlane is 54–88, its mirror 480–514).
+        let ix = TableLayout.laneGuideX + 17, iy = TableLayout.laneGuideTop + 10
+        let r = TableLayout.rightFlipperPivot
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left,
+                                    starts: ShotLab.lowerStarts(pivot: l, pointsLeft: false, inlaneX: ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: right,
+                                    starts: ShotLab.lowerStarts(pivot: r, pointsLeft: true, inlaneX: TableLayout.mirrorSum - ix, inlaneTopY: iy))]
     }
 
     func shotLabSetFlipper(_ index: Int, pressed: Bool) {
@@ -1858,6 +1864,12 @@ extension TableScene: ShotLabHost {
         let ball = Ball(at: point)
         addChild(ball)
         balls.append(ball)
+    }
+
+    /// Round 15: a moving start (the inlane and drop starts).
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector) {
+        shotLabPlaceBall(at: point)
+        balls.last?.physicsBody?.velocity = velocity
     }
 
     func shotLabResetTable() {
@@ -1925,11 +1937,17 @@ extension TableScene: PlayLabHost {
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: TableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
                                  shots: [("hangar", 0.301), ("rightRamp", 0.447), ("abduction", 0.503), ("fighter", 0.528)],
-                                 shots60: [("hangar", 0.376), ("rightRamp", 0.432), ("abduction", 0.458), ("fighter", 0.502)]),
+                                 shots60: [("hangar", 0.376), ("rightRamp", 0.432), ("abduction", 0.458), ("fighter", 0.502)],
+                                 // Round 9b: inlane feeds (shotlab-grey-invasion-inlane-2026-10-27T20-52-34Z): the shot a flip
+                                 // makes with the ball this far (pt) from the pivot. The 60 Hz hangar (the crook) is left out.
+                                 inlane: [("rightRamp", 32, 49), ("fighter", 62, 70)],
+                                 inlane60: [("rightRamp", 31, 46), ("fighter", 55, 75)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: TableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
                                  shots: [("hangar", 0.300), ("leftRamp", 0.446), ("orbit", 0.490)],
-                                 shots60: [("hangar", 0.369), ("leftRamp", 0.416), ("orbit", 0.484)])]
+                                 shots60: [("hangar", 0.369), ("leftRamp", 0.416), ("orbit", 0.484)],
+                                 inlane: [("leftRamp", 32, 51), ("orbit", 54, 64)],
+                                 inlane60: [("leftRamp", 32, 38), ("orbit", 47, 53), ("abduction", 64, 67)])]
     }
 
     func playLabStartGame(variant: Int) -> String {

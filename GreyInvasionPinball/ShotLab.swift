@@ -19,6 +19,8 @@ protocol ShotLabHost: AnyObject {
     var shotLabTableName: String { get }
     func shotLabSetFlipper(_ index: Int, pressed: Bool)
     func shotLabPlaceBall(at point: CGPoint)
+    /// Round 15: a moving ball (the inlane and drop starts).
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector)
     /// Remove every ball and put the table back to a neutral state (targets up, no saves lit, scoops empty).
     func shotLabResetTable()
     /// The ball in play, if any.
@@ -45,6 +47,43 @@ final class ShotLab {
         let pivot: CGPoint
         /// Where to drop the ball with the flipper held up, so it settles in the cradle.
         let cradle: CGPoint
+        /// Round 15: the moving starts (nil for a flipper with no inlane: the upper and loft flippers).
+        var starts: Starts? = nil
+    }
+
+    /// Round 15: a ball released at a point with a velocity, the flipper at rest, the delay counted from the release.
+    struct Start {
+        let point: CGPoint
+        let velocity: CGVector
+    }
+
+    struct Starts {
+        /// A wire return's drop: released at the top of the inlane rolling down at 300 pt/s.
+        let inlane: Start
+        /// A sling's exit: arriving on the resting flipper from across the table at ~460 pt/s.
+        let drop: Start
+    }
+
+    /// The lower flippers' starts from a table's lower layout: `inlaneX` is the inlane's centre on that flipper's
+    /// side (laneGuideX + 17 on the 600-wide tables, mirrored for the right), `inlaneTopY` where the wire returns
+    /// drop (laneGuideTop + 10). `pointsLeft` is true for the right flipper.
+    static func lowerStarts(pivot: CGPoint, pointsLeft: Bool, inlaneX: CGFloat, inlaneTopY: CGFloat) -> Starts {
+        let s: CGFloat = pointsLeft ? -1 : 1           // the flipper's direction from its pivot
+        return Starts(inlane: Start(point: CGPoint(x: inlaneX, y: inlaneTopY), velocity: CGVector(dx: 0, dy: -300)),
+                      drop: Start(point: CGPoint(x: pivot.x + s * 60, y: pivot.y + 160),
+                                  velocity: CGVector(dx: -s * 300, dy: -350)))
+    }
+
+    /// Round 15: how a trial starts. `cradle` is the original sweep.
+    enum StartKind: String, CaseIterable {
+        case cradle, inlane, drop
+        var delayRange: ClosedRange<Double> {
+            switch self {
+            case .cradle: return ShotLab.minDelay...ShotLab.maxDelay
+            case .inlane: return 0.30...0.90          // release at the inlane top → the ball reaches the flipper ~0.4–0.6 s later
+            case .drop: return 0.10...0.50            // release 160 pt up → on the flipper after ~0.25 s
+            }
+        }
     }
 
     /// A horizontal line across the table at height `y`. The first time a flip's ball crosses it going
@@ -73,6 +112,7 @@ final class ShotLab {
         var note: String = ""           // why a trial was invalid
         var crossings: [String: Crossing] = [:]   // probe name → where the ball crossed it
         var context: Double?             // the host's shotLabContext at the flip (Table 03: Cthulhu's sway phase)
+        var start: String = "cradle"     // round 15: cradle | inlane | drop
     }
 
     struct Results: Codable {
@@ -83,6 +123,7 @@ final class ShotLab {
         let passes: [Double]            // physics speeds run (0.5 at 60 fps = 120 Hz steps, 1.0 = 60 Hz)
         let majorEvents: [String]
         let trials: [Trial]
+        var start: String = "cradle"     // round 15: every trial in a file shares one start
     }
 
     // MARK: Settings
@@ -128,6 +169,10 @@ final class ShotLab {
     nonisolated static let launchScenario: String? = {
         UserDefaults.standard.string(forKey: "shotlab-scenario").map { String($0.lowercased().filter { $0.isLetter }) }
     }()
+    /// Round 15: `-shotlab-start inlane|drop` (default: cradle).
+    nonisolated static let launchStart: String? = {
+        UserDefaults.standard.string(forKey: "shotlab-start").map { $0.lowercased().trimmingCharacters(in: .whitespaces) }
+    }()
     nonisolated static let launchFlippers: [String]? = {
         guard let s = UserDefaults.standard.string(forKey: "shotlab-flippers") else { return nil }
         let names = s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
@@ -150,24 +195,31 @@ final class ShotLab {
     private var leftFlippers = false
     private var lastBall: CGPoint?
     private let probes: [Probe]
+    let startKind: StartKind
     private(set) var trials: [Trial] = []
     private var frames = 0
     private var startedAt: CFTimeInterval?          // real time (the lab clock runs slow at times)
 
     /// `only`: flipper names to sweep (nil = all; the launch argument `-shotlab-flippers` when there is one).
-    init(host: ShotLabHost, only: [String]? = ShotLab.launchFlippers) {
+    init(host: ShotLabHost, only: [String]? = ShotLab.launchFlippers,
+         start: StartKind = ShotLab.launchStart.flatMap { StartKind(rawValue: $0) } ?? .cradle) {
         self.host = host
         flippers = host.shotLabFlippers
         probes = host.shotLabProbes
         majorEvents = host.shotLabMajorEvents
-        let steps = Int(((Self.maxDelay - Self.minDelay) / Self.delayStep).rounded())
-        let chosen = flippers.indices.filter { i in only.map { $0.contains(flippers[i].name.lowercased()) } ?? true }
+        startKind = start
+        let range = start.delayRange
+        let steps = Int(((range.upperBound - range.lowerBound) / Self.delayStep).rounded())
+        var chosen = flippers.indices.filter { i in only.map { $0.contains(flippers[i].name.lowercased()) } ?? true }
+        if chosen.isEmpty { chosen = Array(flippers.indices) }
+        // Round 15: the moving starts only exist for flippers with an inlane (the lower pair).
+        if start != .cradle { chosen = chosen.filter { flippers[$0].starts != nil } }
         for speed in Self.passes {
-            for f in chosen.isEmpty ? Array(flippers.indices) : chosen {
+            for f in chosen {
                 for i in 0...steps {
                     // A little jitter (± half a step) so frame timing samples every phase.
                     let jitter = Double.random(in: -0.5...0.5) * Self.delayStep
-                    plan.append((f, Self.minDelay + Double(i) * Self.delayStep + jitter, speed))
+                    plan.append((f, range.lowerBound + Double(i) * Self.delayStep + jitter, speed))
                 }
             }
         }
@@ -185,7 +237,8 @@ final class ShotLab {
 
     var progressText: String {
         let pass = index < plan.count ? (plan[index].speed == 1 ? " · 60 Hz PASS" : " · 120 Hz PASS") : ""
-        return "SHOT LAB \(min(index + 1, plan.count))/\(plan.count)\(pass)"
+        let kind = startKind == .cradle ? "" : " · \(startKind.rawValue.uppercased())"
+        return "SHOT LAB \(min(index + 1, plan.count))/\(plan.count)\(pass)\(kind)"
     }
 
     /// A shot event from the scene (rightRamp, hangar, fighter, bumper…).
@@ -210,9 +263,19 @@ final class ShotLab {
         switch stage {
         case .start:
             host.shotLabResetTable()
-            for f in flippers.indices { host.shotLabSetFlipper(f, pressed: f == step.flipper) }
             current = Trial(flipper: spec.name, plannedDelay: step.delay)
+            current?.start = startKind.rawValue
             leftFlippers = false
+            if startKind != .cradle, let starts = spec.starts {
+                // Round 15: a moving start — flippers at rest, the ball released now, the delay counted from here.
+                for f in flippers.indices { host.shotLabSetFlipper(f, pressed: false) }
+                let s = startKind == .inlane ? starts.inlane : starts.drop
+                host.shotLabPlaceBall(at: s.point, velocity: s.velocity)
+                stage = .dropped(at: now)
+                noteStep(step.speed)
+                break
+            }
+            for f in flippers.indices { host.shotLabSetFlipper(f, pressed: f == step.flipper) }
             stage = .raising(until: now + Self.raiseTime)     // v2: let the flipper get all the way up first
 
         case .raising(let until):
@@ -237,9 +300,7 @@ final class ShotLab {
             }
             host.shotLabSetFlipper(step.flipper, pressed: false)      // drop the flipper: the ball rolls
             stage = .dropped(at: now)
-            // Table time per physics step on this pass: a real frame × the pass speed.
-            let frame = startedAt.map { frames > 1 ? (CACurrentMediaTime() - $0) / Double(frames) : 1.0 / 60 } ?? 1.0 / 60
-            current?.physicsStepMs = (frame * step.speed * 10_000).rounded() / 10
+            noteStep(step.speed)
 
         case .dropped(let at):
             guard now - at >= step.delay else { break }
@@ -282,6 +343,12 @@ final class ShotLab {
         return index < plan.count
     }
 
+    /// Table time per physics step on this pass: a real frame × the pass speed.
+    private func noteStep(_ speed: Double) {
+        let frame = startedAt.map { frames > 1 ? (CACurrentMediaTime() - $0) / Double(frames) : 1.0 / 60 } ?? 1.0 / 60
+        current?.physicsStepMs = (frame * speed * 10_000).rounded() / 10
+    }
+
     /// Probe lines: the first upward crossing of each, interpolated between this frame and the last.
     private func recordCrossings() {
         guard let ball = host.shotLabBall else { lastBall = nil; return }
@@ -321,7 +388,7 @@ final class ShotLab {
         let stamp = ISO8601DateFormatter().string(from: Date())
         let results = Results(table: host.shotLabTableName, date: stamp, fps: (fps * 10).rounded() / 10,
                               delayStep: Self.delayStep, passes: Self.passes,
-                              majorEvents: majorEvents.sorted(), trials: trials)
+                              majorEvents: majorEvents.sorted(), trials: trials, start: startKind.rawValue)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(results) else { return "couldn't encode results" }
@@ -335,7 +402,8 @@ final class ShotLab {
         }
         // Pinball Lab: the table's name in the file name (e.g. shotlab-cthulhu-rising-…).
         let slug = host.shotLabTableName.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
-        let name = "shotlab-" + String(slug) + "-" + stamp.replacingOccurrences(of: ":", with: "-") + ".json"
+        let kind = startKind == .cradle ? "" : startKind.rawValue + "-"     // round 15: shotlab-<table>-inlane-<stamp>
+        let name = "shotlab-" + String(slug) + "-" + kind + stamp.replacingOccurrences(of: ":", with: "-") + ".json"
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appendingPathComponent(name)

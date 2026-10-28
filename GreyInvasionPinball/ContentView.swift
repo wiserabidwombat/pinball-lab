@@ -94,6 +94,17 @@ struct ContentView: View {
                     scene.debugStartPlayLab()
                 }
             }
+            // Plan 2 round 15b: `-shotlab greyinvasion [-shotlab-flippers left,right] [-shotlab-start inlane|drop]`:
+            // the Shot Lab sweep unattended, as the Lamplight has had since round 4b.
+            if PlayLab.launchTable == nil, ShotLab.launchTable == "greyinvasion" {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartShotLab()
+                }
+            }
             #endif
         }
         .onDisappear { LabGamepad.shared.release("greyInvasion") }

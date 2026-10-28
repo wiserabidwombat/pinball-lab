@@ -6,12 +6,14 @@
 #   tools/shotlab_run.sh lamplight                        # the whole sweep (~40 min)
 #   tools/shotlab_run.sh lamplight booksdown left,right   # bookshelf down (measures the fireplace), two flippers (~25 min)
 #   SKIP_BUILD=1 tools/shotlab_run.sh lamplight           # reuse the last build
+#   tools/shotlab_run.sh cthulhu "" "" inlane             # plan 2 round 15: start from the inlane (or: drop); or START=inlane
 #
 # Tables: lamplight (others as their views pick up `-shotlab`). Scenarios: lamplight: booksdown. Results go to ShotLab/.
 set -euo pipefail
 TABLE=${1:?table (lamplight)}
 SCENARIO=${2:-}
 FLIPPERS=${3:-}
+START=${4:-${START:-}}
 DEVICE=${DEVICE:-iPhone 17 Pro Max}
 BUNDLE=com.aarontilley.pinballlab
 PROJECT=GreyInvasionPinball.xcodeproj
@@ -52,6 +54,7 @@ xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
 ARGS=(-shotlab "$TABLE")
 [ -n "$SCENARIO" ] && ARGS+=(-shotlab-scenario "$SCENARIO")
 [ -n "$FLIPPERS" ] && ARGS+=(-shotlab-flippers "$FLIPPERS")
+[ -n "$START" ] && ARGS+=(-shotlab-start "$START")
 echo "▶ Launching the Shot Lab: ${ARGS[*]} (the app quits by itself when the results are saved)"
 BEFORE=$(ls -t ShotLab/shotlab-*.json 2>/dev/null | head -1 || true)
 xcrun simctl launch --console "$UDID" "$BUNDLE" "${ARGS[@]}" | grep -E "SHOT LAB" || true

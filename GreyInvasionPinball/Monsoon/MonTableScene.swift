@@ -2424,6 +2424,7 @@ extension MonTableScene {
             physicsWorld.speed = 1
             shotLabResetTable()
             game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+            ShotLab.quitIfLaunchedForLab()          // round 15b: launched by tools/shotlab_run.sh → quit
         }
     }
     #endif
@@ -2451,8 +2452,13 @@ extension MonTableScene: ShotLabHost {
         let arm = CGFloat.pi - up
         let ua: CGFloat = 32, uh: CGFloat = 17
         let upper = CGPoint(x: u.x + ua * cos(arm) + uh * sin(arm), y: u.y + ua * sin(arm) - uh * cos(arm))
-        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left),
-                ShotLab.FlipperSpec(name: "right", pivot: MonTableLayout.rightFlipperPivot, cradle: right),
+        // Round 15: the inlane and drop starts for the lower pair (the inlane is 54–88, its mirror 480–514).
+        let ix = MonTableLayout.laneGuideX + 17, iy = MonTableLayout.laneGuideTop + 10
+        let r = MonTableLayout.rightFlipperPivot
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left,
+                                    starts: ShotLab.lowerStarts(pivot: l, pointsLeft: false, inlaneX: ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: right,
+                                    starts: ShotLab.lowerStarts(pivot: r, pointsLeft: true, inlaneX: MonTableLayout.mirrorSum - ix, inlaneTopY: iy)),
                 ShotLab.FlipperSpec(name: "upper", pivot: u, cradle: upper)]
     }
 
@@ -2469,6 +2475,12 @@ extension MonTableScene: ShotLabHost {
         let ball = MonBall(at: point)
         addChild(ball)
         balls.append(ball)
+    }
+
+    /// Round 15: a moving start (the inlane and drop starts).
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector) {
+        shotLabPlaceBall(at: point)
+        balls.last?.physicsBody?.velocity = velocity
     }
 
     func shotLabResetTable() {
@@ -2550,11 +2562,17 @@ extension MonTableScene: PlayLabHost {
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
                                  shots: [("arroyo", 0.312), ("mesaRamp", 0.450), ("standup", 0.522)],
-                                 shots60: [("arroyo", 0.407), ("mesaRamp", 0.432), ("standup", 0.501)]),
+                                 shots60: [("arroyo", 0.407), ("mesaRamp", 0.432), ("standup", 0.501)],
+                                 // Round 9b: inlane feeds (shotlab-monsoon-inlane-2026-10-27T20-18-22Z): the shot a flip
+                                 // makes with the ball this far (pt) from the pivot. The 60 Hz arroyo (the crook) is left out.
+                                 inlane: [("mesaRamp", 32, 49), ("standup", 62, 71)],
+                                 inlane60: [("mesaRamp", 31, 43), ("standup", 55, 75)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: MonTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
                                  shots: [("orbit", 0.492), ("captiveTop", 0.517)],
-                                 shots60: [("arroyo", 0.373), ("orbit", 0.467)]),
+                                 shots60: [("arroyo", 0.373), ("orbit", 0.467)],
+                                 inlane: [("orbit", 54, 60)],
+                                 inlane60: [("orbit", 46, 53), ("captiveTop", 55, 59)]),
                 // Round 6a (Aaron: the robot never used the upper flipper): back in, with the post-assist Shot Lab
                 // (21-32): from its cradle the one solid window is the raindrop LANES (0.302–0.331 at 120 Hz,
                 // 0.370–0.427 at 60 Hz). Its arroyo/standup bands are 3–5 trials and went 0/38 in run 8 (6b: gone), so

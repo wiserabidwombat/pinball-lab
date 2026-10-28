@@ -2018,6 +2018,7 @@ extension CthTableScene {
             physicsWorld.speed = 1
             shotLabResetTable()
             game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+            ShotLab.quitIfLaunchedForLab()          // round 15b: launched by tools/shotlab_run.sh → quit
         }
     }
     #endif
@@ -2129,8 +2130,13 @@ extension CthTableScene: ShotLabHost {
         let arm = CGFloat.pi - up
         let ua: CGFloat = 32, uh: CGFloat = 17
         let upper = CGPoint(x: u.x + ua * cos(arm) + uh * sin(arm), y: u.y + ua * sin(arm) - uh * cos(arm))
-        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left),
-                ShotLab.FlipperSpec(name: "right", pivot: CthTableLayout.rightFlipperPivot, cradle: right),
+        // Round 15: the inlane and drop starts for the lower pair (the inlane is 54–88, its mirror 480–514).
+        let ix = CthTableLayout.laneGuideX + 17, iy = CthTableLayout.laneGuideTop + 10
+        let r = CthTableLayout.rightFlipperPivot
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left,
+                                    starts: ShotLab.lowerStarts(pivot: l, pointsLeft: false, inlaneX: ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: right,
+                                    starts: ShotLab.lowerStarts(pivot: r, pointsLeft: true, inlaneX: CthTableLayout.mirrorSum - ix, inlaneTopY: iy)),
                 ShotLab.FlipperSpec(name: "upper", pivot: u, cradle: upper)]
     }
 
@@ -2147,6 +2153,12 @@ extension CthTableScene: ShotLabHost {
         let ball = CthBall(at: point)
         addChild(ball)
         balls.append(ball)
+    }
+
+    /// Round 15: a moving start (the inlane and drop starts).
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector) {
+        shotLabPlaceBall(at: point)
+        balls.last?.physicsBody?.velocity = velocity
     }
 
     func shotLabResetTable() {
@@ -2231,13 +2243,20 @@ extension CthTableScene: PlayLabHost {
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
                                  shots: [("library", 0.298), ("lagoon", 0.347), ("cthulhu", 0.366), ("rightRamp", 0.446),
                                          ("sigil", 0.528)],
-                                 shots60: [("library", 0.370), ("cthulhu", 0.377), ("rightRamp", 0.433), ("sigil", 0.502)]),
+                                 shots60: [("library", 0.370), ("cthulhu", 0.377), ("rightRamp", 0.433), ("sigil", 0.502)],
+                                 // Round 9b: inlane feeds (shotlab-cthulhu-rising-inlane-2026-10-27T17-09-55Z): the shot a
+                                 // flip makes with the ball this far (pt) from the pivot. The 60 Hz library window (20–30)
+                                 // is the crook and is left out on purpose.
+                                 inlane: [("rightRamp", 33, 40), ("sigil", 65, 75)],
+                                 inlane60: [("rightRamp", 30, 40)]),            // 60 Hz sigil was 13/24 in the lab, 3/30 in play
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: CthTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
                                  // No sigil from the right: the Shot Lab's "window" there is a 1–2 trial sliver at the
                                  // end of the sweep (0/17 in Play Lab runs 1–2); the left flipper takes the bank.
                                  shots: [("library", 0.295), ("cthulhu", 0.412), ("orbit", 0.493)],
-                                 shots60: [("library", 0.376), ("cthulhu", 0.425), ("orbit", 0.482)]),
+                                 shots60: [("library", 0.376), ("cthulhu", 0.425), ("orbit", 0.482)],
+                                 inlane: [("orbit", 55, 65)],
+                                 inlane60: []),                                 // 60 Hz sigil was 5/9 in the lab, 2/29 in play
                 PlayRobotFlipper(name: "upper", pivot: specs[2].pivot, length: CthTableLayout.upperFlipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[2].cradle, rightButton: true, upper: false,
                                  shots: [("cthulhu", 0.299), ("lagoon", 0.346)],

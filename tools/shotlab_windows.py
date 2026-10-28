@@ -39,7 +39,8 @@ def main():
     only = sys.argv[sys.argv.index("--shot") + 1] if "--shot" in sys.argv else None
     d = json.load(open(args[0]))
     trials = d["trials"]
-    print(f"{d['table']} · {d['date']} · {len(trials)} trials · step {d['delayStep'] * 1000:.0f} ms · {d['fps']} fps")
+    start = d.get("start", "cradle")       # round 15: cradle | inlane | drop (delays count from the release for the moving starts)
+    print(f"{d['table']} · {d['date']} · {len(trials)} trials · step {d['delayStep'] * 1000:.0f} ms · {d['fps']} fps · start: {start}")
     for label, lo, hi in (("120 Hz", 0, 12), ("60 Hz", 12, 99)):
         pass_trials = [t for t in trials if lo <= t["physicsStepMs"] < hi]
         if not pass_trials:

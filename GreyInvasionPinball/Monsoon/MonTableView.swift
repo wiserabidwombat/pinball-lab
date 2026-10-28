@@ -83,6 +83,17 @@ struct MonTableView: View {
                     scene.debugStartPlayLab()
                 }
             }
+            // Plan 2 round 15b: `-shotlab monsoon [-shotlab-scenario devilraging] [-shotlab-flippers left,right] [-shotlab-start inlane|drop]`:
+            // the Shot Lab sweep unattended, as the Lamplight has had since round 4b.
+            if PlayLab.launchTable == nil, ShotLab.launchTable == "monsoon" {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartShotLab(devilRaging: ShotLab.launchScenario == "devilraging")
+                }
+            }
             #endif
         }
         .onDisappear { LabGamepad.shared.release("monsoon") }

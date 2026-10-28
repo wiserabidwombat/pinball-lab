@@ -77,13 +77,18 @@ final class ShotLab {
     /// Round 15: how a trial starts. `cradle` is the original sweep.
     enum StartKind: String, CaseIterable {
         case cradle, inlane, drop
+        /// Round 15c: the inlane release, but the flipper is raised AND HELD at the delay (a catch attempt, not a
+        /// flip). Outcomes: cradled / launched / drain / none, or a shot event.
+        case hold
         var delayRange: ClosedRange<Double> {
             switch self {
             case .cradle: return ShotLab.minDelay...ShotLab.maxDelay
-            case .inlane: return 0.30...0.90          // release at the inlane top → the ball reaches the flipper ~0.4–0.6 s later
+            case .inlane, .hold: return 0.30...0.90   // release at the inlane top → the ball reaches the flipper ~0.4–0.6 s later
             case .drop: return 0.10...0.50            // release 160 pt up → on the flipper after ~0.25 s
             }
         }
+        /// The inlane release serves both the flip (`inlane`) and the raise-and-hold (`hold`).
+        var usesInlaneRelease: Bool { self == .inlane || self == .hold }
     }
 
     /// A horizontal line across the table at height `y`. The first time a flip's ball crosses it going
@@ -194,6 +199,7 @@ final class ShotLab {
     private var current: Trial?
     private var leftFlippers = false
     private var lastBall: CGPoint?
+    private var holdSettledSince: TimeInterval?       // round 15c: the held ball has been still at the cradle since
     private let probes: [Probe]
     let startKind: StartKind
     private(set) var trials: [Trial] = []
@@ -269,8 +275,9 @@ final class ShotLab {
             if startKind != .cradle, let starts = spec.starts {
                 // Round 15: a moving start — flippers at rest, the ball released now, the delay counted from here.
                 for f in flippers.indices { host.shotLabSetFlipper(f, pressed: false) }
-                let s = startKind == .inlane ? starts.inlane : starts.drop
+                let s = startKind.usesInlaneRelease ? starts.inlane : starts.drop
                 host.shotLabPlaceBall(at: s.point, velocity: s.velocity)
+                holdSettledSince = nil
                 stage = .dropped(at: now)
                 noteStep(step.speed)
                 break
@@ -318,13 +325,30 @@ final class ShotLab {
 
         case .flipped(let at):
             recordCrossings()
-            if now - at >= Self.flipHold { host.shotLabSetFlipper(step.flipper, pressed: false) }
+            if startKind != .hold, now - at >= Self.flipHold { host.shotLabSetFlipper(step.flipper, pressed: false) }
             if let outcome = current?.outcome, !outcome.isEmpty {
                 finishTrial(outcome, now: now)
                 break
             }
             guard let ball = host.shotLabBall else {                   // e.g. locked away by a scoop
                 finishTrial("none", now: now)
+                break
+            }
+            if startKind == .hold {
+                // Round 15c: the flipper stays up. Cradled = still at the cradle point for 0.5 s; launched = the
+                // ball climbed above the flippers (the crook-press pinch); else drain / none as for a flip.
+                let still = hypot(ball.velocity.dx, ball.velocity.dy) < 40
+                    && hypot(ball.position.x - spec.cradle.x, ball.position.y - spec.cradle.y) < 26
+                if still { holdSettledSince = holdSettledSince ?? now } else { holdSettledSince = nil }
+                if let s = holdSettledSince, now - s >= 0.5 {
+                    finishTrial("cradled", now: now, seconds: now - at)
+                } else if ball.position.y > Self.leftFlippersY {
+                    finishTrial("launched", now: now, seconds: now - at)
+                } else if now - at > Self.timeout {
+                    finishTrial("none", now: now, seconds: now - at)
+                } else if ball.position.y < Self.drainY {
+                    finishTrial("drain", now: now, seconds: now - at)
+                }
                 break
             }
             // T5 M5 v2: the timeout is checked first. It used to come last in this chain, after "still above

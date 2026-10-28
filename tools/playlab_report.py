@@ -136,6 +136,9 @@ def build_key(d):
     return b.get("id") or b.get("builtAt") or "unknown"
 
 
+FEED_KEYS = ["aim", "none", "raise", "caught", "launched", "dropped"]
+
+
 def analyze(d, precise=()):
     games = d.get("games", d.get("evenings", []))
     for g in games:
@@ -164,6 +167,7 @@ def analyze(d, precise=()):
                                  bounces=mean([g.get("bounces", 0) for g in gs]),
                                  traps=mean([g.get("traps", 0) for g in gs]),
                                  live=mean([g.get("liveCatches", 0) for g in gs]),
+                                 feeds={k: mean([g.get("feeds", {}).get(k, 0) for g in gs]) for k in FEED_KEYS},
                                  extras={k: mean([g.get("extras", {}).get(k, 0) for g in gs]) for k in extras},
                                  ends=[g["endedBy"] for g in gs]))
 
@@ -546,6 +550,12 @@ def print_text(d, a, report_path, checks):
             print(row)
         for o in a["objectives"]:
             print(f"  {o['name']:15} {o['text']}")
+    if any(any(r["feeds"].values()) for r in a["rows"]):
+        print("\nFeeds per game (round 9b: inlane feeds · aim = flipped live at the wanted shot · none = flipped at mid-face"
+              " · raise = raised into a catch at 38 pt → caught / launched up the table / dropped):")
+        print(f"  {'pass':7}{'skill':13}" + "".join(f"{k:>9}" for k in FEED_KEYS))
+        for r in a["rows"]:
+            print(f"  {r['pass_']:7}{r['skill']:13}" + "".join(f"{r['feeds'][k]:>9.1f}" for k in FEED_KEYS))
     print("\nAim accuracy (made / tried):")
     for (p, s), tot in a["aims"].items():
         if s != "beginner":
@@ -687,6 +697,17 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
                      "reached it by t seconds — one step line per pass × skill (hz120 solid, hz60 dashed; beginner blue, "
                      "intermediate teal, advanced yellow, expert white), a tick at the median first reach; hover a line</div>"
                      "<div class='panel'>" + curves + "</div>")
+
+    # Feeds (round 9b⁗)
+    if any(any(r["feeds"].values()) for r in a["rows"]):
+        h.append("<h2>Inlane feeds</h2><div class='panel small'>per game · aim = flipped live at the wanted shot's window · "
+                 "none = flipped at mid-face · raise = raised into a catch at the cradle point (38 pt), then caught / "
+                 "launched up the table / dropped</div><div class='panel'><table><tr><th>pass</th><th>skill</th>"
+                 + "".join(f"<th>{k}</th>" for k in FEED_KEYS) + "</tr>")
+        for r in a["rows"]:
+            h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td>"
+                     + "".join(f"<td>{r['feeds'][k]:.1f}</td>" for k in FEED_KEYS) + "</tr>")
+        h.append("</table></div>")
 
     # Aims
     if a["aims"]:

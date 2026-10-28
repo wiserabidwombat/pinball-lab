@@ -157,8 +157,10 @@ struct PlayRobotFlipper {
         pass == .hz60 && !shots60.isEmpty ? shots60 : shots
     }
 
+    /// Round 15c: no fallback — every table's 60 Hz feed windows are measured, so an empty `inlane60` means this
+    /// flipper has no usable 60 Hz feed window (Cthulhu's right flipper was aiming at the 120 Hz orbit window).
     func inlane(for pass: PlayPass) -> [(name: String, lo: CGFloat, hi: CGFloat)] {
-        pass == .hz60 && !inlane60.isEmpty ? inlane60 : inlane
+        pass == .hz60 ? inlane60 : inlane
     }
 
     /// The resting flipper's tip.
@@ -209,6 +211,10 @@ final class PlayRobot {
     private var inlaneTarget: [(name: String, along: CGFloat)?]
     /// Round 9b: live catches — inlane feeds flipped on the fly at a measured window.
     private(set) var liveCatches = 0
+    /// Round 9b⁗: what happened to each inlane feed — aim / none / raise, and for raises caught / launched / dropped.
+    private(set) var feeds: [String: Int] = [:]
+    /// Round 9b⁗: the current `.catching` began as a feed raise (so its outcome is tallied in `feeds`).
+    private var catchFromFeed = false
     private var plungeAt: TimeInterval?
     /// Round 7a: set by the lab in a plunge sweep — plunge the next served ball at exactly this power, never flip.
     var sweepPower: CGFloat?
@@ -314,6 +320,13 @@ final class PlayRobot {
     }
 
     /// While catching: the ball is still over the flipper (not past the tip into the gap, not gone).
+    /// Round 9c: a feed still coming down the inlane toward this flipper (above the pivot on the inlane side).
+    private func feedComing(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
+        let inlaneSide = f.pointsLeft ? b.position.x > f.pivot.x : b.position.x < f.pivot.x
+        return b.isUpper == f.upper && !b.isHeld && inlaneSide && abs(b.position.x - f.pivot.x) < 140
+            && b.position.y > f.pivot.y - 10 && b.position.y < f.pivot.y + 160
+    }
+
     private func overFlipper(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
         let tip = f.restTip
         let lo = min(f.pivot.x, tip.x), hi = max(f.pivot.x, tip.x)
@@ -364,13 +377,23 @@ final class PlayRobot {
                 let s = steadySince ?? now
                 if now - s >= 0.3 {
                     catches += 1
+                    if catchFromFeed { feeds["caught", default: 0] += 1; catchFromFeed = false }
                     let (target, delay) = pickShot(f, wanted: view.wanted)
                     mode = .cradled(flipper: i, dropAt: now + Double.random(in: 0.4...1.0, using: &rng),
                                     target: target, delay: delay)
                 } else {
                     mode = .catching(flipper: i, since: since, steadySince: s)
                 }
-            } else if now - since > 2.5 || !free.contains(where: { overFlipper($0, f) }) {
+            } else if now - since > 2.5 || !free.contains(where: { overFlipper($0, f) || (catchFromFeed && feedComing($0, f)) }) {
+                if catchFromFeed {
+                    // Round 9b⁗: a feed raise that didn't settle — was the ball thrown up the table (the crook-press
+                    // shape) or did it just roll off / time out?
+                    let b = lowerFree.min(by: { hypot($0.position.x - f.cradle.x, $0.position.y - f.cradle.y)
+                                                < hypot($1.position.x - f.cradle.x, $1.position.y - f.cradle.y) })
+                    let launched = b.map { $0.position.y > f.pivot.y + 80 || $0.velocity.dy > 100 } ?? false
+                    feeds[launched ? "launched" : "dropped", default: 0] += 1
+                    catchFromFeed = false
+                }
                 mode = .free
             } else {
                 mode = .catching(flipper: i, since: since, steadySince: nil)
@@ -467,21 +490,31 @@ final class PlayRobot {
             let towardTip = f.pointsLeft ? b.velocity.dx < 0 : b.velocity.dx > 0
             let inlaneSide = f.pointsLeft ? b.position.x > f.pivot.x + 4 : b.position.x < f.pivot.x - 4
             let fromInlane = inlaneSide && b.position.y > f.pivot.y + 8 && b.velocity.dy < 0
-            if inlaneTarget[i] == nil, !f.upper, fromInlane, towardTip, along < 60, hypot(b.velocity.dx, b.velocity.dy) < 1200 {
+            if inlaneTarget[i] == nil, !f.upper, fromInlane, towardTip, along < 130, hypot(b.velocity.dx, b.velocity.dy) < 1200 {
                 // First sight of a feed: choose the window (the table's wanted shot if this flipper has one for a
                 // feed, else the first measured one), and turn this player's timing error into distance along the
                 // face (the ball rolls out at ~450 pt/s there). Windows under 30 pt are the crook: never used.
                 // 9b‴: live-flip only at the table's WANTED shot when this flipper has a feed window for it; a catcher
                 // otherwise raises at the cradle point (38 pt, past the crook) and holds — the normal catch — and the
                 // rest flip at mid-face.
+                // 9c (the hold Shot Lab): a raise made while the ball is still 40+ pt out — coming down the inlane onto
+                // an already-raised flipper — cradles every time; a raise once it is in the crook or on the face
+                // launches it. So a catcher raises NOW, on first sight, while the feed is at least 45 pt out, and the
+                // catch roll comes before the live aim (a player cradles a feed and shoots from the cradle).
                 let windows = f.inlane(for: pass).filter { $0.lo >= 30 }
                 let pick = windows.first(where: { w in view.wanted.contains(w.name) })
                 let noise = CGFloat(gauss(skill.timingSigma)) * 450
                 let calm = lowerFree.count == 1 || skill.trapsInMultiball
-                if let w = pick, skill.aims {
+                if busy == nil, skill.catchChance > 0, calm, along >= 45, Double.random(in: 0..<1, using: &rng) < skill.catchChance {
+                    mode = .catching(flipper: i, since: now, steadySince: nil)
+                    catchFromFeed = true
+                    feeds["raise", default: 0] += 1
+                    pressed[i] = true
+                    trigger[i] = nil
+                    decidedCatch[i] = nil
+                    break
+                } else if let w = pick, skill.aims {
                     inlaneTarget[i] = (w.name, (w.lo + w.hi) / 2 + noise)
-                } else if busy == nil, skill.catchChance > 0, calm, Double.random(in: 0..<1, using: &rng) < skill.catchChance {
-                    inlaneTarget[i] = ("catch", max(32, 38 + noise))
                 } else {
                     inlaneTarget[i] = ("none", 42 + noise)         // mid-face, clear of the crook (no aim)
                 }
@@ -489,17 +522,11 @@ final class PlayRobot {
             if let t = inlaneTarget[i] {
                 if !towardTip || b.velocity.dy > 200 || proj > 95 {
                     inlaneTarget[i] = nil                           // the feed is over (bounced off, past the tip)
-                } else if proj >= t.along, t.name == "catch", busy == nil {
-                    mode = .catching(flipper: i, since: now, steadySince: nil)   // 9b‴: raise at the cradle point and hold
-                    pressed[i] = true
-                    inlaneTarget[i] = nil
-                    trigger[i] = nil
-                    decidedCatch[i] = nil
-                    break
                 } else if proj >= t.along {
                     holdUntil[i] = now + 0.22
                     pressed[i] = true
                     liveCatches += 1
+                    feeds[t.name == "none" ? "none" : "aim", default: 0] += 1
                     if t.name != "none" && t.name != "catch" { cmd.aimedAt = t.name; cmd.aimedFrom = i }
                     inlaneTarget[i] = nil
                     trigger[i] = nil
@@ -519,6 +546,7 @@ final class PlayRobot {
             }
             if busy == nil, decidedCatch[i] == true {
                 mode = .catching(flipper: i, since: now, steadySince: nil)
+                catchFromFeed = false
                 pressed[i] = true
                 decidedCatch[i] = nil
                 break
@@ -721,6 +749,7 @@ nonisolated struct PlayGame: Codable {
     var bounces = 0                     // round 9: dead bounces (a crossing ball left to bounce off the resting flipper)
     var traps = 0                       // round 11: multiball traps (a cradle held while another ball was loose)
     var liveCatches = 0                 // round 9b: inlane feeds flipped on the fly at a measured window
+    var feeds: [String: Int] = [:]      // round 9b⁗: aim / none / raise → caught / launched / dropped
     var banners: [String: Int] = [:]
     var shots: [String: Int] = [:]
     var aims: [String: [Int]] = [:]     // target → [tried, made]
@@ -1288,6 +1317,7 @@ final class PlayLab {
         g.bounces = robot?.bounces ?? 0
         g.traps = robot?.traps ?? 0
         g.liveCatches = robot?.liveCatches ?? 0
+        g.feeds = robot?.feeds ?? [:]
         for (k, v) in robot?.passResults ?? [:] { g.aims[k] = v }      // round 10: "pass@0.54" → [tried, made]
         g.extras = host.playLabEndGame()
         games.append(g)

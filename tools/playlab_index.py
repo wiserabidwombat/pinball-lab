@@ -54,6 +54,7 @@ def summarize(path, d, a):
                 build=pr.build_line(d), build_key=pr.build_key(d),
                 minutes=minutes, incidents=len(a["incidents"]), flags=a["flags"], notes=a["notes"], rows=rows,
                 drains=drains, reach=reach, reached=reached, aims=a["aims"], nobj=len(names), aim_text=aim_text,
+                curves=pr.curves_svg(a, skills=("expert",), inline=True, panel_w=220, panel_h=130, per_row=3),
                 page=os.path.splitext(path)[0] + ".html", tracks=os.path.splitext(path)[0] + "-tracks.svg", delta=None)
 
 
@@ -303,6 +304,8 @@ def write_html(tables, out_path, games_per_skill, hz, failed, baseline_name=None
             h.append("<div class='small' style='color:var(--good);margin-top:6px'>nothing flagged</div>")
         if t["notes"]:
             h.append("<ul class='small'>" + "".join(f"<li>{e(n)}</li>" for n in t["notes"]) + "</ul>")
+        if t.get("curves"):
+            h.append("<details><summary class='small'>expert · time to objective (round 14)</summary>" + t["curves"] + "</details>")
         h.append("</div>")
     h.append("</div></main></body></html>")
     with open(out_path, "w", encoding="utf-8") as f:

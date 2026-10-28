@@ -163,6 +163,7 @@ def analyze(d, precise=()):
                                  tilts=mean([g.get("tilts", 0) for g in gs]),
                                  bounces=mean([g.get("bounces", 0) for g in gs]),
                                  traps=mean([g.get("traps", 0) for g in gs]),
+                                 live=mean([g.get("liveCatches", 0) for g in gs]),
                                  extras={k: mean([g.get("extras", {}).get(k, 0) for g in gs]) for k in extras},
                                  ends=[g["endedBy"] for g in gs]))
 
@@ -435,17 +436,98 @@ def heat_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------- time-to-objective curves (round 14)
+
+def curves_svg(a, skills=SKILLS, inline=False, panel_w=300, panel_h=170, per_row=4):
+    """One small panel per objective: the share of games (per pass × skill) that have reached it by t seconds.
+    Step lines: hz120 solid, hz60 dashed, skill colours as the heat maps. A tick marks the median first reach."""
+    names = a["names"]
+    games = [g for g in a["games"] if g["skill"] in skills]
+    if not names or not games:
+        return ""
+    passes = a["passes"]
+    t_end = max(60.0, math.ceil(max(g.get("seconds", 0) for g in games) / 60.0) * 60.0)
+    by = collections.defaultdict(list)
+    for g in games:
+        by[(g["pass"], g["skill"])].append(g)
+    rows = (len(names) + per_row - 1) // per_row
+    cols = min(per_row, len(names))
+    attrs = 'xmlns="http://www.w3.org/2000/svg"'
+    style = f' style="width:100%;height:auto;max-width:{cols * panel_w + 40}px"' if inline else ''
+    W, H = cols * panel_w, rows * panel_h + 26
+    out = [f'<svg {attrs} viewBox="0 0 {W} {H}" font-family="Helvetica, Arial" font-size="11"{style}>',
+           f'<rect x="0" y="0" width="{W}" height="{H}" fill="#101010"/>']
+    # Legend
+    lx = 8
+    for s in skills:
+        out.append(f'<line x1="{lx}" y1="13" x2="{lx + 18}" y2="13" stroke="{SKILL_COLOR.get(s, "#fff")}" stroke-width="2.5"/>'
+                   f'<text x="{lx + 22}" y="17" fill="#bbb">{s}</text>')
+        lx += 30 + 7 * len(s)
+    for p, dash in (("hz120", ""), ("hz60", ' stroke-dasharray="5,4"')):
+        if p in passes:
+            out.append(f'<line x1="{lx}" y1="13" x2="{lx + 22}" y2="13" stroke="#bbb" stroke-width="2"{dash}/>'
+                       f'<text x="{lx + 26}" y="17" fill="#bbb">{p}</text>')
+            lx += 70
+    if W - lx > 420:
+        out.append(f'<text x="{W - 8}" y="17" fill="#888" text-anchor="end">share of games that have reached the objective by t · '
+                   f'tick = median first reach</text>')
+    ml, mr, mt, mb = 30, 10, 22, 22          # margins inside a panel
+    pw, ph = panel_w - ml - mr, panel_h - mt - mb
+    for i, name in enumerate(names):
+        ox, oy = (i % per_row) * panel_w, 26 + (i // per_row) * panel_h
+        out.append(f'<g transform="translate({ox},{oy})">')
+        out.append(f'<text x="{ml}" y="14" fill="#ddd" font-weight="bold">{html.escape(name)}</text>')
+        out.append(f'<rect x="{ml}" y="{mt}" width="{pw}" height="{ph}" fill="#161616" stroke="#333"/>')
+        for frac, lab in ((0.0, "0"), (0.5, "50%"), (1.0, "100%")):
+            y = mt + ph - frac * ph
+            out.append(f'<line x1="{ml}" y1="{y:.1f}" x2="{ml + pw}" y2="{y:.1f}" stroke="#2a2a2a"/>'
+                       f'<text x="{ml - 3}" y="{y + 3.5:.1f}" fill="#777" text-anchor="end" font-size="9">{lab}</text>')
+        t = 0.0
+        while t <= t_end:
+            x = ml + pw * t / t_end
+            out.append(f'<line x1="{x:.1f}" y1="{mt}" x2="{x:.1f}" y2="{mt + ph}" stroke="#2a2a2a"/>'
+                       f'<text x="{x:.1f}" y="{mt + ph + 11}" fill="#777" text-anchor="middle" font-size="9">{t:.0f}s</text>')
+            t += 120.0 if t_end > 400 else 60.0
+        for p in passes:
+            dash = ' stroke-dasharray="5,4"' if p != "hz120" else ""
+            for s in skills:
+                gs = by.get((p, s), [])
+                if not gs:
+                    continue
+                times = sorted(g["objectives"][name] for g in gs if name in g.get("objectives", {}))
+                n = len(gs)
+                pts = [(ml, mt + ph)]
+                for k, tt in enumerate(times, 1):
+                    x = ml + pw * min(tt, t_end) / t_end
+                    y = mt + ph - ph * k / n
+                    pts.append((x, pts[-1][1]))      # step: across, then up
+                    pts.append((x, y))
+                pts.append((ml + pw, pts[-1][1]))
+                color = SKILL_COLOR.get(s, "#fff")
+                med = median(times) if times else None
+                tip = f"{p} {s}: {len(times)}/{n} games" + (f", median {med:.0f}s" if med is not None else "")
+                out.append(f'<polyline points="{" ".join(f"{x:.1f},{y:.1f}" for x, y in pts)}" fill="none" stroke="{color}" '
+                           f'stroke-width="2" stroke-opacity="0.9"{dash}><title>{html.escape(tip)}</title></polyline>')
+                if med is not None:
+                    x = ml + pw * min(med, t_end) / t_end
+                    y = mt + ph - ph * (len(times) / n) / 2
+                    out.append(f'<line x1="{x:.1f}" y1="{y - 5:.1f}" x2="{x:.1f}" y2="{y + 5:.1f}" stroke="{color}" stroke-width="2"/>')
+        out.append("</g>")
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 # ---------------------------------------------------------------- text
 
 def print_text(d, a, report_path, checks):
     games, passes, extras = a["games"], a["passes"], a["extras"]
     print(f"{d['table']} · {d['date']} · {len(games)} games · {d['fps']} fps · passes {', '.join(passes)}")
     print(f"build: {build_line(d)}")
-    print(f"\n{'pass':7}{'skill':13}{'games':>6}{'score':>10}{'min':>6}{'balls':>6}{'catch':>6}{'lanes':>6}{'nudge':>6}{'tilt':>5}{'bounce':>7}{'trap':>5}"
+    print(f"\n{'pass':7}{'skill':13}{'games':>6}{'score':>10}{'min':>6}{'balls':>6}{'catch':>6}{'lanes':>6}{'nudge':>6}{'tilt':>5}{'bounce':>7}{'trap':>5}{'live':>5}"
           + "".join(f"{k[:7]:>8}" for k in extras) + "  end")
     for r in a["rows"]:
         print(f"{r['pass_']:7}{r['skill']:13}{r['games']:>6}{r['score']:>10,.0f}{r['minutes']:>6.1f}{r['balls']:>6.1f}"
-              f"{r['catches']:>6.1f}{r['lane_taps']:>6.1f}{r['nudges']:>6.1f}{r['tilts']:>5.1f}{r['bounces']:>7.1f}{r['traps']:>5.1f}" + "".join(f"{r['extras'][k]:>8.1f}" for k in extras)
+              f"{r['catches']:>6.1f}{r['lane_taps']:>6.1f}{r['nudges']:>6.1f}{r['tilts']:>5.1f}{r['bounces']:>7.1f}{r['traps']:>5.1f}{r['live']:>5.1f}" + "".join(f"{r['extras'][k]:>8.1f}" for k in extras)
               + "  " + ",".join(e[:4] for e in r["ends"])
               + (f"  score ±{(r['score_hi'] - r['score_lo']) / 2:,.0f}" if r["score_lo"] is not None else ""))
     if a["names"]:
@@ -566,12 +648,13 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
              "<th title='TILT banners: a third nudge within 3 s, flippers dead for the rest of that ball'>tilts</th>"
              "<th title='dead bounces (round 9: the expert lets a fast crossing ball hit the resting flipper and go across)'>bounces</th>"
              "<th title='multiball traps (round 11: the expert holds one ball on a flipper while another is loose)'>traps</th>"
+             "<th title='live catches (round 9b: inlane feeds flipped on the fly at the inlane Shot Lab window)'>live</th>"
              + "".join(f"<th>{e(k)}</th>" for k in extras) + "<th>ended by</th></tr>")
     for r in a["rows"]:
         h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['games']}</td><td>{r['score']:,.0f}"
                  + (f"<div class='small'>±{(r['score_hi'] - r['score_lo']) / 2:,.0f}</div>" if r["score_lo"] is not None else "") + "</td>"
                  f"<td>{r['minutes']:.1f}</td><td>{r['balls']:.1f}</td><td>{r['catches']:.1f}</td><td>{r['lane_taps']:.1f}</td>"
-                 f"<td>{r['nudges']:.1f}</td><td>{r['tilts']:.1f}</td><td>{r['bounces']:.1f}</td><td>{r['traps']:.1f}</td>"
+                 f"<td>{r['nudges']:.1f}</td><td>{r['tilts']:.1f}</td><td>{r['bounces']:.1f}</td><td>{r['traps']:.1f}</td><td>{r['live']:.1f}</td>"
                  + "".join(f"<td>{r['extras'][k]:.1f}</td>" for k in extras)
                  + f"<td>{e(', '.join(r['ends']))}</td></tr>")
     h.append("</table></div>")
@@ -598,6 +681,12 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
             h.append("<details><summary>what each objective means</summary><ul class='small'>"
                      + "".join(f"<li><b>{e(o['name'])}</b> — {e(o['text'])}</li>" for o in a["objectives"]) + "</ul></details>")
         h.append("</div>")
+        curves = curves_svg(a, inline=True)
+        if curves:
+            h.append("<h2>Time to objective</h2><div class='panel small'>round 14 · per objective, the share of games that have "
+                     "reached it by t seconds — one step line per pass × skill (hz120 solid, hz60 dashed; beginner blue, "
+                     "intermediate teal, advanced yellow, expert white), a tick at the median first reach; hover a line</div>"
+                     "<div class='panel'>" + curves + "</div>")
 
     # Aims
     if a["aims"]:
@@ -707,6 +796,7 @@ if __name__ == "__main__":
     ap.add_argument("--precise", nargs="*", default=[], help="shots meant to be hard: an expert rate under 15% is noted, not flagged")
     ap.add_argument("--tracks", help="write the shot tracks as this SVG file")
     ap.add_argument("--heat", help="round 13: write the heat maps (balls lost / shot ends, per pass) as this SVG file")
+    ap.add_argument("--curves", help="round 14: write the time-to-objective curves (all skills, both passes) as this SVG file")
     ap.add_argument("--html", nargs="?", const="", help="write the report as an HTML page (default: <stem>.html beside the JSON)")
     ap.add_argument("--map", help="a table picture to draw the tracks over")
     ap.add_argument("--tightness", action="store_true",
@@ -726,6 +816,9 @@ if __name__ == "__main__":
     if args.heat:
         open(args.heat, "w").write(heat_svg(analysis, args.map, args.map_rect))
         print(f"\nHeat maps drawn to {args.heat}")
+    if args.curves:
+        open(args.curves, "w").write(curves_svg(analysis))
+        print(f"\nTime-to-objective curves drawn to {args.curves}")
     if args.html is not None:
         out = args.html or os.path.splitext(args.report)[0] + ".html"
         write_html(data, analysis, args.report, out, args.checks, args.map, args.map_rect)

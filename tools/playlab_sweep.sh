@@ -108,6 +108,13 @@ run_table() {   # $1 table, $2 slot; writes its outcome to ShotLab/sweep-$STAMP-
   final=ShotLab/sweep-$STAMP-$t.final
   T0=$(date +%s)
   say "▶ $(date '+%H:%M') · $t on '$dev'"
+  # Plan 2 (sweep 10-28): a table's first launch on a Simulator that is already up stalled three times in one night
+  # (the app up, "no drawables", the lab never starting) and the retry after a shutdown always ran — so every
+  # table now starts on a freshly booted device (FRESH_BOOT=0 to skip; ~1 min each).
+  if [ "${FRESH_BOOT:-1}" != "0" ]; then
+    xcrun simctl shutdown "$(udid_of "$dev")" 2>/dev/null || true
+    sleep 10
+  fi
   DEVICE="$dev" SKIP_BUILD=1 tools/playlab_run.sh "$t" "$GAMES" "$HZ" 2>&1 | tee -a "$tlog" | while IFS= read -r l; do echo "[$t] $l"; done
   report=$(report_from "$tlog")
   # Round 4: no report → reboot this device and try the table once more (the build is reused) — unless the sweep was

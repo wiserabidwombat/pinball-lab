@@ -215,6 +215,8 @@ final class PlayRobot {
     private(set) var feeds: [String: Int] = [:]
     /// Round 9b⁗: the current `.catching` began as a feed raise (so its outcome is tallied in `feeds`).
     private var catchFromFeed = false
+    /// Round 9c′: every feed raise — [along at the press, ball speed at the press, outcome 0/1/2/3].
+    private(set) var raiseLog: [[Double]] = []
     private var plungeAt: TimeInterval?
     /// Round 7a: set by the lab in a plunge sweep — plunge the next served ball at exactly this power, never flip.
     var sweepPower: CGFloat?
@@ -320,6 +322,11 @@ final class PlayRobot {
     }
 
     /// While catching: the ball is still over the flipper (not past the tip into the gap, not gone).
+    /// Round 9c′: the outcome of the most recent feed raise (1 caught, 2 launched, 3 dropped).
+    private func resolveRaise(_ outcome: Double) {
+        if let i = raiseLog.indices.last, raiseLog[i][2] == 0 { raiseLog[i][2] = outcome }
+    }
+
     /// Round 9c: a feed still coming down the inlane toward this flipper (above the pivot on the inlane side).
     private func feedComing(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
         let inlaneSide = f.pointsLeft ? b.position.x > f.pivot.x : b.position.x < f.pivot.x
@@ -377,7 +384,7 @@ final class PlayRobot {
                 let s = steadySince ?? now
                 if now - s >= 0.3 {
                     catches += 1
-                    if catchFromFeed { feeds["caught", default: 0] += 1; catchFromFeed = false }
+                    if catchFromFeed { feeds["caught", default: 0] += 1; catchFromFeed = false; resolveRaise(1) }
                     let (target, delay) = pickShot(f, wanted: view.wanted)
                     mode = .cradled(flipper: i, dropAt: now + Double.random(in: 0.4...1.0, using: &rng),
                                     target: target, delay: delay)
@@ -393,6 +400,7 @@ final class PlayRobot {
                     let launched = b.map { $0.position.y > f.pivot.y + 80 || $0.velocity.dy > 100 } ?? false
                     feeds[launched ? "launched" : "dropped", default: 0] += 1
                     catchFromFeed = false
+                    resolveRaise(launched ? 2 : 3)
                 }
                 mode = .free
             } else {
@@ -505,10 +513,13 @@ final class PlayRobot {
                 let pick = windows.first(where: { w in view.wanted.contains(w.name) })
                 let noise = CGFloat(gauss(skill.timingSigma)) * 450
                 let calm = lowerFree.count == 1 || skill.trapsInMultiball
-                if busy == nil, skill.catchChance > 0, calm, along >= 45, Double.random(in: 0..<1, using: &rng) < skill.catchChance {
+                if busy == nil, skill.catchChance > 0, calm, along >= 55, Double.random(in: 0..<1, using: &rng) < skill.catchChance {
+                    // 9c′: 55 (was 45) — the lab cradles from 40 pt, but a 60 Hz feed moves 14–20 pt a frame and the
+                    // flipper has to get up, so the press has to be decided with margin.
                     mode = .catching(flipper: i, since: now, steadySince: nil)
                     catchFromFeed = true
                     feeds["raise", default: 0] += 1
+                    raiseLog.append([Double(along), Double(hypot(b.velocity.dx, b.velocity.dy)), 0])
                     pressed[i] = true
                     trigger[i] = nil
                     decidedCatch[i] = nil
@@ -750,6 +761,7 @@ nonisolated struct PlayGame: Codable {
     var traps = 0                       // round 11: multiball traps (a cradle held while another ball was loose)
     var liveCatches = 0                 // round 9b: inlane feeds flipped on the fly at a measured window
     var feeds: [String: Int] = [:]      // round 9b⁗: aim / none / raise → caught / launched / dropped
+    var feedRaises: [[Double]] = []     // round 9c′: per raise [along, speed, outcome 0/1 caught/2 launched/3 dropped]
     var banners: [String: Int] = [:]
     var shots: [String: Int] = [:]
     var aims: [String: [Int]] = [:]     // target → [tried, made]
@@ -1318,12 +1330,16 @@ final class PlayLab {
         g.traps = robot?.traps ?? 0
         g.liveCatches = robot?.liveCatches ?? 0
         g.feeds = robot?.feeds ?? [:]
+        g.feedRaises = robot?.raiseLog ?? []
         for (k, v) in robot?.passResults ?? [:] { g.aims[k] = v }      // round 10: "pass@0.54" → [tried, made]
         g.extras = host.playLabEndGame()
         games.append(g)
         current = nil
         robot = nil
         index += 1
+        // 2026-10-29: write the report after every game (the same file, overwritten), so a run stopped by the
+        // runner's time limit keeps every finished game instead of losing them all.
+        if index < plan.count { _ = save() }
     }
 
     /// Stops the run (the host puts the table back); saves what was played if asked.

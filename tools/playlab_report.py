@@ -556,6 +556,25 @@ def print_text(d, a, report_path, checks):
         print(f"  {'pass':7}{'skill':13}" + "".join(f"{k:>9}" for k in FEED_KEYS))
         for r in a["rows"]:
             print(f"  {r['pass_']:7}{r['skill']:13}" + "".join(f"{r['feeds'][k]:>9.1f}" for k in FEED_KEYS))
+        # Round 9c′: where the raises were made — along the face (pt from the pivot) and the ball's speed at the press,
+        # caught vs launched, so a late press shows as a short along / fast ball.
+        lines = []
+        by = collections.defaultdict(list)
+        for g in a["games"]:
+            by[(g["pass"], g["skill"])].append(g)
+        for (p, s), gs in sorted(by.items(), key=lambda kv: (pass_order(kv[0][0]), SKILLS.index(kv[0][1]) if kv[0][1] in SKILLS else 9)):
+            rs = [x for g in gs for x in g.get("feedRaises", [])]
+            if not rs:
+                continue
+            parts = []
+            for code, name in ((1, "caught"), (2, "launched"), (3, "dropped")):
+                sel = [x for x in rs if len(x) >= 3 and x[2] == code]
+                if sel:
+                    parts.append(f"{name} {len(sel)}: along {median([x[0] for x in sel]):.0f} ({min(x[0] for x in sel):.0f}–{max(x[0] for x in sel):.0f}) · speed {median([x[1] for x in sel]):.0f}")
+            lines.append(f"  {p:7}{s:13}" + "  |  ".join(parts))
+        if lines:
+            print("Raises: along at the press (pt from the pivot, median and range) · ball speed at the press (pt/s):")
+            print("\n".join(lines))
     print("\nAim accuracy (made / tried):")
     for (p, s), tot in a["aims"].items():
         if s != "beginner":

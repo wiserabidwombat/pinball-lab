@@ -32,6 +32,12 @@ for devs in d['devices'].values():
         if x['name']=='$DEVICE': print(x['udid']); sys.exit()
 print('')")
 [ -n "$UDID" ] || { echo "No simulator named '$DEVICE' (set DEVICE=...)"; xcrun simctl list devices available | grep iPhone; exit 1; }
+# 2026-10-29: a launch on a Simulator that is already up can stall for the whole budget (app up, "no drawables",
+# the lab never starting); a launch on a freshly booted one hasn't yet. So shut it down first (FRESH_BOOT=0 to skip).
+if [ "${FRESH_BOOT:-1}" != "0" ]; then
+  xcrun simctl shutdown "$UDID" 2>/dev/null || true
+  sleep 5
+fi
 xcrun simctl boot "$UDID" 2>/dev/null || true
 # Simulator.app moves between Xcode versions: open it by bundle id.
 open -b com.apple.iphonesimulator --args -CurrentDeviceUDID "$UDID" || true
@@ -96,8 +102,11 @@ touch "$MARKER"
 # app is terminated, there is no report, and the runner exits 2 so a sweep can retry.
 NSK=4; [ -n "$SKILLS" ] && NSK=$(echo "$SKILLS" | tr ',' '\n' | grep -c .)
 NPASS=2; [ "$HZ" != "both" ] && NPASS=1
-BUDGET=$(( GAMES * NSK * NPASS * ${CAP:-480} + 600 ))
-echo "▶ Budget: $(( BUDGET / 60 )) min (the app is terminated if it hasn't quit by then)"
+BUDGET=$(( 3 * (GAMES * NSK * NPASS * ${CAP:-480} + 600) ))
+# 2026-10-29: slow runs are not stalls — the app saves the report after every game now, so the run is stopped only
+# when nothing in ShotLab/ has been written for IDLE_MIN minutes (default 25), or at the hard cap above.
+IDLE_MIN=${IDLE_MIN:-25}
+echo "▶ Stops if nothing is written for $IDLE_MIN min (hard cap $(( BUDGET / 60 )) min); the report is saved after every game"
 # --console attaches to the app's stdout and returns when it exits; watched from here so it can be cut short.
 ( xcrun simctl launch --console "$UDID" "$BUNDLE" "${ARGS[@]}" | grep -E "LAB:|PLAY LAB" || true ) &
 WATCH=$!
@@ -105,8 +114,17 @@ T_LAUNCH=$(date +%s)
 STALLED=
 while kill -0 "$WATCH" 2>/dev/null; do
   sleep 20
-  if [ $(( $(date +%s) - T_LAUNCH )) -gt "$BUDGET" ]; then
-    echo "▶ STALLED: the app hadn't quit after $(( BUDGET / 60 )) min — terminating it"
+  ELAPSED=$(( $(date +%s) - T_LAUNCH ))
+  IDLE=
+  if [ "$ELAPSED" -gt $(( IDLE_MIN * 60 )) ] && [ -z "$(find ShotLab -newer "$MARKER" -mmin -"$IDLE_MIN" 2>/dev/null | head -1)" ]; then
+    IDLE=1
+  fi
+  if [ -n "$IDLE" ] || [ "$ELAPSED" -gt "$BUDGET" ]; then
+    if [ -n "$IDLE" ]; then
+      echo "▶ STALLED: nothing written to ShotLab/ for $IDLE_MIN min — terminating it"
+    else
+      echo "▶ STOPPED: the hard cap of $(( BUDGET / 60 )) min — terminating it (finished games are in the report)"
+    fi
     STALLED=1
     xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
     sleep 5

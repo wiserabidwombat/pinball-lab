@@ -513,7 +513,10 @@ final class PlayRobot {
                 let pick = windows.first(where: { w in view.wanted.contains(w.name) })
                 let noise = CGFloat(gauss(skill.timingSigma)) * 450
                 let calm = lowerFree.count == 1 || skill.trapsInMultiball
-                if busy == nil, skill.catchChance > 0, calm, along >= 55, Double.random(in: 0..<1, using: &rng) < skill.catchChance {
+                // 9c″ (sweep 10-30, all four tables): raises on feeds under 900 pt/s were caught 117 / launched 8 /
+                // dropped 18; at 900+ caught 7 / launched 41 / dropped 29, at any distance — so no raise on a fast feed.
+                if busy == nil, skill.catchChance > 0, calm, along >= 55, hypot(b.velocity.dx, b.velocity.dy) < 900,
+                   Double.random(in: 0..<1, using: &rng) < skill.catchChance {
                     // 9c′: 55 (was 45) — the lab cradles from 40 pt, but a 60 Hz feed moves 14–20 pt a frame and the
                     // flipper has to get up, so the press has to be decided with margin.
                     mode = .catching(flipper: i, since: now, steadySince: nil)

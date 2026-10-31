@@ -510,13 +510,24 @@ final class PlayRobot {
                 // launches it. So a catcher raises NOW, on first sight, while the feed is at least 45 pt out, and the
                 // catch roll comes before the live aim (a player cradles a feed and shoots from the cradle).
                 let windows = f.inlane(for: pass).filter { $0.lo >= 30 }
-                let pick = windows.first(where: { w in view.wanted.contains(w.name) })
+                // 9d: live-aim only at the MOST wanted shot. robotWanted() ends with every shot as filler, so
+                // "contains" was always true and aimers looped the first feed window (GI: the ramps) all game.
+                let top = view.wanted.first
+                let pick = windows.first(where: { w in w.name == top })
                 let noise = CGFloat(gauss(skill.timingSigma)) * 450
                 let calm = lowerFree.count == 1 || skill.trapsInMultiball
+                let feedSpeed = hypot(b.velocity.dx, b.velocity.dy)
+                let catchRoll = busy == nil && skill.catchChance > 0 && calm
+                    && Double.random(in: 0..<1, using: &rng) < skill.catchChance
                 // 9c″ (sweep 10-30, all four tables): raises on feeds under 900 pt/s were caught 117 / launched 8 /
-                // dropped 18; at 900+ caught 7 / launched 41 / dropped 29, at any distance — so no raise on a fast feed.
-                if busy == nil, skill.catchChance > 0, calm, along >= 55, hypot(b.velocity.dx, b.velocity.dy) < 900,
-                   Double.random(in: 0..<1, using: &rng) < skill.catchChance {
+                // dropped 18; at 900+ caught 7 / launched 41 / dropped 29 — a raise on first sight drains a hot feed.
+                // 9d (holdfast Shot Lab, 1000 pt/s): held up early, a hot feed drains every time; raised with the
+                // ball ~60–79 pt out it cradles about half the time and the rest stays in play. So a hot feed gets a
+                // timed raise at ~70 pt (below).
+                if catchRoll, feedSpeed >= 900, along > 80 {
+                    let at = min(85, max(55, 70 + CGFloat(gauss(skill.timingSigma)) * feedSpeed))
+                    inlaneTarget[i] = ("hotcatch", at)
+                } else if catchRoll, along >= 55, feedSpeed < 900 {
                     // 9c′: 55 (was 45) — the lab cradles from 40 pt, but a 60 Hz feed moves 14–20 pt a frame and the
                     // flipper has to get up, so the press has to be decided with margin.
                     mode = .catching(flipper: i, since: now, steadySince: nil)
@@ -531,6 +542,26 @@ final class PlayRobot {
                     inlaneTarget[i] = (w.name, (w.lo + w.hi) / 2 + noise)
                 } else {
                     inlaneTarget[i] = ("none", 42 + noise)         // mid-face, clear of the crook (no aim)
+                }
+            }
+            if let t = inlaneTarget[i], t.name == "hotcatch" {
+                // 9d: the timed raise for a hot feed — hands off until the ball is ~70 pt out, then raise and hold.
+                if !fromInlane || !towardTip {
+                    inlaneTarget[i] = nil                           // it left the inlane (bounced off, or past)
+                } else if along <= t.along, busy == nil {
+                    mode = .catching(flipper: i, since: now, steadySince: nil)
+                    catchFromFeed = true
+                    feeds["raise", default: 0] += 1
+                    raiseLog.append([Double(along), Double(hypot(b.velocity.dx, b.velocity.dy)), 0])
+                    pressed[i] = true
+                    inlaneTarget[i] = nil
+                    trigger[i] = nil
+                    decidedCatch[i] = nil
+                    break
+                } else {
+                    trigger[i] = nil
+                    decidedCatch[i] = nil
+                    continue
                 }
             }
             if let t = inlaneTarget[i] {

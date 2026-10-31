@@ -80,15 +80,20 @@ final class ShotLab {
         /// Round 15c: the inlane release, but the flipper is raised AND HELD at the delay (a catch attempt, not a
         /// flip). Outcomes: cradled / launched / drain / none, or a shot event.
         case hold
+        /// The hold test with a hot feed: released at 1000 pt/s, like a fast ramp/wire return.
+        case holdfast
         var delayRange: ClosedRange<Double> {
             switch self {
             case .cradle: return ShotLab.minDelay...ShotLab.maxDelay
             case .inlane, .hold: return 0.30...0.90   // release at the inlane top → the ball reaches the flipper ~0.4–0.6 s later
             case .drop: return 0.10...0.50            // release 160 pt up → on the flipper after ~0.25 s
+            case .holdfast: return 0.02...0.50        // a 1000 pt/s release reaches the flipper in ~0.2 s
             }
         }
+        /// Raise and hold at the delay (a catch attempt) rather than flip.
+        var isHold: Bool { self == .hold || self == .holdfast }
         /// The inlane release serves both the flip (`inlane`) and the raise-and-hold (`hold`).
-        var usesInlaneRelease: Bool { self == .inlane || self == .hold }
+        var usesInlaneRelease: Bool { self == .inlane || self == .hold || self == .holdfast }
     }
 
     /// A horizontal line across the table at height `y`. The first time a flip's ball crosses it going
@@ -276,7 +281,9 @@ final class ShotLab {
                 // Round 15: a moving start — flippers at rest, the ball released now, the delay counted from here.
                 for f in flippers.indices { host.shotLabSetFlipper(f, pressed: false) }
                 let s = startKind.usesInlaneRelease ? starts.inlane : starts.drop
-                host.shotLabPlaceBall(at: s.point, velocity: s.velocity)
+                let v = startKind == .holdfast
+                    ? CGVector(dx: s.velocity.dx * 1000 / 300, dy: s.velocity.dy * 1000 / 300) : s.velocity
+                host.shotLabPlaceBall(at: s.point, velocity: v)
                 holdSettledSince = nil
                 stage = .dropped(at: now)
                 noteStep(step.speed)
@@ -325,7 +332,7 @@ final class ShotLab {
 
         case .flipped(let at):
             recordCrossings()
-            if startKind != .hold, now - at >= Self.flipHold { host.shotLabSetFlipper(step.flipper, pressed: false) }
+            if !startKind.isHold, now - at >= Self.flipHold { host.shotLabSetFlipper(step.flipper, pressed: false) }
             if let outcome = current?.outcome, !outcome.isEmpty {
                 finishTrial(outcome, now: now)
                 break
@@ -334,7 +341,7 @@ final class ShotLab {
                 finishTrial("none", now: now)
                 break
             }
-            if startKind == .hold {
+            if startKind.isHold {
                 // Round 15c: the flipper stays up. Cradled = still at the cradle point for 0.5 s; launched = the
                 // ball climbed above the flippers (the crook-press pinch); else drain / none as for a flip.
                 let still = hypot(ball.velocity.dx, ball.velocity.dy) < 40

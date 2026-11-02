@@ -141,6 +141,8 @@ final class MonTableScene: SKScene, RendererHostedScene {
     private var bonusBase = 0
     private var bonusMultiplier = 1
     private var dustDevil: MonDustDevil?
+    /// 2026-11-02: the Dust Storm's end (nil when the devil is calm). See startDustStorm().
+    private var dustStormUntil: TimeInterval?
     private var bumpers: [MonBumper] = []
     private var rollovers: [MonRollover] = []
     private var lanesResetAt: TimeInterval?
@@ -872,13 +874,19 @@ final class MonTableScene: SKScene, RendererHostedScene {
     /// the captive ball scores when it reaches the top of its channel.
     private func updateToys(_ dt: CGFloat, now: TimeInterval) {
         if let devil = dustDevil {
+            devil.animate(dt: dt)                    // the Dust Storm's funnel
             for ball in balls where ball.isOnFloor && ball.heldIn == nil {
                 guard let body = ball.physicsBody else { continue }
                 if let v = devil.stir(ballAt: ball.position, velocity: body.velocity, dt: dt) {
                     body.velocity = v
                     if !ball.inDustDevil {
                         ball.inDustDevil = true
-                        award(MonPoints.dustDevil)
+                        if dustStormUntil != nil {
+                            award(MonPoints.dustStormPass * cycle)
+                            showBanner("DUST STORM \((MonPoints.dustStormPass * cycle).formatted())")
+                        } else {
+                            award(MonPoints.dustDevil)
+                        }
                         sound.play(.dustDevil, volume: Float(settings.soundVolume) * (devil.isRaging ? 0.9 : 0.5))
                         shotEvent("dustDevil")
                         paintWash(.desert, units: 0.25, at: ball.position)
@@ -1262,6 +1270,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
             let units = regionUnits[i]
             lamps.set("drop.\(i)", paintedRegions.contains(region) ? .on : (units > 0 ? .blink : .off))
         }
+        if dustStormUntil != nil { lamps.set("drop.\(MonRegion.desert.rawValue)", .fastBlink) }   // the Dust Storm
         func needs(_ r: MonRegion) -> MonLampState { paintedRegions.contains(r) ? .off : .blink }
         lamps.set("helix", diverterToHelix ? .on : .off)
         let all: MonLampState? = superbloomOn ? .fastBlink : nil      // Superbloom: every shot lit
@@ -1324,6 +1333,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
         lamps.play(.flash, at: gameTime)
         rampHaptic.impactOccurred(intensity: 1)
         cameraRig.shake(strength: 3, duration: 0.25)
+        if region == .desert { startDustStorm() }   // before the Monsoon check, so "MONSOON IS LIT" wins the banner
         if paintedRegions.count >= monsoonNextAt, !monsoonLit, !monsoonOn, !superbloomLit,
            paintedRegions.count < 5 || wildflowers < MonTableLayout.wildflowersNeeded {
             monsoonLit = true
@@ -1336,6 +1346,30 @@ final class MonTableScene: SKScene, RendererHostedScene {
                        ? "THE DESERT IS PAINTED · BLOOM THE WILDFLOWERS IN MONSOON" : "THE DESERT IS PAINTED")
             lamps.play(.sweep, at: gameTime)
         }
+    }
+
+    // MARK: - Dust Storm (2026-11-02)
+
+    /// Painting the desert floor stirs up a Dust Storm: the devil rages (the strong push and bend, the fast spin) for
+    /// dustStormSeconds, and every pass through it scores dustStormPass × the cycle instead of 50. The Shot Lab measured
+    /// the raging devil: no drains through it (314 trials), centre shots wobble ~8°, the arroyo gets easier.
+    private func startDustStorm() {
+        dustStormUntil = gameTime + MonTableLayout.dustStormSeconds
+        dustDevil?.isRaging = true
+        showBanner("DUST STORM!")
+        sfx(.dustDevil)
+        lamps.play(.sweep, at: gameTime)
+    }
+
+    private func endDustStorm(banner: Bool) {
+        guard dustStormUntil != nil else { return }
+        dustStormUntil = nil
+        dustDevil?.isRaging = false
+        if banner { showBanner("THE DUST SETTLES") }
+    }
+
+    private func updateDustStorm(_ now: TimeInterval) {
+        if let until = dustStormUntil, now >= until { endDustStorm(banner: true) }
     }
 
     // MARK: - Rules: Act 2, Monsoon (milestone 8 round 3)
@@ -1454,6 +1488,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
     }
 
     private func startBonus(at now: TimeInterval) {
+        endDustStorm(banner: false)                  // the storm ends with the ball
         bonusBase = shotsThisBall * MonTableLayout.bonusPerShot + spinsThisBall * MonTableLayout.bonusPerSpin
         bonusMultiplier = game.multiplier
         bonusStart = now
@@ -1780,6 +1815,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
         setDiverter(toHelix: false)
         captive?.reset()
         dustDevil?.isRaging = false
+        dustStormUntil = nil
         monsoonOn = false
         superbloomLit = false
         superbloomOn = false
@@ -2131,6 +2167,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
         updateLanes(now)
         updateScoops(now)
         updateMonsoon(now)
+        updateDustStorm(now)
         updateStandups(now)
         updateSpinner(dt, now: now)
         paint.step(dt: dt)
@@ -2302,7 +2339,10 @@ final class MonTableScene: SKScene, RendererHostedScene {
     func debugToggleDiverter() { setDiverter(toHelix: !diverterToHelix) }
 
     /// Makes the dust devil rage (strong push, fast spin) or calm down (until the rules light it).
-    func debugToggleDustDevil() { dustDevil?.isRaging.toggle() }
+    /// 2026-11-02: starts (or ends) a Dust Storm, the devil's raging mode, as painting the desert floor does.
+    func debugToggleDustDevil() {
+        if dustStormUntil != nil { endDustStorm(banner: true) } else { startDustStorm() }
+    }
 
     // MARK: - Contacts
 

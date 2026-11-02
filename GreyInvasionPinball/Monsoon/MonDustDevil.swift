@@ -1,7 +1,7 @@
 // Pinball Lab Table 04 (Monsoon), milestone 5: the dust devil, a spinning disc set in the playfield. Any floor ball
 // crossing it is pushed sideways along the spin (anticlockwise), each frame in update. Gentle normally; much
-// stronger while it's "raging" (the rules light it; until then the pause card's debug button does). No physics body:
-// the scene applies the push, so it can't trap a ball or tunnel.
+// stronger while it's "raging": the Dust Storm, 30 s after the desert floor is painted (2026-11-02, MonTableScene).
+// No physics body: the scene applies the push, so it can't trap a ball or tunnel.
 import SpriteKit
 import CoreGraphics
 import Foundation
@@ -13,6 +13,8 @@ final class MonDustDevil: SKNode {
         didSet { guard isRaging != oldValue else { return }; setSpin() }
     }
     private let swirl = SKNode()
+    /// 2026-11-02: the funnel of sand that rises and spins during the Dust Storm (MonDustFunnel).
+    private let funnel = MonDustFunnel()
     private let rim: SKShapeNode
     /// Push along the spin, pt/s², at the disc's middle ring (it fades to nothing at the centre and the edge). This
     /// is what makes slow balls curl.
@@ -71,6 +73,8 @@ final class MonDustDevil: SKNode {
             }
         }
         addChild(swirl)
+        funnel.zPosition = 58.6                 // the disc is −18.6, so the funnel draws at 40: over the balls (it's
+        addChild(funnel)                        // translucent), under the rain (46.5), the dimmer (48) and the banners
         setSpin()
     }
 
@@ -83,6 +87,12 @@ final class MonDustDevil: SKNode {
         swirl.run(.repeatForever(.rotate(byAngle: 2 * .pi, duration: isRaging ? 0.45 : 1.6)))
         rim.strokeColor = isRaging ? SKColor(red: 1.0, green: 0.78, blue: 0.45, alpha: 0.95)
                                    : SKColor(red: 0.85, green: 0.78, blue: 0.66, alpha: 0.7)
+        funnel.setRaging(isRaging)
+    }
+
+    /// The funnel's frame (its spin, sway and rise/sink); the scene calls it every frame.
+    func animate(dt: CGFloat) {
+        funnel.animate(dt: dt)
     }
 
     /// The ball's new velocity after a frame on the disc, or nil when it's outside it: its path bends anticlockwise

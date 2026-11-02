@@ -109,7 +109,7 @@ struct MonHowToPlayView: View {
                             picture("mon_goal_saguaros", "Saguaros: the standups from the left flipper (1), each one lighting as you hit it, and the captive ball from the right flipper (2).")
                             step(4, "Arroyo · 6 washes", "The arroyo hole. A finished wire ride is half a wash.")
                             picture("mon_goal_arroyo", "Arroyo: the centre hole (1), which sends the ball round the low wire (2) to the right inlane. A painted region has lit the outlane save, bottom right.")
-                            step(5, "Desert · 6 washes", "Every 10th bumper hit. Each pass through the dust devil is a quarter wash.")
+                            step(5, "Desert · 6 washes", "Every 10th bumper hit. Each pass through the dust devil is a quarter wash. Painting it stirs up a 30-second Dust Storm: the devil spins hard and every pass scores 5,000.")
                             picture("mon_goal_desert", "Desert: every 10th storm-cloud hit (1) and every pass through the dust devil (2).")
                             para("Shot arrows blink while their region still needs color, and the five paint drops round the dust devil show how far each region has got.")
                         }

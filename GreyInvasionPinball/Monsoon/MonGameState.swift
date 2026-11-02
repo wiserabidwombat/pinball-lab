@@ -19,6 +19,8 @@ enum MonPoints {
     static let captiveKnock = 100
     static let captiveTop = 2_500
     static let dustDevil = 50
+    /// 2026-11-02: a dust-devil pass during the Dust Storm (painting the desert floor starts it), × the cycle.
+    static let dustStormPass = 5_000
     /// M8 v2: each wash of color, and a region painted all the way.
     static let wash = 250
     static let regionPainted = 10_000

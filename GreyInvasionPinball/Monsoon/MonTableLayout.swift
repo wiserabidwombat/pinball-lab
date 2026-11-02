@@ -375,6 +375,9 @@ enum MonTableLayout {
     /// makes centre shots wobble.
     static let dustDevilCenter = CGPoint(x: 284, y: 470)
     static let dustDevilRadius: CGFloat = 44
+    /// 2026-11-02: the Dust Storm, the devil's raging mode (the plan's "strong while its mode is lit"; no rule had ever
+    /// lit it). Painting the desert floor starts it; it lasts this long, or until the ball is lost.
+    static let dustStormSeconds: TimeInterval = 30
 
     /// Milestone 5, the captive ball: a channel on the left side, its mouth facing the right flipper (heading 120°,
     /// up and to the left), 82 long, 21 wide, ending 12 pt off the left wall's bulge (too narrow for a ball). It stays

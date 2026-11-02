@@ -1725,6 +1725,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
         let find = LmpShop.shared.find(from: source, lucky: game.lucky, festival: festivalActive,
                                        treasureBoost: has(.windowSeat) && game.lucky)
         game.findsTonight += 1
+        if source == .loft { game.loftFindsTonight += 1 }        // plan 2 round 19
         ballFinds += 1
         labObjective("find")
         if find.isNew { game.newTonight += 1; refreshShelf() }
@@ -2726,7 +2727,7 @@ extension LmpTableScene: PlayLabHost {
             rushBallsToServe = 0
         }
         return ["requests": game.requestsTonight, "rushes": game.rushesTonight,
-                "finds": game.findsTonight, "newBooks": game.newTonight]
+                "finds": game.findsTonight, "newBooks": game.newTonight, "loftFinds": game.loftFindsTonight]
     }
 
     func playLabStop() {

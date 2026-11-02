@@ -55,7 +55,20 @@ def summarize(path, d, a):
                 minutes=minutes, incidents=len(a["incidents"]), flags=a["flags"], notes=a["notes"], rows=rows,
                 drains=drains, reach=reach, reached=reached, aims=a["aims"], nobj=len(names), aim_text=aim_text,
                 curves=pr.curves_svg(a, skills=("expert",), inline=True, panel_w=220, panel_h=130, per_row=3),
-                page=os.path.splitext(path)[0] + ".html", tracks=os.path.splitext(path)[0] + "-tracks.svg", delta=None)
+                page=os.path.splitext(path)[0] + ".html", tracks=os.path.splitext(path)[0] + "-tracks.svg", delta=None,
+                econ=econ_lines(path, d))
+
+
+def econ_lines(path, d):
+    """Plan 2 round 19: the Lamplight's collection pace per skill, from this run's evenings (tools/lmp_econ_sim.py)."""
+    if "Lamplight" not in d.get("table", ""):
+        return []
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import lmp_econ_sim
+        return lmp_econ_sim.played_lines([path])
+    except Exception as ex:              # the index must never fail on the sim
+        return [f"(collection sim failed: {ex})"]
 
 
 # ---------------------------------------------------------------- regression mode (plan 2, round 3)
@@ -306,6 +319,9 @@ def write_html(tables, out_path, games_per_skill, hz, failed, baseline_name=None
             h.append("<ul class='small'>" + "".join(f"<li>{e(n)}</li>" for n in t["notes"]) + "</ul>")
         if t.get("curves"):
             h.append("<details><summary class='small'>expert · time to objective (round 14)</summary>" + t["curves"] + "</details>")
+        if t.get("econ"):
+            h.append("<details><summary class='small'>collection pace, from these evenings (round 19)</summary><ul class='small'>"
+                     + "".join(f"<li>{e(x)}</li>" for x in t["econ"]) + "</ul></details>")
         h.append("</div>")
     h.append("</div></main></body></html>")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -334,6 +350,8 @@ def print_text(tables, failed, baseline_name=None, retried=()):
             print(f"   {p:6} {scores}   drains/min {dr}   reached {n}/{t['nobj']}" + (f" (missed: {missed})" if missed != "everything" else ""))
         for f in t["flags"]:
             print(f"   ! {f}")
+        for x in t.get("econ", []):
+            print(f"   collection: {x}")
     if failed:
         print("No report:", ", ".join(failed))
     if retried:

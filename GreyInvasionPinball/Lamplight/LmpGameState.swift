@@ -19,6 +19,8 @@ final class LmpGameState {
     var findToast: LmpFind?
     var findsTonight = 0
     var newTonight = 0
+    /// Plan 2 round 19: finds from the loft tonight (the Play Lab reports them for the economy sim).
+    var loftFindsTonight = 0
     /// M6: a loop combo or a full plunge makes it a lucky evening: better odds on rare books until closing.
     var lucky = false
     /// M6 round 3: where the cat is tonight (shown on the pause card with what she does there).
@@ -69,6 +71,7 @@ final class LmpGameState {
         findToast = nil
         findsTonight = 0
         newTonight = 0
+        loftFindsTonight = 0
         lucky = false
         status = nil
         requestsTonight = 0

@@ -123,6 +123,8 @@ final class ShotLab {
         var crossings: [String: Crossing] = [:]   // probe name → where the ball crossed it
         var context: Double?             // the host's shotLabContext at the flip (Table 03: Cthulhu's sway phase)
         var start: String = "cradle"     // round 15: cradle | inlane | drop
+        var flipPoint: [Double]?         // round 17: the ball at the flip [x, y]
+        var launch: [Double]?            // round 17: first 60 pt off the flipper [x, y, degrees, speed]
     }
 
     struct Results: Codable {
@@ -324,6 +326,7 @@ final class ShotLab {
                 trial.context = host.shotLabContext
                 if let ball = host.shotLabBall {
                     trial.flipAlong = Double(hypot(ball.position.x - spec.pivot.x, ball.position.y - spec.pivot.y))
+                    trial.flipPoint = [(Double(ball.position.x) * 10).rounded() / 10, (Double(ball.position.y) * 10).rounded() / 10]
                 }
                 current = trial
             }
@@ -332,6 +335,7 @@ final class ShotLab {
 
         case .flipped(let at):
             recordCrossings()
+            recordLaunch()
             if !startKind.isHold, now - at >= Self.flipHold { host.shotLabSetFlipper(step.flipper, pressed: false) }
             if let outcome = current?.outcome, !outcome.isEmpty {
                 finishTrial(outcome, now: now)
@@ -378,6 +382,19 @@ final class ShotLab {
     private func noteStep(_ speed: Double) {
         let frame = startedAt.map { frames > 1 ? (CACurrentMediaTime() - $0) / Double(frames) : 1.0 / 60 } ?? 1.0 / 60
         current?.physicsStepMs = (frame * speed * 10_000).rounded() / 10
+    }
+
+    /// Round 17: the ball's first straight line off the flipper, for the window map: where it is (and its heading and
+    /// speed) the first frame it's 60 pt from where it was at the flip.
+    private func recordLaunch() {
+        guard var trial = current, trial.launch == nil, let from = trial.flipPoint, from.count == 2,
+              let ball = host.shotLabBall else { return }
+        let x = Double(ball.position.x), y = Double(ball.position.y)
+        guard hypot(x - from[0], y - from[1]) >= 60 else { return }
+        let v = ball.velocity
+        trial.launch = [(x * 10).rounded() / 10, (y * 10).rounded() / 10,
+                        (Double(atan2(v.dy, v.dx)) * 180 / .pi * 10).rounded() / 10, Double(hypot(v.dx, v.dy)).rounded()]
+        current = trial
     }
 
     /// Probe lines: the first upward crossing of each, interpolated between this frame and the last.

@@ -23,6 +23,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "GreyInvasionPinball", "HallOfFame")
 OUT = os.path.join(OUT_DIR, "halloffame.json")
 SKILLS = ["beginner", "intermediate", "advanced", "expert"]
+# The lab screenshots carry the debug build tag (fps, build, PLAY LAB line) in the bottom ~6 % of the frame; the
+# picture ships in the app, so that strip is cropped off (2026-11-02, table agent). Keep 92.5 % of the height.
+KEEP_HEIGHT = 0.925
 
 
 def slug(table):
@@ -45,6 +48,28 @@ def picture_for(report_path, game):
     pick = next((c for c in caps if c.get("reason") == "gameEnd"), caps[-1])
     p = os.path.join(os.path.splitext(report_path)[0], pick.get("file", ""))
     return p if os.path.isfile(p) else None
+
+
+def crop_debug_strip(path):
+    """Crop the bottom (1 - KEEP_HEIGHT) of the picture, where the lab's debug tag sits. PIL if present, else sips."""
+    try:
+        from PIL import Image
+        im = Image.open(path).convert("RGB")
+        w, h = im.size
+        im.crop((0, 0, w, round(h * KEEP_HEIGHT))).save(path, quality=85)
+        return
+    except ImportError:
+        pass
+    if shutil.which("sips"):
+        out = subprocess.run(["sips", "-g", "pixelHeight", "-g", "pixelWidth", path],
+                             capture_output=True, text=True).stdout
+        dims = {k: int(v) for k, v in (ln.split(":") for ln in out.splitlines()[1:] if ":" in ln)}
+        h, w = dims.get("pixelHeight", 0), dims.get("pixelWidth", 0)
+        if h and w:
+            subprocess.run(["sips", "--cropToHeightWidth", str(round(h * KEEP_HEIGHT)), str(w),
+                            "--cropOffset", "0", "0", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+    print(f"  warning: couldn't crop the debug strip off {os.path.basename(path)} (no PIL or sips)")
 
 
 def main():
@@ -97,6 +122,7 @@ def main():
             shutil.copyfile(src, dst)
             if shutil.which("sips"):
                 subprocess.run(["sips", "-Z", "700", dst], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            crop_debug_strip(dst)
             for e in entries.values():
                 e["picture"] = None
             top["picture"] = os.path.basename(dst)

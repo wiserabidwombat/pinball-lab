@@ -1263,7 +1263,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
     private func updateAmbience(_ dt: Float) {
         var quiet = isLabRunning
         #if DEBUG
-        if playLab != nil { quiet = true }
+        if playLab != nil, playLab?.isWatching != true { quiet = true }   // round 20: not when watched
         #endif
         let v = quiet ? 0 : Float(settings.soundVolume)
         sound.setLoop(.fire, target: v * LmpTableLayout.fireLoopGain)
@@ -1274,7 +1274,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
     private func sfx(_ s: LmpSound) {
         if isLabRunning { return }                 // the robot plays silently
         #if DEBUG
-        if playLab != nil { return }               // and so do the Play Lab's players
+        if playLab != nil, playLab?.isWatching != true { return }   // and so do the Play Lab's players (round 20: not when watched)
         #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }

@@ -639,7 +639,7 @@ final class TableScene: SKScene, RendererHostedScene {
     /// Plays a sound effect (missing files are skipped).
     private func sfx(_ s: Sound) {
         #if DEBUG
-        if shotLab != nil || playLab != nil { return }   // the robots play silently
+        if shotLab != nil || (playLab != nil && playLab?.isWatching != true) { return }   // the robots play silently (round 20: not when watched)
         #endif
         sound.play(s, volume: Float(settings.soundVolume))   // M10: the settings volume
     }

@@ -365,6 +365,8 @@ struct CthTableView: View {
             debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
             // Plan 2 round 6: one expert game at the phone's own step, 3-minute cap, the report shared when done.
             debugButton("Play Lab · quick") { PlayLab.nextRunIsQuick = true; scene.debugStartPlayLab(); setPaused(false) }
+            // Plan 2 round 20: the robots at real speed with sound and camera, the four skills in turn (nothing saved).
+            debugButton("Watch the robots") { PlayLab.nextRunIsWatch = true; scene.debugStartPlayLab(); setPaused(false) }
             // Plan 2 round 12: one game of your own, watched by the lab (no robot), the report shared when it ends.
             debugButton("Record me") { PlayLab.nextRunIsRecording = true; scene.debugStartPlayLab(); setPaused(false) }
             // Rules shortcuts (M7 v2): skip ahead through the tomes, or straight to the Ritual.

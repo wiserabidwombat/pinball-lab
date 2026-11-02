@@ -1829,7 +1829,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
     private func updateStormBed(_ dt: CGFloat) {
         var v = Float(settings.soundVolume) * Float(MonTableLayout.stormBedGain)
         #if DEBUG
-        if playLab != nil { v = 0 }                // the robot plays silently
+        if playLab != nil, playLab?.isWatching != true { v = 0 }   // the robot plays silently (round 20: not when watched)
         #endif
         let p = Float(paintedRegions.count) / 5
         var mix: [MonLoop: Float]
@@ -1853,7 +1853,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
 
     private func sfx(_ s: MonSound) {
         #if DEBUG
-        if shotLab != nil || playLab != nil { return }   // the robots play silently
+        if shotLab != nil || (playLab != nil && playLab?.isWatching != true) { return }   // the robots play silently (round 20: not when watched)
         #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }

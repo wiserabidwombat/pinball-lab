@@ -807,6 +807,9 @@ nonisolated struct PlayGame: Codable {
     var captures: [PlayCapture] = []
     var drains: [PlayDrain] = []
     var plunges: [PlayPlunge] = []      // round 7a: the plunge sweep's record of every plunge (empty in normal runs)
+    /// Plan 2 round 21: the whole game for the report's replay — every 0.1 s of table time "t,buttons,x,y,u,x,y,u…"
+    /// (u 1 = on a ramp/loft; buttons 1 left, 2 right, 3 both), frames joined by ";".
+    var replay: String?
 }
 
 /// Round 7a: what one plunge did — for the sweep that maps plunger power to the top lanes / skill shot per table.
@@ -875,6 +878,19 @@ struct PlayLabConfig {
     /// Round 12: no robot — the lab only watches while YOU play (drains, shots, objectives, catches), and the game is
     /// labelled "you" in the report, so tools/playlab_calibrate.py can say which robot you play like.
     var recording = false
+    /// Plan 2 round 20, "Watch the robots": real speed, the table's sound and camera, nothing saved.
+    var watch = false
+
+    /// Round 20: the four skills in turn (beginner → expert, round and round), 3-minute games at the device's own step,
+    /// no screenshots, no report.
+    static var watching: PlayLabConfig {
+        var c = PlayLabConfig.quick
+        c.skills = (0..<25).flatMap { _ in [PlaySkill.beginner, .intermediate, .advanced, .expert] }
+        c.maxCapturesPerGame = 0
+        c.shareOnSave = false
+        c.watch = true
+        return c
+    }
 
     /// Round 12, the "Record me" button: one game of your own, at the phone's own step, a 15-minute cap, the report
     /// shared when it ends.
@@ -981,6 +997,8 @@ final class PlayLab {
     static var nextRunIsQuick = false
     /// Round 12: set by a view's "Record me" button the same way.
     static var nextRunIsRecording = false
+    /// Round 20: set by a view's "Watch the robots" button the same way.
+    static var nextRunIsWatch = false
 
     private unowned let host: PlayLabHost
     let config: PlayLabConfig
@@ -1015,6 +1033,9 @@ final class PlayLab {
     private var lowPath: [(x: CGFloat, y: CGFloat, at: TimeInterval, buttons: Double)] = []
     private var recentShots: [(name: String, at: TimeInterval)] = []
     private var lastButtons = 0.0
+    /// Round 21: the replay frames of the game in progress, and when the last was taken (table time).
+    private var replayFrames: [String] = []
+    private var lastReplayAt: TimeInterval = -1
 
     init(host: PlayLabHost, config given: PlayLabConfig? = nil) {
         self.host = host
@@ -1027,6 +1048,9 @@ final class PlayLab {
         } else if PlayLab.nextRunIsRecording {
             PlayLab.nextRunIsRecording = false
             config = .recording
+        } else if PlayLab.nextRunIsWatch {
+            PlayLab.nextRunIsWatch = false
+            config = .watching
         } else {
             config = .fromLaunchArguments()
         }
@@ -1047,6 +1071,9 @@ final class PlayLab {
 
     var isDone: Bool { index >= plan.count }
 
+    /// Round 20: a watched run plays with the table's sound (the hosts check this where robots play silently).
+    var isWatching: Bool { config.watch }
+
     /// The physics speed for the game in progress (1 between games).
     var physicsSpeed: CGFloat { index < plan.count && !config.nativeSpeed ? plan[index].pass.physicsSpeed : 1 }
 
@@ -1054,6 +1081,7 @@ final class PlayLab {
         guard index < plan.count else { return "PLAY LAB DONE" }
         let p = plan[index]
         if config.recording { return "RECORDING YOU · \(p.pass.label) · play as you always do" }
+        if config.watch { return "WATCHING · \(p.skill.rawValue.uppercased()) · \(p.pass.label) · Menu stops it" }
         return "PLAY LAB · \(p.skill.rawValue.uppercased()) · \(p.pass.label) · GAME \(index + 1)/\(plan.count)"
     }
 
@@ -1076,6 +1104,8 @@ final class PlayLab {
         lastPlunge = nil
         watching = nil
         lowPath.removeAll()
+        replayFrames.removeAll()
+        lastReplayAt = -1
         recentShots.removeAll()
         captureQueue.removeAll()
         capturesThisGame = 0
@@ -1221,6 +1251,13 @@ final class PlayLab {
     /// A ball that vanishes within 0.6 s of being seen below the flipper pivots, heading down, drained: note where it
     /// was, how fast, what the robot was doing and how long since the plunge that put it in play.
     private func noteDrains(_ view: PlayRobotView, mode: String) {
+        // Round 21: the whole game for the replay — every ball every 0.1 s of table time, with the buttons.
+        if lastReplayAt < 0 || view.now - lastReplayAt >= 0.1 {
+            lastReplayAt = view.now
+            var f = "\((((view.now - gameStart) * 10).rounded() / 10)),\(Int(lastButtons))"
+            for b in view.balls { f += ",\(Int(b.position.x.rounded())),\(Int(b.position.y.rounded())),\(b.isUpper ? 1 : 0)" }
+            replayFrames.append(f)
+        }
         let count = view.balls.count
         if count < ballCount { logDrain(now: view.now, mode: mode) }
         ballCount = count
@@ -1369,6 +1406,7 @@ final class PlayLab {
         g.feedRaises = robot?.raiseLog ?? []
         for (k, v) in robot?.passResults ?? [:] { g.aims[k] = v }      // round 10: "pass@0.54" → [tried, made]
         g.extras = host.playLabEndGame()
+        g.replay = replayFrames.isEmpty ? nil : replayFrames.joined(separator: ";")    // round 21
         games.append(g)
         current = nil
         robot = nil
@@ -1390,6 +1428,7 @@ final class PlayLab {
 
     /// Writes the report; returns the file name (or why it failed).
     func save() -> String {
+        if config.watch { return "watching (nothing saved)" }      // round 20
         struct Flipper: Codable {
             let name: String
             let pivot: [Double]

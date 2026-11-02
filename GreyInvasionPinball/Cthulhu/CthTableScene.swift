@@ -1495,7 +1495,7 @@ final class CthTableScene: SKScene, RendererHostedScene {
 
     private func sfx(_ s: CthSound) {
         #if DEBUG
-        if shotLab != nil || slingLab != nil || playLab != nil { return }   // the robots play silently
+        if shotLab != nil || slingLab != nil || (playLab != nil && playLab?.isWatching != true) { return }   // the robots play silently (round 20: not when watched)
         #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }

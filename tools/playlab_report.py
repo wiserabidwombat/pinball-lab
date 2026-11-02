@@ -649,6 +649,73 @@ details summary{cursor:pointer;color:var(--dim)}.small{font-size:13px;color:var(
 """
 
 
+# ---------------------------------------------------------------- replays (plan 2, round 21)
+
+def replays_html(d, map_file=None, map_rect=(-40, -75, 680, 1405)):
+    """A player for whole games: every ball every 0.1 s (PlayGame.replay), a scrubber, play/speed, and jump links —
+    objectives, drains, the best ball (longest life) and the worst drain (shortest life)."""
+    e = html.escape
+    X, Y, W, H = map_rect
+    data, opts = {}, []
+    for i, g in enumerate(d.get("games", [])):
+        if not g.get("replay"):
+            continue
+        marks = [(t, "objective", n) for n, t in sorted(g.get("objectives", {}).items(), key=lambda kv: kv[1])]
+        drains = g.get("drains", [])
+        for dr in drains:
+            marks.append((max(0, dr["at"] - 4), "drain", f"drain at {dr['at']:.0f}s · life {dr.get('life', 0):.0f}s"))
+        if drains:
+            best = max(drains, key=lambda dr: dr.get("life", 0))
+            worst = min(drains, key=lambda dr: dr.get("life", 0))
+            marks.append((max(0, best["at"] - best.get("life", 0)), "best", f"best ball · {best.get('life', 0):.0f}s"))
+            marks.append((max(0, worst["at"] - 4), "worst", f"worst drain · life {worst.get('life', 0):.0f}s"))
+        marks.sort()
+        data[i] = {"r": g["replay"], "m": [[round(t, 1), k, n] for t, k, n in marks]}
+        opts.append(f"<option value='{i}'>game {i + 1} · {e(g.get('pass', ''))} {e(g.get('skill', ''))} · "
+                    f"{g.get('score', 0):,} · {g.get('seconds', 0) / 60:.1f} min</option>")
+    if not data:
+        return ""
+    art = (f"<image href='{e(map_file)}' x='0' y='0' width='{W}' height='{H}' opacity='0.8'/>" if map_file else "")
+    out = [
+        "<h2>Replays</h2><div class='panel small'>round 21 · whole games, every ball every 0.1 s of table time "
+        "(hollow = on a ramp or the loft) · the flipper buttons light under the table · jump links: objectives, "
+        "each drain (4 s before), the best ball (its plunge) and the worst drain</div>",
+        "<div class='panel'><div style='display:flex;gap:8px;flex-wrap:wrap;align-items:center'>"
+        f"<select id='rpGame'>{''.join(opts)}</select><button id='rpPlay'>▶ play</button>"
+        "<select id='rpSpeed'><option value='1'>1×</option><option value='2'>2×</option><option value='4' selected>4×</option>"
+        "<option value='8'>8×</option></select><span id='rpTime' class='small'></span></div>"
+        "<input id='rpScrub' type='range' min='0' max='1000' value='0' style='width:100%;margin:8px 0'>"
+        "<div id='rpMarks' class='small' style='line-height:1.9'></div>"
+        f"<svg viewBox='0 0 {W} {H + 40}' style='width:100%;max-width:420px;background:#101010;display:block;margin:8px auto'>"
+        f"{art}<rect x='{-X}' y='{Y + H - 1300}' width='600' height='1300' fill='none' stroke='#555' stroke-width='2'/>"
+        "<g id='rpTrail'></g><g id='rpBalls'></g>"
+        f"<rect id='rpL' x='{-X + 150}' y='{H + 8}' width='120' height='24' rx='6' fill='#333'/>"
+        f"<rect id='rpR' x='{-X + 330}' y='{H + 8}' width='120' height='24' rx='6' fill='#333'/></svg></div>",
+        "<script>(function(){const RP=" + json.dumps(data, separators=(",", ":")) + ";",
+        f"const X={X},Y={Y},H={H};",
+        r"""
+const $=id=>document.getElementById(id);let F=[],T=0,playing=false,last=null,cur=null;
+function load(i){const g=RP[i];F=g.r.split(';').map(s=>s.split(',').map(Number));cur=g;T=0;
+ $('rpMarks').innerHTML=g.m.map(m=>`<a href='#' data-t='${m[0]}' style='margin-right:10px;color:${{objective:'#7fd17f',drain:'#d1403a',best:'#ffd54f',worst:'#ff8a65'}[m[1]]}'>${m[0].toFixed(0)}s ${m[2]}</a>`).join('');
+ $('rpMarks').querySelectorAll('a').forEach(a=>a.onclick=ev=>{ev.preventDefault();seek(+a.dataset.t);});draw();}
+function dur(){return F.length?F[F.length-1][0]:0}
+function frameAt(t){let lo=0,hi=F.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(F[m][0]<=t)lo=m;else hi=m-1;}return lo}
+function sx(x){return x-X} function sy(y){return Y+H-y}
+function draw(){if(!F.length)return;const k=frameAt(T),f=F[k];let s='';
+ for(let j=2;j+2<f.length;j+=3){const up=f[j+2]==1;s+=`<circle cx='${sx(f[j])}' cy='${sy(f[j+1])}' r='${up?9:8}' fill='${up?'none':'#fff'}' stroke='#fff' stroke-width='3'/>`;}
+ $('rpBalls').innerHTML=s;let t='';for(let q=Math.max(0,k-12);q<k;q++){const g=F[q];for(let j=2;j+2<g.length;j+=3)t+=`<circle cx='${sx(g[j])}' cy='${sy(g[j+1])}' r='3' fill='#4fc3f7' opacity='${(q-k+13)/16}'/>`;}
+ $('rpTrail').innerHTML=t;const b=f[1];$('rpL').setAttribute('fill',b&1?'#4fc3f7':'#333');$('rpR').setAttribute('fill',b&2?'#4fc3f7':'#333');
+ $('rpTime').textContent=`${T.toFixed(1)} / ${dur().toFixed(0)} s`;$('rpScrub').value=Math.round(1000*T/Math.max(dur(),0.1));}
+function seek(t){T=Math.max(0,Math.min(dur(),t));draw();}
+function tick(ts){if(!playing){last=null;return}if(last!=null){T+=(ts-last)/1000*(+$('rpSpeed').value);if(T>=dur()){T=dur();playing=false;$('rpPlay').textContent='▶ play';}}last=ts;draw();if(playing)requestAnimationFrame(tick);}
+$('rpPlay').onclick=()=>{playing=!playing;$('rpPlay').textContent=playing?'❚❚ pause':'▶ play';if(playing){last=null;requestAnimationFrame(tick);}};
+$('rpScrub').oninput=()=>seek(dur()*$('rpScrub').value/1000);
+$('rpGame').onchange=()=>{playing=false;$('rpPlay').textContent='▶ play';load($('rpGame').value);};
+load($('rpGame').value);})();</script>""",
+    ]
+    return "".join(out)
+
+
 def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40, -75, 680, 1405)):
     e = html.escape
     games, passes, extras = a["games"], a["passes"], a["extras"]
@@ -804,6 +871,7 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
         h.append("</div>")
 
     # Incidents
+    h.append(replays_html(d, map_file, map_rect))          # round 21
     h.append(f"<h2>Watchdog</h2><div class='panel'>{len(a['incidents'])} incident(s)")
     if a["incidents"]:
         h.append("<table><tr><th>pass</th><th>skill</th><th>kind</th><th>where</th><th>layer</th><th>t</th></tr>" + "".join(

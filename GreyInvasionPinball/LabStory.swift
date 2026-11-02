@@ -204,6 +204,10 @@ struct LabTableStoryView: View {
                         notes(table.newThings)
                     }
                     section("WHAT WE LEARNED") { notes(table.lessons) }
+                    // Plan 2 round 23: the robots' best games (HallOfFame/halloffame.json, from the Play Lab sweeps).
+                    if let hall = LabHallOfFame.entries(for: table) {
+                        section("HALL OF FAME") { LabHallOfFameView(table: table, entries: hall) }
+                    }
                     Button {
                         dismiss()
                         onPlay()

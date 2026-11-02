@@ -52,6 +52,8 @@ finish() {
     python3 tools/playlab_index.py --out "ShotLab/sweep-$STAMP.html" --games "$GAMES" --hz "$HZ" \
       --failed "$FAILED_CSV" --retried "$RETRIED_CSV" ${BASELINE:+--baseline "$BASELINE"} "${REPORTS[@]}" | tee -a "$LOG"
     say "▶ Index: ShotLab/sweep-$STAMP.html (log: $LOG)"
+    # Plan 2 round 23: the robots' hall of fame (bundled in the app; rebuild to see it on the Lab card).
+    python3 tools/playlab_halloffame.py --since "$STAMP" 2>&1 | tee -a "$LOG" || true
     open "ShotLab/sweep-$STAMP.html" 2>/dev/null || true
   else
     say "No reports — nothing to index (log: $LOG)"

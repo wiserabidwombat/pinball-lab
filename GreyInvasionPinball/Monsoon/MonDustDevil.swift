@@ -16,15 +16,16 @@ final class MonDustDevil: SKNode {
     private let rim: SKShapeNode
     /// Push along the spin, pt/s², at the disc's middle ring (it fades to nothing at the centre and the edge). This
     /// is what makes slow balls curl.
-    static let calmPush: CGFloat = 600
-    static let ragingPush: CGFloat = 1600
+    /// Plan 2 round 18: overridable for a what-if run (`-override "Mon.ragingPush=2000"`; LabOverrides.swift).
+    static var calmPush: CGFloat { LabOverrides.cg("Mon.calmPush", 600) }
+    static var ragingPush: CGFloat { LabOverrides.cg("Mon.ragingPush", 1600) }
     /// T4 M5 v3 (Aaron: on fast shots "it's hard to tell it wobbles the ball at all"): the ball's path also bends by
     /// this many radians per point it travels on the middle ring, so fast balls bend as much as slow ones. Straight
     /// through the middle that's about 1.5° calm and 8° raging.
     /// T4 M6 v2: calm halved (was 0.0009). The Shot Lab found 3° bent left-flipper shots off the mesa ramp's left
     /// post and into the arroyo (ramp 20% vs 47% on Table 03, arroyo 88%); Aaron chose a weaker calm devil.
-    static let calmBend: CGFloat = 0.00045
-    static let ragingBend: CGFloat = 0.0025
+    static var calmBend: CGFloat { LabOverrides.cg("Mon.calmBend", 0.00045) }
+    static var ragingBend: CGFloat { LabOverrides.cg("Mon.ragingBend", 0.0025) }
 
     init(at center: CGPoint, radius: CGFloat) {
         self.radius = radius

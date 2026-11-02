@@ -127,6 +127,8 @@ def build_line(d):
         return "unknown (report predates build identity)"
     parts = [b.get("id") or "no runner id (phone build?)", b.get("bundleVersion", ""), "built " + b.get("builtAt", "?"),
              b.get("device", "")]
+    if b.get("overrides"):          # plan 2 round 18: a what-if run
+        parts.append("OVERRIDES " + ", ".join(f"{k}={v:g}" for k, v in sorted(b["overrides"].items())))
     return " · ".join(p for p in parts if p)
 
 

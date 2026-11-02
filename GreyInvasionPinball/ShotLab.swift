@@ -136,6 +136,7 @@ final class ShotLab {
         let majorEvents: [String]
         let trials: [Trial]
         var start: String = "cradle"     // round 15: every trial in a file shares one start
+        var overrides: [String: Double]? = LabOverrides.recorded   // round 18: what-if overrides this run used
     }
 
     // MARK: Settings

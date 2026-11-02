@@ -58,6 +58,8 @@ ARGS=(-shotlab "$TABLE")
 [ -n "$SCENARIO" ] && ARGS+=(-shotlab-scenario "$SCENARIO")
 [ -n "$FLIPPERS" ] && ARGS+=(-shotlab-flippers "$FLIPPERS")
 [ -n "$START" ] && ARGS+=(-shotlab-start "$START")
+# Plan 2 round 18: OVERRIDE="Mon.ragingPush=2000,Mon.calmBend=0.0009" — what-if tunables (GreyInvasionPinball/LabOverrides.swift).
+[ -n "${OVERRIDE:-}" ] && ARGS+=(-override "$OVERRIDE") && echo "▶ Overrides: $OVERRIDE"
 echo "▶ Launching the Shot Lab: ${ARGS[*]} (the app quits by itself when the results are saved)"
 BEFORE=$(ls -t ShotLab/shotlab-*.json 2>/dev/null | head -1 || true)
 xcrun simctl launch --console "$UDID" "$BUNDLE" "${ARGS[@]}" | grep -E "SHOT LAB" || true

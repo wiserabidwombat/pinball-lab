@@ -134,6 +134,8 @@ def main():
     rect = opt("--art-rect", 4)
     args = [a for a in argv if not a.startswith("--")]
     d = json.load(open(args[0]))
+    if d.get("overrides"):          # plan 2 round 18: a what-if run
+        print("OVERRIDES " + ", ".join(f"{k}={v:g}" for k, v in sorted(d["overrides"].items())))
     if map_out:
         window_map(d, map_out, art, tuple(float(v) for v in rect) if rect else (-40, -75, 680, 1405))
         return

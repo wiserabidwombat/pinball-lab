@@ -939,6 +939,8 @@ struct PlayLabBuild: Codable {
     let bundleVersion: String
     let builtAt: String
     let device: String
+    /// Plan 2 round 18: the what-if overrides this run used (nil when none).
+    var overrides: [String: Double]? = LabOverrides.recorded
 
     static func current(fromArguments id: String?) -> PlayLabBuild {
         let info = Bundle.main.infoDictionary ?? [:]

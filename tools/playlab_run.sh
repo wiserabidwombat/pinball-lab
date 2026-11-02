@@ -86,6 +86,8 @@ else
   ARGS=(-playlab "$TABLE" -playlab-games "$GAMES" -playlab-hz "$HZ" -playlab-build "$BUILD_ID")
 fi
 [ -n "$SKILLS" ] && ARGS+=(-playlab-skills "$SKILLS")
+# Plan 2 round 18: OVERRIDE="Mon.ragingPush=2000" — what-if tunables (GreyInvasionPinball/LabOverrides.swift).
+[ -n "${OVERRIDE:-}" ] && ARGS+=(-override "$OVERRIDE") && echo "▶ Overrides: $OVERRIDE"
 echo "▶ Launching the Play Lab: ${ARGS[*]} (the app quits by itself when the report is saved)"
 # Round 5: this table's reports only (other tables may be playing on other devices at the same time), and only one
 # written after this launch (a marker file's mtime).

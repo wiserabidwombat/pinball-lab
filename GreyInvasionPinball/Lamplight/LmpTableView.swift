@@ -104,7 +104,9 @@ struct LmpTableView: View {
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
-                    scene.debugStartShotLab(booksDown: ShotLab.launchScenario == "booksdown")
+                    let perch: LmpPerch = ShotLab.launchScenario == "catmantel" ? .mantel
+                        : ShotLab.launchScenario == "catkettle" ? .kettle : .shelf     // plan 2 round 16c
+                    scene.debugStartShotLab(booksDown: ShotLab.launchScenario == "booksdown", catPerch: perch)
                 }
             }
             #endif
@@ -403,6 +405,11 @@ struct LmpTableView: View {
                 .padding(.top, 4)
             // Round 4b: the same sweep with the bookshelf down (measures the fireplace; file "(books down)")
             debugButton("Shot Lab · books down") { scene.debugStartShotLab(booksDown: true); setPaused(false) }
+            // Plan 2 round 16c: the cat on her floor perches (she's a solid body there and swats)
+            HStack(spacing: 8) {
+                debugButton("Lab: cat on mantel") { scene.debugStartShotLab(catPerch: .mantel); setPaused(false) }
+                debugButton("Lab: cat by kettle") { scene.debugStartShotLab(catPerch: .kettle); setPaused(false) }
+            }
             // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator);
             // report in ShotLab/ on the Mac
             debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }

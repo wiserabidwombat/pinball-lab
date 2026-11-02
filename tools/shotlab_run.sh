@@ -8,7 +8,8 @@
 #   SKIP_BUILD=1 tools/shotlab_run.sh lamplight           # reuse the last build
 #   tools/shotlab_run.sh cthulhu "" "" inlane             # plan 2 round 15: start from the inlane (or: drop); or START=inlane
 #
-# Tables: lamplight, cthulhu, monsoon, greyinvasion. Scenarios (2nd argument): lamplight booksdown · cthulhu cthulhuup,
+# Tables: lamplight, cthulhu, monsoon, greyinvasion. Scenarios (2nd argument): lamplight booksdown, catmantel,
+# catkettle · cthulhu cthulhuup,
 # sigilsdown, ritual ·
 # monsoon devilraging · greyinvasion bankdown (plan 2 round 16). Results go to ShotLab/.
 set -euo pipefail

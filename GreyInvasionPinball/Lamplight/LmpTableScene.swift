@@ -150,6 +150,8 @@ final class LmpTableScene: SKScene, RendererHostedScene {
     private var shotLab: ShotLab?
     /// Shot Lab scenario (round 4b): trials start with the bookshelf down, to measure the fireplace.
     private var shotLabBooksDown = false
+    /// Plan 2 round 16c: where the reset puts the cat (`catmantel`, `catkettle`); she's held still while the lab runs.
+    private var shotLabCatPerch: LmpPerch = .shelf
     /// Play Lab (shared, PlayLab.swift): the run, and when its next game starts.
     private var playLab: PlayLab?
     private var playLabNextAt: TimeInterval?
@@ -477,7 +479,12 @@ final class LmpTableScene: SKScene, RendererHostedScene {
 
     /// Moves the cat, and lets her swat any floor ball that comes within reach while she's awake.
     private func updateCat(_ dt: CGFloat, now: TimeInterval) {
-        cat.update(dt: dt, now: now)
+        #if DEBUG
+        let heldStill = shotLab != nil      // round 16c: the Shot Lab keeps her where the reset put her (repeatable)
+        #else
+        let heldStill = false
+        #endif
+        if !heldStill { cat.update(dt: dt, now: now) }
         // M6 round 3: now and then she wanders to another perch you own.
         if !isLabRunning, now >= catRoamAt {
             catRoamAt = now + Double.random(in: LmpTableLayout.catRoamSeconds)
@@ -2407,6 +2414,9 @@ final class LmpTableScene: SKScene, RendererHostedScene {
             }
         case LmpPhysicsCategory.toy:
             if node === cat {
+                #if DEBUG
+                shotLab?.event("catHit", at: shotLabTime)             // round 16c: the Shot Lab only
+                #endif
                 switch cat.ballHit(now: gameTime) {
                 case .woke:
                     game.add(LmpTableLayout.catWakePoints)
@@ -2493,11 +2503,12 @@ extension LmpTableScene {
     /// ShotLab/ on the Mac. Menu or a new game stops it.
     /// `booksDown` (Play Lab round 4b): every trial starts with the bookshelf bank down, so the sweep measures the
     /// fireplace (a hole behind the alcove the bank normally covers); the results file says "(books down)".
-    func debugStartShotLab(booksDown: Bool = false) {
+    func debugStartShotLab(booksDown: Bool = false, catPerch: LmpPerch = .shelf) {
         stopPlayLab(saving: true)                  // the Play Lab and the Shot Lab never run together
         isAttractMode = false
         shotLabTime = 0
         shotLabBooksDown = booksDown
+        shotLabCatPerch = catPerch
         shotLab = ShotLab(host: self)
         refreshCamera()
     }
@@ -2528,6 +2539,7 @@ extension LmpTableScene {
             shotLab = nil
             physicsWorld.speed = 1
             shotLabBooksDown = false
+            shotLabCatPerch = .shelf
             shotLabResetTable()
             game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
             ShotLab.quitIfLaunchedForLab()
@@ -2538,12 +2550,17 @@ extension LmpTableScene {
 
 #if DEBUG
 extension LmpTableScene: ShotLabHost {
-    var shotLabTableName: String { shotLabBooksDown && shotLab != nil ? "The Lamplight (books down)" : "The Lamplight" }
+    var shotLabTableName: String {
+        guard shotLab != nil else { return "The Lamplight" }
+        if shotLabCatPerch != .shelf { return "The Lamplight (cat \(shotLabCatPerch.spot))" }
+        return shotLabBooksDown ? "The Lamplight (books down)" : "The Lamplight"
+    }
 
     /// The shots a player aims for end a trial; bumpers, slings, the post, the spinner and the cat's swats are
     /// noted only.
     var shotLabMajorEvents: Set<String> {
-        ["leftLoop", "rightLoop", "ramp", "kettle", "mail", "fireplace", "bookTarget", "windowSeat", "cat"]
+        let base: Set<String> = ["leftLoop", "rightLoop", "ramp", "kettle", "mail", "fireplace", "bookTarget", "windowSeat", "cat"]
+        return shotLabCatPerch == .shelf ? base : base.union(["catHit"])   // round 16c: a blocked shot reads "catHit"
     }
 
     /// Cradles as on Tables 02–04: 40 pt out and 14 above the raised main flippers; on the shorter upper (64) and
@@ -2603,6 +2620,7 @@ extension LmpTableScene: ShotLabHost {
         pendingDrops.removeAll()
         bankResetAt = nil
         cat.reset()
+        if shotLab != nil, shotLabCatPerch != .shelf { cat.move(to: shotLabCatPerch, animated: false) }   // round 16c
     }
 
     /// T5 M5 v3: where every flip's ball first crosses these heights going up (x, heading, speed), to map the

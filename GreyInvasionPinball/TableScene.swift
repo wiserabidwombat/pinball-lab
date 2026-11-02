@@ -41,6 +41,8 @@ final class TableScene: SKScene, RendererHostedScene {
     private var shotLab: ShotLab?
     /// The lab's own clock: table time, which runs at the pass speed (lab.physicsSpeed) while it aims (M10 v13–v14).
     private var shotLabTime: TimeInterval = 0
+    /// Plan 2 round 16a: the `bankdown` scenario — the fighter bank is dropped at every trial's reset.
+    private var shotLabBankDown = false
     /// Play Lab (shared, PlayLab.swift): the run, when its next game starts, and the robot's buttons.
     private var playLab: PlayLab?
     private var playLabNextAt: TimeInterval?
@@ -571,9 +573,10 @@ final class TableScene: SKScene, RendererHostedScene {
 
     /// Shot Lab: the robot takes over the flippers and sweeps flip timings from a cradled ball on
     /// each flipper. Progress shows on the status line; Menu or a new game stops it.
-    func debugStartShotLab() {
+    func debugStartShotLab(bankDown: Bool = false) {
         isAttractMode = false
         shotLabTime = 0
+        shotLabBankDown = bankDown
         shotLab = ShotLab(host: self)
         refreshCamera()
     }
@@ -1832,7 +1835,7 @@ extension TableScene: SKPhysicsContactDelegate {
 // MARK: - Shot Lab host (M10 v12)
 
 extension TableScene: ShotLabHost {
-    var shotLabTableName: String { "Grey Invasion" }
+    var shotLabTableName: String { shotLabBankDown && shotLab != nil ? "Grey Invasion (bank down)" : "Grey Invasion" }
 
     /// Left and right flippers. The cradle point is just above each flipper held up (30° above
     /// horizontal), 40 pt out from the pivot; the ball rolls back into the crook and settles.
@@ -1881,6 +1884,7 @@ extension TableScene: ShotLabHost {
         pendingDrops.removeAll()
         bankResetAt = nil
         dropTargets.forEach { $0.raise() }
+        if shotLabBankDown, shotLab != nil { dropTargets.forEach { $0.drop() } }   // round 16a: the bank-down sweep
         lanesResetAt = nil
         rollovers.forEach { $0.isLit = false }
         setKickback(lit: false)

@@ -91,7 +91,9 @@ struct CthTableView: View {
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
-                    scene.debugStartShotLab(cthulhuUp: ShotLab.launchScenario == "cthulhuup")
+                    scene.debugStartShotLab(cthulhuUp: ShotLab.launchScenario == "cthulhuup",
+                                            sigilsDown: ShotLab.launchScenario == "sigilsdown",
+                                            ritual: ShotLab.launchScenario == "ritual")
                 }
             }
             #endif
@@ -351,6 +353,10 @@ struct CthTableView: View {
             HStack(spacing: 8) {
                 debugButton("Shot Lab") { scene.debugStartShotLab(cthulhuUp: false); setPaused(false) }
                 debugButton("Lab: Cthulhu up") { scene.debugStartShotLab(cthulhuUp: true); setPaused(false) }
+            }
+            HStack(spacing: 8) {                                        // plan 2 round 16b
+                debugButton("Lab: sigils down") { scene.debugStartShotLab(cthulhuUp: false, sigilsDown: true); setPaused(false) }
+                debugButton("Lab: ritual") { scene.debugStartShotLab(cthulhuUp: true, ritual: true); setPaused(false) }
             }
             .padding(.top, 4)
             // Sling Lab (milestone 5 round 2): the same balls thrown at four sling designs (~30 min).

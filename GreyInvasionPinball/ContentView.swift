@@ -102,7 +102,7 @@ struct ContentView: View {
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
-                    scene.debugStartShotLab()
+                    scene.debugStartShotLab(bankDown: ShotLab.launchScenario == "bankdown")
                 }
             }
             #endif
@@ -374,6 +374,7 @@ struct ContentView: View {
             .padding(.top, 4)
             // Shot Lab (M10 v12): a robot measures every shot's timing window (~15 min; best in the Simulator).
             debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
+            debugButton("Lab: bank down") { scene.debugStartShotLab(bankDown: true); setPaused(false) }
             // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator).
             debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
             // Plan 2 round 6: one expert game at the phone's own step, 3-minute cap, the report shared when done.

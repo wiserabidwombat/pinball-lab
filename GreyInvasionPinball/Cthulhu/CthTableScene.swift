@@ -33,6 +33,9 @@ final class CthTableScene: SKScene, RendererHostedScene {
     private var shotLabTime: TimeInterval = 0
     /// This run keeps Cthulhu up and swaying (the Lagoon is then a moving target, not a hole).
     private var shotLabCthulhuUp = false
+    /// Plan 2 round 16b: the Sigil bank dropped at every reset; the Ritual magnet armed (the Awakening).
+    private var shotLabSigilsDown = false
+    private var shotLabRitual = false
     /// Play Lab (shared, PlayLab.swift): the run, when its next game starts, and the robot's buttons.
     private var playLab: PlayLab?
     private var playLabNextAt: TimeInterval?
@@ -935,7 +938,10 @@ final class CthTableScene: SKScene, RendererHostedScene {
             return
         }
         // The magnet works only while Cthulhu is awake in the Awakening ("his dream pulls at you").
-        let dreaming = campaign.phase == .awakening
+        var dreaming = campaign.phase == .awakening
+        #if DEBUG
+        if shotLabRitual, shotLab != nil { dreaming = true }       // round 16b: the `ritual` Shot Lab scenario
+        #endif
         if magnet.state == .off {
             if dreaming, now >= magnetArmAt { magnet.setState(.armed) }
             return
@@ -957,6 +963,9 @@ final class CthTableScene: SKScene, RendererHostedScene {
                 body.velocity = .zero
                 ball.position = c
                 magnet.setState(.holding)
+                #if DEBUG
+                shotLab?.event("magnet", at: shotLabTime)          // round 16b: a trial the magnet intercepts
+                #endif
                 award(CthPoints.magnet)
                 showBanner("THE DREAMER STIRS")
                 hitHaptic.impactOccurred()
@@ -1983,10 +1992,12 @@ extension CthTableScene {
     /// Starts the robot: it takes over the flippers and sweeps flip timings from a cradled ball on the left,
     /// right and upper flippers, at 120 Hz and 60 Hz physics steps. `cthulhuUp` keeps Cthulhu awake and
     /// swaying for the whole run (the Lagoon is then a moving target). Menu or a new game stops it.
-    func debugStartShotLab(cthulhuUp: Bool) {
+    func debugStartShotLab(cthulhuUp: Bool, sigilsDown: Bool = false, ritual: Bool = false) {
         isAttractMode = false
         shotLabTime = 0
-        shotLabCthulhuUp = cthulhuUp
+        shotLabCthulhuUp = cthulhuUp || ritual                  // the Ritual magnet works only with Cthulhu up
+        shotLabSigilsDown = sigilsDown
+        shotLabRitual = ritual
         shotLab = ShotLab(host: self)
         refreshCamera()
     }
@@ -2010,6 +2021,7 @@ extension CthTableScene {
         updateLanes(now)
         _ = spinner?.update(dt: dt)
         cthulhu?.step(dt: dt, now: now)
+        if shotLabRitual { updateMagnet(dt, now: now) }          // round 16b
         if lab.update(now: now) {
             game.banner = lab.progressText
         } else {
@@ -2107,10 +2119,15 @@ extension CthTableScene: CthSlingLabHost {
 }
 
 extension CthTableScene: ShotLabHost {
-    var shotLabTableName: String { shotLabCthulhuUp ? "Cthulhu Rising (Cthulhu up)" : "Cthulhu Rising" }
+    var shotLabTableName: String {
+        if shotLabRitual { return "Cthulhu Rising (ritual)" }
+        if shotLabSigilsDown { return "Cthulhu Rising (sigils down)" }
+        return shotLabCthulhuUp ? "Cthulhu Rising (Cthulhu up)" : "Cthulhu Rising"
+    }
 
     var shotLabMajorEvents: Set<String> {
-        ["rightRamp", "orbit", "library", "lagoon", "sigil", "lane", "cthulhu"]
+        let base: Set<String> = ["rightRamp", "orbit", "library", "lagoon", "sigil", "lane", "cthulhu"]
+        return shotLabRitual ? base.union(["magnet"]) : base
     }
 
     /// Cthulhu's sway phase at the flip (0–1), when he's up.
@@ -2167,10 +2184,15 @@ extension CthTableScene: ShotLabHost {
         pendingDrops.removeAll()
         bankResetAt = nil
         dropTargets.forEach { $0.raise() }
+        if shotLabSigilsDown { dropTargets.forEach { $0.drop() } }      // round 16b
         lanesResetAt = nil
         rollovers.forEach { $0.isLit = false }
         magnetBall = nil
         magnet?.setState(.off)
+        if shotLabRitual {                                              // round 16b: armed for every trial
+            magnetArmAt = 0
+            magnet?.setState(.armed)
+        }
         if shotLabCthulhuUp {
             if cthulhu?.isAwake != true { cthulhu?.forceAwake(at: shotLabTime) }
         } else {

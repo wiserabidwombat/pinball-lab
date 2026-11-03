@@ -26,6 +26,8 @@ final class MonTableScene: SKScene, RendererHostedScene {
     private let game: MonGameState
     private let settings: GameSettings
     private let cameraRig = MonCameraRig()
+    /// iPad (2026-11-02, as Cthulhu's 10-26): a blurred, darkened copy of the table art beside the table on wide screens.
+    private let backdrop = TableBackdrop(imageNamed: "mon_upper")
     /// Table 03's sounds until Table 04's own set (juice milestone).
     private let sound = MonSoundPlayer()          // M10 v1: Monsoon's own sounds (mon_sfx_*)
     private var buildTag: SKLabelNode?
@@ -242,6 +244,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
         dimmer.alpha = 0
         dimmer.zPosition = 48                      // over the table and the wires (helix ≤ 46, diverter 47), under the tag
         cameraRig.node.addChild(dimmer)
+        if let backdrop { cameraRig.node.addChild(backdrop) }
         setUpRain()
         setUpPetals()
         buildTable()
@@ -268,6 +271,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
         dimmer.size = size
+        backdrop?.fit(size)
         placeRain()
         placePetals()
         placeBuildTag()

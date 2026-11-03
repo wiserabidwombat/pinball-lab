@@ -32,6 +32,8 @@ final class LmpTableScene: SKScene, RendererHostedScene {
     private let game: LmpGameState
     private let settings: GameSettings
     private let cameraRig = LmpCameraRig()
+    /// iPad (2026-11-02, as Cthulhu's 10-26): a blurred, darkened copy of the table art beside the table on wide screens.
+    private let backdrop = TableBackdrop(imageNamed: "lmp_upper")
     private let sound = LmpSoundPlayer()          // T5 M9 v41: the Lamplight's own sound set (was Monsoon's)
     private var buildTag: SKLabelNode?
     private var buildTagBack: SKShapeNode?
@@ -260,6 +262,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
         physicsWorld.gravity = CGVector(dx: 0, dy: LmpTableLayout.gravity)
         physicsWorld.contactDelegate = self
         cameraRig.install(in: self)
+        if let backdrop { cameraRig.node.addChild(backdrop) }
         buildTable()
         addBuildTag()
         placeBallOnPlunger()
@@ -294,6 +297,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
     func refreshCamera() {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
+        backdrop?.fit(size)
         placeBuildTag()
     }
 

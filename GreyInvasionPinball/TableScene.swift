@@ -20,6 +20,8 @@ final class TableScene: SKScene, RendererHostedScene {
     private let game: GameState
     private let settings: GameSettings
     private let cameraRig = CameraRig()
+    /// iPad (2026-11-02, as Cthulhu's 10-26): a blurred, darkened copy of the table art beside the table on wide screens.
+    private let backdrop = TableBackdrop(imageNamed: "playfield")
     /// Table text that grows with the camera zoom (M10 v5).
     private let tableLabels = TableLabels()
     private var buildTag: SKLabelNode?
@@ -214,6 +216,7 @@ final class TableScene: SKScene, RendererHostedScene {
         dimmer.alpha = 0
         dimmer.zPosition = 40                     // over the table, under the debug tag
         cameraRig.node.addChild(dimmer)
+        if let backdrop { cameraRig.node.addChild(backdrop) }
         buildTable()
         addBuildTag()
         placeBallOnPlunger()
@@ -244,6 +247,7 @@ final class TableScene: SKScene, RendererHostedScene {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
         dimmer.size = size
+        backdrop?.fit(size)
         placeBuildTag()
     }
 

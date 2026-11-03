@@ -1549,6 +1549,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
         rightFlipper.step(dt: dt)
         loftFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
+        governInlanes()                          // the inlane speed limit (2026-11-02)
         updateGates()
         updateBank(now)
         updateScoops(now)
@@ -1631,6 +1632,17 @@ final class LmpTableScene: SKScene, RendererHostedScene {
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
             game.ballOnPlunger = waiting
+        }
+    }
+
+    /// 2026-11-02: hot inlane feeds — a ball rolling down an inlane is held to InlaneGovernor.maxSpeed (800 pt/s) so a
+    /// held-up flipper can trap it (wire returns used to reach the flipper at ~1,050). Runs in play and in the labs.
+    private func governInlanes() {
+        for ball in balls where !ball.isUpper && ball.ride == nil && ball.heldIn == nil {
+            guard let body = ball.physicsBody,
+                  let v = InlaneGovernor.limited(body.velocity, at: ball.position,
+                                                 leftGuide: [CGPoint(x: LmpTableLayout.laneGuideX, y: LmpTableLayout.laneGuideTop), CGPoint(x: LmpTableLayout.laneGuideX, y: LmpTableLayout.laneGuideBend), LmpTableLayout.leftGuideEnd], mirrorSum: LmpTableLayout.mirrorSum) else { continue }
+            body.velocity = v
         }
     }
 
@@ -2527,6 +2539,7 @@ extension LmpTableScene {
         rightFlipper.step(dt: dt)
         loftFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
+        governInlanes()                          // the inlane speed limit (2026-11-02)
         updateGates()
         updateBank(now)
         updateScoops(now)

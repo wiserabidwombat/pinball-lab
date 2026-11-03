@@ -2163,6 +2163,7 @@ final class MonTableScene: SKScene, RendererHostedScene {
         updateRides(dt)
         updateToys(dt, now: now)
         slingshots.forEach { $0.settle() }
+        governInlanes()                          // the inlane speed limit (2026-11-02)
         updateGates()
         updateLanes(now)
         updateScoops(now)
@@ -2251,6 +2252,17 @@ final class MonTableScene: SKScene, RendererHostedScene {
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
             game.ballOnPlunger = waiting
+        }
+    }
+
+    /// 2026-11-02: hot inlane feeds — a ball rolling down an inlane is held to InlaneGovernor.maxSpeed (800 pt/s) so a
+    /// held-up flipper can trap it (wire returns used to reach the flipper at ~1,050). Runs in play and in the labs.
+    private func governInlanes() {
+        for ball in balls where ball.isOnFloor && ball.heldIn == nil {
+            guard let body = ball.physicsBody,
+                  let v = InlaneGovernor.limited(body.velocity, at: ball.position,
+                                                 leftGuide: MonTableLayout.leftLaneGuide, mirrorSum: MonTableLayout.mirrorSum) else { continue }
+            body.velocity = v
         }
     }
 
@@ -2451,6 +2463,7 @@ extension MonTableScene {
         updateRides(dt)
         updateToys(dt, now: now)
         slingshots.forEach { $0.settle() }
+        governInlanes()                          // the inlane speed limit (2026-11-02)
         updateGates()
         updateLanes(now)
         updateScoops(now)

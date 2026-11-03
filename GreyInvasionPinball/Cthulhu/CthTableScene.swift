@@ -1767,6 +1767,7 @@ final class CthTableScene: SKScene, RendererHostedScene {
         rightFlipper.step(dt: dt)
         upperFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
+        governInlanes()                          // the inlane speed limit (2026-11-02)
         updateLanes(now)
         updateDiverter()
         updateScoops(now)
@@ -1862,6 +1863,17 @@ final class CthTableScene: SKScene, RendererHostedScene {
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
             game.ballOnPlunger = waiting
+        }
+    }
+
+    /// 2026-11-02: hot inlane feeds — a ball rolling down an inlane is held to InlaneGovernor.maxSpeed (800 pt/s) so a
+    /// held-up flipper can trap it (wire returns used to reach the flipper at ~1,050). Runs in play and in the labs.
+    private func governInlanes() {
+        for ball in balls where ball.isOnFloor && ball.heldIn == nil {
+            guard let body = ball.physicsBody,
+                  let v = InlaneGovernor.limited(body.velocity, at: ball.position,
+                                                 leftGuide: CthTableLayout.leftLaneGuide, mirrorSum: CthTableLayout.mirrorSum) else { continue }
+            body.velocity = v
         }
     }
 
@@ -2015,6 +2027,7 @@ extension CthTableScene {
         rightFlipper.step(dt: dt)
         upperFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
+        governInlanes()                          // the inlane speed limit (2026-11-02)
         updateDiverter()
         updateScoops(now)
         updateDropTargets(now)
@@ -2069,6 +2082,7 @@ extension CthTableScene: CthSlingLabHost {
         rightFlipper.step(dt: dt)
         upperFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
+        governInlanes()                          // the inlane speed limit (2026-11-02)
         updateDiverter()
         updateScoops(now)
         updateDropTargets(now)

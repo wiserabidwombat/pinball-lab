@@ -43,6 +43,17 @@ RETRIED=()
 caffeinate -dims -w $$ &
 
 say() { echo "$*" | tee -a "$LOG"; }
+INDEX_RC=0
+# A failed step after the games must not look like a finished sweep: a banner, a bell, a notification, exit 1.
+shout() {
+  say ""
+  say "████████████████████████████████████████████████████████████████"
+  say "██ SWEEP PROBLEM: $*"
+  say "████████████████████████████████████████████████████████████████"
+  say ""
+  printf '\a\a\a'
+  osascript -e "display notification \"$*\" with title \"Play Lab sweep\" sound name \"Basso\"" 2>/dev/null || true
+}
 
 finish() {
   say "▶ Sweep index…"
@@ -50,11 +61,24 @@ finish() {
     FAILED_CSV=$(IFS=,; echo "${FAILED[*]-}")
     RETRIED_CSV=$(IFS=,; echo "${RETRIED[*]-}")
     python3 tools/playlab_index.py --out "ShotLab/sweep-$STAMP.html" --games "$GAMES" --hz "$HZ" \
-      --failed "$FAILED_CSV" --retried "$RETRIED_CSV" ${BASELINE:+--baseline "$BASELINE"} "${REPORTS[@]}" | tee -a "$LOG"
-    say "▶ Index: ShotLab/sweep-$STAMP.html (log: $LOG)"
+      --failed "$FAILED_CSV" --retried "$RETRIED_CSV" ${BASELINE:+--baseline "$BASELINE"} "${REPORTS[@]}" 2>&1 | tee -a "$LOG"
+    local rc=${PIPESTATUS[0]}
+    if [ "$rc" -ne 0 ] || [ ! -s "ShotLab/sweep-$STAMP.html" ]; then
+      INDEX_RC=1
+      shout "the index failed (exit $rc) — the games are saved, the page is not. Error above / in $LOG"
+      say "Rerun just the index once fixed (copy this line):"
+      say "  python3 tools/playlab_index.py --out ShotLab/sweep-$STAMP.html --games $GAMES --hz $HZ ${BASELINE:+--baseline $BASELINE }${REPORTS[*]}"
+    else
+      say "▶ Index: ShotLab/sweep-$STAMP.html (log: $LOG)"
+    fi
     # Plan 2 round 23: the robots' hall of fame (bundled in the app; rebuild to see it on the Lab card).
-    python3 tools/playlab_halloffame.py --since "$STAMP" 2>&1 | tee -a "$LOG" || true
-    open "ShotLab/sweep-$STAMP.html" 2>/dev/null || true
+    python3 tools/playlab_halloffame.py --since "$STAMP" 2>&1 | tee -a "$LOG"
+    rc=${PIPESTATUS[0]}
+    if [ "$rc" -ne 0 ]; then
+      INDEX_RC=1
+      shout "the hall of fame update failed (exit $rc) — the index is fine. Error above / in $LOG"
+    fi
+    [ -s "ShotLab/sweep-$STAMP.html" ] && { open "ShotLab/sweep-$STAMP.html" 2>/dev/null || true; }
   else
     say "No reports — nothing to index (log: $LOG)"
   fi
@@ -205,3 +229,4 @@ for t in "${STARTED[@]-}"; do [ -n "$t" ] && collect "$t"; done
 say "▶ Sweep played in $(( ($(date +%s) - START) / 60 )) min"
 rm -f "$STOP"
 finish
+[ "$INDEX_RC" -eq 0 ] || { say "Sweep finished WITH PROBLEMS (see the banner above)."; exit 1; }

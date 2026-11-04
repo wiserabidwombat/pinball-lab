@@ -40,40 +40,40 @@
   },
   "Grey Invasion": {
    "advanced": {
-    "date": "2026-11-01",
-    "game": 13,
-    "minutes": 6.3,
+    "date": "2026-11-03",
+    "game": 41,
+    "minutes": 8.0,
     "pass": "hz60",
     "picture": "hof-greyinvasion.jpg",
-    "report": "playlab-grey-invasion-2026-11-01T04-09-35Z.json",
-    "score": 7897240
+    "report": "playlab-grey-invasion-2026-11-03T12-16-54Z.json",
+    "score": 10062450
    },
    "beginner": {
-    "date": "2026-11-01",
-    "game": 9,
+    "date": "2026-11-03",
+    "game": 28,
     "minutes": 8.0,
     "pass": "hz60",
     "picture": null,
-    "report": "playlab-grey-invasion-2026-11-01T04-09-35Z.json",
-    "score": 5639220
+    "report": "playlab-grey-invasion-2026-11-03T12-16-54Z.json",
+    "score": 6349090
    },
    "expert": {
-    "date": "2026-10-31",
-    "game": 11,
+    "date": "2026-11-03",
+    "game": 21,
     "minutes": 8.0,
     "pass": "hz120",
     "picture": null,
-    "report": "playlab-grey-invasion-2026-10-31T20-33-21Z.json",
-    "score": 3056630
+    "report": "playlab-grey-invasion-2026-11-03T12-16-54Z.json",
+    "score": 6474340
    },
    "intermediate": {
-    "date": "2026-10-31",
-    "game": 16,
+    "date": "2026-11-03",
+    "game": 12,
     "minutes": 8.0,
-    "pass": "hz60",
+    "pass": "hz120",
     "picture": null,
-    "report": "playlab-grey-invasion-2026-10-31T20-33-21Z.json",
-    "score": 4231260
+    "report": "playlab-grey-invasion-2026-11-03T12-16-54Z.json",
+    "score": 5555120
    }
   },
   "Monsoon": {
@@ -143,15 +143,14 @@
     "score": 556710
    },
    "intermediate": {
-    "date": "2026-10-29",
-    "game": 4,
+    "date": "2026-11-03",
+    "game": 2,
     "minutes": 8.0,
     "pass": "hz120",
-    "picture": null,
-    "report": "playlab-the-lamplight-2026-10-29T01-48-40Z.json",
-    "score": 1844300
+    "report": "playlab-the-lamplight-2026-11-03T10-42-39Z.json",
+    "score": 1921340
    }
   }
  },
- "updated": "2026-11-02"
+ "updated": "2026-11-04"
 }

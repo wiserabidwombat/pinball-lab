@@ -63,12 +63,14 @@ def crop_debug_strip(path):
     if shutil.which("sips"):
         out = subprocess.run(["sips", "-g", "pixelHeight", "-g", "pixelWidth", path],
                              capture_output=True, text=True).stdout
-        dims = {k: int(v) for k, v in (ln.split(":") for ln in out.splitlines()[1:] if ":" in ln)}
+        dims = {k.strip(): int(v) for k, v in (ln.rsplit(":", 1) for ln in out.splitlines()[1:] if ":" in ln)}
         h, w = dims.get("pixelHeight", 0), dims.get("pixelWidth", 0)
         if h and w:
-            subprocess.run(["sips", "--cropToHeightWidth", str(round(h * KEEP_HEIGHT)), str(w),
-                            "--cropOffset", "0", "0", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return
+            r = subprocess.run(["sips", "--cropToHeightWidth", str(round(h * KEEP_HEIGHT)), str(w),
+                                "--cropOffset", "0", "0", path], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            if r.returncode == 0:
+                return
+            print("  sips crop failed:", r.stderr.strip()[:200])
     print(f"  warning: couldn't crop the debug strip off {os.path.basename(path)} (no PIL or sips)")
 
 

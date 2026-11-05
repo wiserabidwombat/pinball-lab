@@ -88,6 +88,8 @@ fi
 [ -n "$SKILLS" ] && ARGS+=(-playlab-skills "$SKILLS")
 # Plan 2 round 18: OVERRIDE="Mon.ragingPush=2000" — what-if tunables (GreyInvasionPinball/LabOverrides.swift).
 [ -n "${OVERRIDE:-}" ] && ARGS+=(-override "$OVERRIDE") && echo "▶ Overrides: $OVERRIDE"
+# The custom skill's profile: CUSTOM="base=advanced,sigma=0.013,catch=0.86" … custom (tools/playlab_calibrate.py prints it).
+[ -n "${CUSTOM:-}" ] && ARGS+=(-playlab-custom "$CUSTOM") && echo "▶ Custom skill: $CUSTOM"
 echo "▶ Launching the Play Lab: ${ARGS[*]} (the app quits by itself when the report is saved)"
 # Round 5: this table's reports only (other tables may be playing on other devices at the same time), and only one
 # written after this launch (a marker file's mtime).

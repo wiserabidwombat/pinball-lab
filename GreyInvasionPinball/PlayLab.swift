@@ -23,7 +23,8 @@
 // default 2), `-playlab-hz 120|60|both` (default both), `-playlab-skills beginner,expert` (default all),
 // `-playlab-cap SECONDS` (a game that runs this long is closed early, default 480), `-playlab-plunge [REPEATS]` (plan 2
 // round 7a: the plunge sweep — no flipping, every served ball plunged at the next power of 0.20…1.00 by 0.05, REPEATS
-// balls per power (default 3), and what each plunge did recorded in the report's `plunges`).
+// balls per power (default 3), and what each plunge did recorded in the report's `plunges`). `-playlab-custom
+// "base=advanced,sigma=0.013,catch=0.86"` sets the custom skill's profile (run it with `-playlab-skills custom`).
 #if DEBUG
 import Foundation
 import CoreGraphics
@@ -35,6 +36,16 @@ import UIKit
 
 nonisolated enum PlaySkill: String, CaseIterable, Codable {
     case beginner, intermediate, advanced, expert
+    /// A robot that plays like a recorded player: the habits of its profile's base skill (aiming, nudges, dead
+    /// bounces, passes, traps, plunges) with the player's own timing and catching (`PlayCustom`, from
+    /// tools/playlab_calibrate.py). Runs only when asked for by name (`-playlab-skills custom`).
+    case custom
+
+    /// The four built-in skills — what sweeps, Watch mode and an unnamed run play. `custom` is never among them.
+    static var allCases: [PlaySkill] { [.beginner, .intermediate, .advanced, .expert] }
+
+    /// The built-in skill whose habits this one plays with: itself, or the custom profile's base.
+    var style: PlaySkill { self == .custom ? PlayCustom.base : self }
 
     /// Timing error (seconds, one standard deviation) on every flip.
     var timingSigma: Double {
@@ -43,6 +54,7 @@ nonisolated enum PlaySkill: String, CaseIterable, Codable {
         case .intermediate: return 0.025
         case .advanced: return 0.015
         case .expert: return 0.008
+        case .custom: return PlayCustom.timingSigma
         }
     }
 
@@ -53,27 +65,28 @@ nonisolated enum PlaySkill: String, CaseIterable, Codable {
         case .intermediate: return 0.4
         case .advanced: return 0.8
         case .expert: return 0.95
+        case .custom: return PlayCustom.catchChance
         }
     }
 
     /// Whether they aim at what the table wants (otherwise a random shot from that flipper).
-    var aims: Bool { self == .advanced || self == .expert }
+    var aims: Bool { PlayCustom.aims(for: self) ?? (style == .advanced || style == .expert) }
 
     /// Round 6a: whether they tap a flipper to move the lit lanes under a ball heading into the top lanes.
     var changesLanes: Bool { aims }
 
     /// Round 9: whether they let a fast crossing ball hit the resting flipper and bounce to the other side (a dead
     /// bounce) instead of flipping at it.
-    var deadBounces: Bool { self == .expert && LabOverrides.on("Lab.deadBounce") }
+    var deadBounces: Bool { style == .expert && LabOverrides.on("Lab.deadBounce") }
 
     /// Round 10: whether they pass a cradled ball to the other flipper when the wanted shot is over there.
-    var passes: Bool { self == .expert && LabOverrides.on("Lab.postPass") }
+    var passes: Bool { style == .expert && LabOverrides.on("Lab.postPass") }
 
     /// Round 11: whether they trap one ball on a flipper during multiball and play the other.
-    var trapsInMultiball: Bool { self == .expert && LabOverrides.on("Lab.mbTrap") }
+    var trapsInMultiball: Bool { style == .expert && LabOverrides.on("Lab.mbTrap") }
 
     /// Beginners often hit both buttons at once.
-    var flailChance: Double { self == .beginner ? 0.5 : 0 }
+    var flailChance: Double { style == .beginner ? 0.5 : 0 }
 
     /// How far they pull the plunger (1 = all the way). Better players either go for a full plunge or a
     /// controlled medium one.
@@ -84,8 +97,43 @@ nonisolated enum PlaySkill: String, CaseIterable, Codable {
         case .intermediate: return CGFloat.random(in: 0.4...1, using: &rng)
         case .advanced: return r < 0.3 ? 0.96 : CGFloat.random(in: 0.55...0.8, using: &rng)
         case .expert: return r < 0.6 ? 0.97 : CGFloat.random(in: 0.6...0.8, using: &rng)
+        case .custom: return PlayCustom.base.plungePower(&rng)
         }
     }
+}
+
+/// The custom skill's profile, from the launch argument `-playlab-custom "base=advanced,sigma=0.013,catch=0.86"`
+/// (tools/playlab_run.sh passes CUSTOM=…; tools/playlab_calibrate.py prints the line for a Record me report).
+/// base: the built-in skill whose habits it keeps (default advanced); sigma: flip timing error in seconds (one SD);
+/// catch: how often it catches a ball coming down; aims (optional, 1/0): override whether it aims.
+nonisolated enum PlayCustom {
+    static let profile: [String: String] = {
+        guard let s = UserDefaults.standard.string(forKey: "playlab-custom"), !s.isEmpty else { return [:] }
+        var out: [String: String] = [:]
+        for part in s.split(whereSeparator: { $0 == "," || $0 == ";" }) {
+            let kv = part.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if kv.count == 2, !kv[0].isEmpty { out[kv[0]] = kv[1] }
+        }
+        return out
+    }()
+
+    static var base: PlaySkill {
+        guard let b = profile["base"].flatMap(PlaySkill.init(rawValue:)), b != .custom else { return .advanced }
+        return b
+    }
+    static var timingSigma: Double {
+        profile["sigma"].flatMap(Double.init).map { min(0.08, max(0.002, $0)) } ?? base.timingSigma
+    }
+    static var catchChance: Double {
+        profile["catch"].flatMap(Double.init).map { min(1, max(0, $0)) } ?? base.catchChance
+    }
+    /// The profile's aims override, for the custom skill only.
+    static func aims(for skill: PlaySkill) -> Bool? {
+        guard skill == .custom, let a = profile["aims"].flatMap(Double.init) else { return nil }
+        return a != 0
+    }
+    /// What a report records: the profile as given (nil when none).
+    static var recorded: [String: String]? { profile.isEmpty ? nil : profile }
 }
 
 /// A pass: how the physics is stepped. The Simulator draws 60 frames a second, so half speed = 120 Hz steps.
@@ -355,7 +403,7 @@ final class PlayRobot {
                 if sweepPower == nil, skill.aims, let p = view.skillPlunge {
                     // Round 7b: go for the ringed lane. The window per lane is ~0.02 of the pull; the expert's hand is
                     // steadier than the advanced player's.
-                    let sigma: CGFloat = skill == .expert ? 0.01 : 0.02
+                    let sigma: CGFloat = skill.style == .expert ? 0.01 : 0.02
                     let u1 = CGFloat.random(in: 0.0001...1, using: &rng), u2 = CGFloat.random(in: 0...1, using: &rng)
                     let noise = sigma * (-2 * log(u1)).squareRoot() * cos(2 * .pi * u2)
                     cmd.plunge = min(1, max(0.1, p + noise))
@@ -664,9 +712,9 @@ final class PlayRobot {
         let py = max(left.pivot.y, right.pivot.y)
         let centreX = (left.restTip.x + right.restTip.x) / 2
         let gapHalf = max(0, (right.restTip.x - left.restTip.x) / 2 - ballRadius)
-        let outlaneTop: CGFloat = skill == .expert ? 460 : 340        // above py: how early the player reacts
+        let outlaneTop: CGFloat = skill.style == .expert ? 460 : 340  // above py: how early the player reacts
         // 8b′: the advanced player can't watch a multiball; the expert can.
-        if skill != .expert, lowerFree.count > 1 { return nil }
+        if skill.style != .expert, lowerFree.count > 1 { return nil }
         var choice: Nudge.Direction?
         for b in lowerFree where b.velocity.dy < -30 {
             let x = b.position.x, y = b.position.y
@@ -682,12 +730,12 @@ final class PlayRobot {
             }
         }
         guard let direction = choice else { return nil }
-        if skill == .expert {
+        if skill.style == .expert {
             nudgeTimes = nudgeTimes.filter { now - $0 < Nudge.window }
             if nudgeTimes.count >= Nudge.tiltAt - 1 { return nil }         // the next one would tilt
             nudgeTimes.append(now)
         }
-        nudgeCooldownUntil = now + (skill == .expert ? 0.6 : 1.5)
+        nudgeCooldownUntil = now + (skill.style == .expert ? 0.6 : 1.5)
         nudges += 1
         lastNudgeAt = now
         return direction
@@ -957,6 +1005,8 @@ struct PlayLabBuild: Codable {
     let device: String
     /// Plan 2 round 18: the what-if overrides this run used (nil when none).
     var overrides: [String: Double]? = LabOverrides.recorded
+    /// The custom skill's profile this run used (nil when none).
+    var custom: [String: String]? = PlayCustom.recorded
 
     static func current(fromArguments id: String?) -> PlayLabBuild {
         let info = Bundle.main.infoDictionary ?? [:]

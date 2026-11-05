@@ -151,6 +151,9 @@ def analyze(d, precise=()):
     by = collections.defaultdict(list)
     for g in games:
         by[(g["pass"], g["skill"])].append(g)
+    # A custom robot (PlaySkill.custom) gets its own column after the four ("you" games stay out, as before).
+    for s in sorted({g["skill"] for g in games} - set(SKILLS) - {"you"}):
+        SKILLS.append(s)
     extras = sorted({k for g in games for k in g.get("extras", {})})
 
     # Per pass × skill summary rows
@@ -383,7 +386,7 @@ def tracks_svg(a, map_file=None, map_rect=(-40, -75, 680, 1405), inline=False):
 
 # ---------------------------------------------------------------- heat maps (round 13)
 
-SKILL_COLOR = {"beginner": "#4f8dd6", "intermediate": "#3fc1c9", "advanced": "#f2c14e", "expert": "#ffffff", "you": "#ff7ac6"}
+SKILL_COLOR = {"beginner": "#4f8dd6", "intermediate": "#3fc1c9", "advanced": "#f2c14e", "expert": "#ffffff", "you": "#ff7ac6", "custom": "#9b7bff"}
 FLIPPER_LINE_Y = 190      # just above the resting tips on the 600x1300 tables: below it the ball is on its way out
 
 

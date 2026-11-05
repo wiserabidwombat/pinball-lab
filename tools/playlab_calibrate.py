@@ -12,8 +12,8 @@ What is compared, per minute of play unless said otherwise: catches, drains (and
 (the table's shot events — orbits, ramps, lanes… — not bumpers/slings), score, and lane taps/nudges where you and
 the robots both have them. Each measure is scored as a z-distance against the four robots' spread, the nearest
 robot wins, and the end of the report says what PlaySkill settings would stand in for you (timing sigma and catch
-chance interpolated between the two nearest robots) — paste those into a PlaySkill case when a "custom" skill
-exists (not yet: PlaySkill is an exhaustive enum in several switches, so adding a case is its own round)."""
+chance interpolated between the two nearest robots) and prints the tools/playlab_run.sh line that runs that
+stand-in as the custom skill (CUSTOM="base=…,sigma=…,catch=…" … custom)."""
 import glob
 import json
 import os
@@ -127,13 +127,31 @@ def main(argv):
     print(f"Keeping the ball (drains/min, ball life): like the {keep}{better}. "
           f"Working it (catches/min, shots/min): like the {work}.")
 
-    # A stand-in skill: interpolate between the two nearest robots by their distances.
-    d0, d1 = dist[nearest] ** 0.5, dist[second] ** 0.5
-    w = d1 / (d0 + d1) if d0 + d1 > 0 else 1.0           # weight on the nearest
-    sigma = w * SIGMA[nearest] + (1 - w) * SIGMA[second]
-    catch = w * CATCH[nearest] + (1 - w) * CATCH[second]
-    print(f"A stand-in robot for you: timingSigma {sigma:.3f} s, catchChance {catch:.2f}"
-          f" (between {nearest} and {second}; aims = {'yes' if nearest in ('advanced', 'expert') else 'no'}).")
+    # A stand-in skill, one setting per measure it drives: the HABITS (aiming, nudges, dead bounces, passes, traps)
+    # of the robot you work the ball like; TIMING (sigma) placed by your median ball life and CATCHING by your
+    # catches/min, each read along the four robots' values (straight lines between neighbours, clamped at the ends).
+    def place(measure, setting):
+        pts = sorted((m_rob[s][measure], setting[s]) for s in SKILLS)
+        x = m_you[measure]
+        if x <= pts[0][0]:
+            return pts[0][1]
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            if x <= x1:
+                return y0 + (y1 - y0) * ((x - x0) / (x1 - x0) if x1 > x0 else 0)
+        return pts[-1][1]
+    base = work
+    sigma = place("ball life s", SIGMA)
+    catch = place("catches/min", CATCH)
+    print(f"A stand-in robot for you: the {base}'s habits, timingSigma {sigma:.3f} s (from your ball life), "
+          f"catchChance {catch:.2f} (from your catches/min).")
+    runner = {"the-lamplight": "lamplight", "grey-invasion": "greyinvasion", "cthulhu-rising": "cthulhu"}
+    slug = os.path.basename(argv[0])[len("playlab-"):].split("-20")[0]
+    hz = "120" if pass_ == "hz120" else "60"
+    # Nudging comes with the advanced/expert habits; a player who never nudged gets the robot's nudges switched off.
+    no_nudge = 'OVERRIDE="Lab.nudge=0" ' if m_you["nudges/min"] == 0 and base in ("advanced", "expert") else ""
+    print("Run it as the custom skill" + (" (no nudges — you didn't nudge):" if no_nudge else ":"))
+    print(f'  {no_nudge}CUSTOM="base={base},sigma={sigma:.3f},catch={catch:.2f}" tools/playlab_run.sh '
+          f"{runner.get(slug, slug)} 6 {hz} custom")
     if m_you["minutes"] < 6:
         print("(Under 6 minutes of play — record a couple more games before trusting this.)")
     return 0

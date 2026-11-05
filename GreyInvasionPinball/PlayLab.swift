@@ -64,13 +64,13 @@ nonisolated enum PlaySkill: String, CaseIterable, Codable {
 
     /// Round 9: whether they let a fast crossing ball hit the resting flipper and bounce to the other side (a dead
     /// bounce) instead of flipping at it.
-    var deadBounces: Bool { self == .expert }
+    var deadBounces: Bool { self == .expert && LabOverrides.on("Lab.deadBounce") }
 
     /// Round 10: whether they pass a cradled ball to the other flipper when the wanted shot is over there.
-    var passes: Bool { self == .expert }
+    var passes: Bool { self == .expert && LabOverrides.on("Lab.postPass") }
 
     /// Round 11: whether they trap one ball on a flipper during multiball and play the other.
-    var trapsInMultiball: Bool { self == .expert }
+    var trapsInMultiball: Bool { self == .expert && LabOverrides.on("Lab.mbTrap") }
 
     /// Beginners often hit both buttons at once.
     var flailChance: Double { self == .beginner ? 0.5 : 0 }
@@ -649,7 +649,7 @@ final class PlayRobot {
         }
 
         // Round 8b: the nudge.
-        if skill.aims, let direction = nudgeDecision(lowerFree, now: now) { cmd.nudge = direction }
+        if skill.aims, LabOverrides.on("Lab.nudge"), let direction = nudgeDecision(lowerFree, now: now) { cmd.nudge = direction }
         return cmd
     }
 

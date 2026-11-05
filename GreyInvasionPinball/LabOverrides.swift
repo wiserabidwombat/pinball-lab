@@ -11,6 +11,8 @@ import Foundation
 ///
 /// Tunables so far (name → default):
 ///   Mon.calmPush 600 · Mon.ragingPush 1600 · Mon.calmBend 0.00045 · Mon.ragingBend 0.0025   (MonDustDevil)
+/// Switches (1 = on, 0 = off; read with `LabOverrides.on`), the Play Lab robots' rounds 8–11 features, all on by default:
+///   Lab.nudge (8, advanced + expert) · Lab.deadBounce (9, expert) · Lab.postPass (10, expert) · Lab.mbTrap (11, expert)
 /// A name nobody reads is ignored silently, but it still appears in the recorded overrides, so check the spelling.
 nonisolated enum LabOverrides {
     static let values: [String: Double] = {
@@ -30,6 +32,11 @@ nonisolated enum LabOverrides {
     /// The tunable's value: the override if one was given, else `fallback`.
     static func cg(_ name: String, _ fallback: CGFloat) -> CGFloat {
         values[name].map { CGFloat($0) } ?? fallback
+    }
+
+    /// A switch: off when overridden to 0, otherwise `fallback` (on).
+    static func on(_ name: String, _ fallback: Bool = true) -> Bool {
+        values[name].map { $0 != 0 } ?? fallback
     }
 
     /// What a lab JSON records (nil when nothing was overridden, so old and new reports read the same).

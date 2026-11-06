@@ -654,9 +654,35 @@ details summary{cursor:pointer;color:var(--dim)}.small{font-size:13px;color:var(
 
 # ---------------------------------------------------------------- replays (plan 2, round 21)
 
-def replays_html(d, map_file=None, map_rect=(-40, -75, 680, 1405)):
+# The art each table's scene draws, in scene points (x, y, w, h) — the same rects as TableLayout.playfieldArtRect and
+# the Cth/Mon/LmpTableLayout lower/upper art rects. Paths are from the repo root; the report links them, so the page
+# shows them while it sits in ShotLab/ beside the project (move it elsewhere and the replays fall back to the outline).
+TABLE_ART = {
+    "Grey Invasion": [("GreyInvasionPinball/playfield.png", (-40, -75, 680, 1405))],
+    "Cthulhu Rising": [("GreyInvasionPinball/Assets.xcassets/CthArt/cth_lower.imageset/cth_lower.png", (-40, -75, 680, 600)),
+                       ("GreyInvasionPinball/Assets.xcassets/CthArt/cth_upper.imageset/cth_upper.png", (-40, 525, 680, 805))],
+    "Monsoon": [("GreyInvasionPinball/Assets.xcassets/MonArt/mon_lower.imageset/mon_lower.jpg", (-40, -75, 680, 600)),
+                ("GreyInvasionPinball/Assets.xcassets/MonArt/mon_upper.imageset/mon_upper.jpg", (-40, 525, 680, 805))],
+    "The Lamplight": [("GreyInvasionPinball/Assets.xcassets/LmpArt/lmp_lower.imageset/lmp_lower.png", (-40, -75, 680, 600)),
+                      ("GreyInvasionPinball/Assets.xcassets/LmpArt/lmp_upper.imageset/lmp_upper.png", (-40, 525, 680, 805))],
+}
+
+
+def table_art(table, out_dir):
+    """The table's art layers that exist, as (path relative to out_dir, rect); [] for an unknown table."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    layers = []
+    for rel, rect in TABLE_ART.get(table, []):
+        full = os.path.join(root, rel)
+        if os.path.isfile(full):
+            layers.append((os.path.relpath(full, os.path.abspath(out_dir or ".")).replace(os.sep, "/"), rect))
+    return layers
+
+
+def replays_html(d, map_file=None, map_rect=(-40, -75, 680, 1405), layers=()):
     """A player for whole games: every ball every 0.1 s (PlayGame.replay), a scrubber, play/speed, and jump links —
-    objectives, drains, the best ball (longest life) and the worst drain (shortest life)."""
+    objectives, drains, the best ball (longest life) and the worst drain (shortest life). `layers`: the table's own art
+    ((path, scene rect) pairs, from table_art) drawn under the balls."""
     e = html.escape
     X, Y, W, H = map_rect
     data, opts = {}, []
@@ -679,6 +705,11 @@ def replays_html(d, map_file=None, map_rect=(-40, -75, 680, 1405)):
     if not data:
         return ""
     art = (f"<image href='{e(map_file)}' x='0' y='0' width='{W}' height='{H}' opacity='0.8'/>" if map_file else "")
+    if not map_file and layers:
+        # Scene rect → SVG: x from the left edge X, y flipped about the top Y + H (as the balls are).
+        art = "".join(f"<image href='{e(path)}' x='{rx - X}' y='{Y + H - (ry + rh)}' width='{rw}' height='{rh}' "
+                      f"preserveAspectRatio='none' opacity='0.55'/>" for path, (rx, ry, rw, rh) in layers)
+    outline = "" if art else f"<rect x='{-X}' y='{Y + H - 1300}' width='600' height='1300' fill='none' stroke='#555' stroke-width='2'/>"
     out = [
         "<h2>Replays</h2><div class='panel small'>round 21 · whole games, every ball every 0.1 s of table time "
         "(hollow = on a ramp or the loft) · the flipper buttons light under the table · jump links: objectives, "
@@ -690,7 +721,7 @@ def replays_html(d, map_file=None, map_rect=(-40, -75, 680, 1405)):
         "<input id='rpScrub' type='range' min='0' max='1000' value='0' style='width:100%;margin:8px 0'>"
         "<div id='rpMarks' class='small' style='line-height:1.9'></div>"
         f"<svg viewBox='0 0 {W} {H + 40}' style='width:100%;max-width:420px;background:#101010;display:block;margin:8px auto'>"
-        f"{art}<rect x='{-X}' y='{Y + H - 1300}' width='600' height='1300' fill='none' stroke='#555' stroke-width='2'/>"
+        f"{art}{outline}"
         "<g id='rpTrail'></g><g id='rpBalls'></g>"
         f"<rect id='rpL' x='{-X + 150}' y='{H + 8}' width='120' height='24' rx='6' fill='#333'/>"
         f"<rect id='rpR' x='{-X + 330}' y='{H + 8}' width='120' height='24' rx='6' fill='#333'/></svg></div>",
@@ -705,7 +736,7 @@ function dur(){return F.length?F[F.length-1][0]:0}
 function frameAt(t){let lo=0,hi=F.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(F[m][0]<=t)lo=m;else hi=m-1;}return lo}
 function sx(x){return x-X} function sy(y){return Y+H-y}
 function draw(){if(!F.length)return;const k=frameAt(T),f=F[k];let s='';
- for(let j=2;j+2<f.length;j+=3){const up=f[j+2]==1;s+=`<circle cx='${sx(f[j])}' cy='${sy(f[j+1])}' r='${up?9:8}' fill='${up?'none':'#fff'}' stroke='#fff' stroke-width='3'/>`;}
+ for(let j=2;j+2<f.length;j+=3){const up=f[j+2]==1;s+=`<circle cx='${sx(f[j])}' cy='${sy(f[j+1])}' r='${up?9:8}' fill='${up?'none':'#fff'}' stroke='#fff' stroke-width='3'/><circle cx='${sx(f[j])}' cy='${sy(f[j+1])}' r='${up?11:10}' fill='none' stroke='#000' stroke-width='1.5'/>`;}
  $('rpBalls').innerHTML=s;let t='';for(let q=Math.max(0,k-12);q<k;q++){const g=F[q];for(let j=2;j+2<g.length;j+=3)t+=`<circle cx='${sx(g[j])}' cy='${sy(g[j+1])}' r='3' fill='#4fc3f7' opacity='${(q-k+13)/16}'/>`;}
  $('rpTrail').innerHTML=t;const b=f[1];$('rpL').setAttribute('fill',b&1?'#4fc3f7':'#333');$('rpR').setAttribute('fill',b&2?'#4fc3f7':'#333');
  $('rpTime').textContent=`${T.toFixed(1)} / ${dur().toFixed(0)} s`;$('rpScrub').value=Math.round(1000*T/Math.max(dur(),0.1));}
@@ -874,7 +905,7 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
         h.append("</div>")
 
     # Incidents
-    h.append(replays_html(d, map_file, map_rect))          # round 21
+    h.append(replays_html(d, map_file, map_rect, table_art(d.get("table", ""), os.path.dirname(out_path))))   # round 21
     h.append(f"<h2>Watchdog</h2><div class='panel'>{len(a['incidents'])} incident(s)")
     if a["incidents"]:
         h.append("<table><tr><th>pass</th><th>skill</th><th>kind</th><th>where</th><th>layer</th><th>t</th></tr>" + "".join(

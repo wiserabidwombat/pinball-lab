@@ -99,11 +99,31 @@ final class SceneHostView: MTKView, MTKViewDelegate {
         fitScene()
     }
 
+    /// When the last update ran (nil before the first frame).
+    private var lastUpdate: CFTimeInterval?
+    /// 2026-11-06 (Aaron: "Let's fix Cthulhu at 60hz"): SpriteKit steps physics once per update, so a 60 Hz screen took
+    /// 16.7 ms physics steps where the tables were designed and tuned on 8.3 ms ones. That changed shots: on Cthulhu the
+    /// upper flipper's Lagoon window shrank from ~11 pt to ~4 pt, its sigil and eye shots mostly missed, and the Ritual
+    /// (five candles, two of them upper-flipper shots) almost never reached the Awakening at 60 Hz (robots: 1 of 6
+    /// Rituals vs 11 of 14). So a long frame is now split into updates of at most 1/120 s: a 60 Hz screen runs two
+    /// physics steps per drawn frame and plays exactly like a 120 Hz one (and the 60 Hz flip assists, which only act on
+    /// steps over 1/90 s, stay off). Capped at 4 updates, so a long hitch doesn't snowball.
+    private static let maxStep: CFTimeInterval = 1.0 / 120
+    private static let maxUpdatesPerFrame = 4
+
     func draw(in view: MTKView) {
         guard bounds.width > 0, let pass = currentRenderPassDescriptor, let drawable = currentDrawable,
               let cb = queue.makeCommandBuffer() else { return }
         fitScene()
-        renderer.update(atTime: CACurrentMediaTime())        // update, actions, physics, didFinishUpdate
+        let now = CACurrentMediaTime()
+        if let last = lastUpdate, now > last {
+            // 120 Hz: 8.3 ms → 1 update. 60 Hz: 16.7 ms → 2. The 0.3 of slack keeps ProMotion's uneven frames (up to
+            // ~10.8 ms) at one update, so 120 Hz devices play exactly as before.
+            let n = min(max(Int(((now - last) / Self.maxStep - 0.3).rounded(.up)), 1), Self.maxUpdatesPerFrame)
+            for i in 1..<n { renderer.update(atTime: last + (now - last) * Double(i) / Double(n)) }
+        }
+        renderer.update(atTime: now)                         // update, actions, physics, didFinishUpdate
+        lastUpdate = now
         renderer.render(withViewport: CGRect(origin: .zero, size: drawableSize),
                         commandBuffer: cb, renderPassDescriptor: pass)
         cb.present(drawable)

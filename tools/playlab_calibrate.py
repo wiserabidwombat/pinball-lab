@@ -90,7 +90,11 @@ def main(argv):
 
     m_you = measures(mine)
     m_rob = {s: measures(robot_games[s]) for s in SKILLS}
-    keys = ["catches/min", "drains/min", "ball life s", "shots/min", "score/min"]
+    # Recordings made before the Record me plunge fix (2026-11-06) logged each drain's life as the time since the game
+    # began: there, ball life is meaningless and is left out (and the timing comes from the habits' skill).
+    stale_life = all(abs(d.get("life", 0) - d.get("at", 0)) < 1.0 for g in mine for d in g.get("drains", []))
+    keys = ["catches/min", "drains/min", "shots/min", "score/min"] if stale_life else \
+        ["catches/min", "drains/min", "ball life s", "shots/min", "score/min"]
     for k in ("lane taps/min", "nudges/min"):
         if m_you[k] > 0 and any(m_rob[s][k] > 0 for s in SKILLS):
             keys.append(k)
@@ -119,7 +123,7 @@ def main(argv):
     print(f"\nYou play most like the {nearest.upper()} robot (then {second}).")
     # The two halves of pinball, said plainly: keeping the ball, and working it.
     keep = min(SKILLS, key=lambda s: abs(m_you["drains/min"] - m_rob[s]["drains/min"]) / (m_rob[s]["drains/min"] or 1)
-               + abs(m_you["ball life s"] - m_rob[s]["ball life s"]) / (m_rob[s]["ball life s"] or 1))
+               + (0 if stale_life else abs(m_you["ball life s"] - m_rob[s]["ball life s"]) / (m_rob[s]["ball life s"] or 1)))
     work = min(SKILLS, key=lambda s: abs(m_you["catches/min"] - m_rob[s]["catches/min"]) / (m_rob[s]["catches/min"] or 1)
                + abs(m_you["shots/min"] - m_rob[s]["shots/min"]) / (m_rob[s]["shots/min"] or 1))
     best_keep = min(SKILLS, key=lambda s: m_rob[s]["drains/min"])
@@ -140,18 +144,21 @@ def main(argv):
                 return y0 + (y1 - y0) * ((x - x0) / (x1 - x0) if x1 > x0 else 0)
         return pts[-1][1]
     base = work
-    sigma = place("ball life s", SIGMA)
+    sigma = SIGMA[base] if stale_life else place("ball life s", SIGMA)
     catch = place("catches/min", CATCH)
-    print(f"A stand-in robot for you: the {base}'s habits, timingSigma {sigma:.3f} s (from your ball life), "
+    if stale_life:
+        print("(These recordings predate the Record me plunge fix: their ball lives count from the game's start, so ball "
+              "life is left out and the timing is the habits' skill's. Record again for a real one.)")
+    print(f"A stand-in robot for you: the {base}'s habits, timingSigma {sigma:.3f} s "
+          f"({'the ' + base + chr(39) + 's' if stale_life else 'from your ball life'}), "
           f"catchChance {catch:.2f} (from your catches/min).")
-    runner = {"the-lamplight": "lamplight", "grey-invasion": "greyinvasion", "cthulhu-rising": "cthulhu"}
-    slug = os.path.basename(argv[0])[len("playlab-"):].split("-20")[0]
+    runner = {"The Lamplight": "lamplight", "Grey Invasion": "greyinvasion", "Cthulhu Rising": "cthulhu", "Monsoon": "monsoon"}
     hz = "120" if pass_ == "hz120" else "60"
     # Nudging comes with the advanced/expert habits; a player who never nudged gets the robot's nudges switched off.
     no_nudge = 'OVERRIDE="Lab.nudge=0" ' if m_you["nudges/min"] == 0 and base in ("advanced", "expert") else ""
     print("Run it as the custom skill" + (" (no nudges — you didn't nudge):" if no_nudge else ":"))
     print(f'  {no_nudge}CUSTOM="base={base},sigma={sigma:.3f},catch={catch:.2f}" tools/playlab_run.sh '
-          f"{runner.get(slug, slug)} 6 {hz} custom")
+          f"{runner.get(table, table)} 6 {hz} custom")
     if m_you["minutes"] < 6:
         print("(Under 6 minutes of play — record a couple more games before trusting this.)")
     return 0

@@ -1074,6 +1074,8 @@ final class PlayLab {
     private var ballCount = 0
     private var lowBall: (x: CGFloat, speed: CGFloat, at: TimeInterval, mode: String)?
     private var lastPlunge: (at: TimeInterval, power: CGFloat)?
+    /// Record me: whether a ball sat on the plunger last frame (the player's plunge is seen when it leaves).
+    private var humanOnPlunger = false
     /// Round 7a: the plunge sweep — which scheduled plunge is next, and the plunge being watched (index into
     /// current.plunges, until when, the ball's last y so a lane crossing is seen).
     private var plungeIndex = 0
@@ -1152,6 +1154,7 @@ final class PlayLab {
         ballCount = 0
         lowBall = nil
         lastPlunge = nil
+        humanOnPlunger = false
         watching = nil
         lowPath.removeAll()
         replayFrames.removeAll()
@@ -1193,6 +1196,11 @@ final class PlayLab {
         if config.recording {
             // Round 12: only watching. The host gets no command, so the flippers stay with the player.
             takeQueuedCaptures()
+            // The player's plunge (no robot command logs it): a ball that sat on the plunger has left it. Its power
+            // isn't known (-1); what matters is the time, so a drain's life counts from it.
+            let onPlunger = view.balls.contains { $0.onPlunger }
+            if humanOnPlunger, !onPlunger { lastPlunge = (view.now, -1) }
+            humanOnPlunger = onPlunger
             noteDrains(view, mode: "you")
             watchHumanCatches(view)
             return nil

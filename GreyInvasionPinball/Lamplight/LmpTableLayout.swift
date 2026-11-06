@@ -583,6 +583,36 @@ enum LmpTableLayout {
         LmpSwitch(a: CGPoint(x: rampMouthLeftX, y: rampMouth.y + 12),
                   b: CGPoint(x: rampMouthRightX, y: rampMouth.y + 12), forward: CGVector(dx: 0, dy: 1), slack: 0)
     }
+    /// T5 M9 v30 (Aaron: a ball coming down from the top of the table fell through the ramp): the ramp's low part is
+    /// solid on the floor too. A floor-layer wall runs up each flare wire from y 860 (the alcove's roof and the mouth's
+    /// right post guard below that), along both sides of the channel to where the climb reaches `rampEntryHeight` (drawn as the
+    /// closed entry in tools/lmp_bake_ramp.py, ENTRY_H), and across the channel there. Above that the ramp is high
+    /// enough for a floor ball to pass under. Ramp balls (upper layer) never touch floor walls, so shots are unchanged.
+    static let rampEntryHeight: CGFloat = 24
+    static var rampEntryBlock: [CGPoint] {
+        let u = CGVector(dx: cos(rampHeading), dy: sin(rampHeading))
+        func at(_ along: CGFloat, _ side: CGFloat) -> CGPoint {
+            CGPoint(x: rampMouth.x + u.dx * along - u.dy * side, y: rampMouth.y + u.dy * along + u.dx * side)
+        }
+        func cut(_ a: CGPoint, _ b: CGPoint, y: CGFloat) -> CGPoint {
+            let t = (y - a.y) / (b.y - a.y)
+            return CGPoint(x: a.x + (b.x - a.x) * t, y: y)
+        }
+        let top = rampStraightLength * rampEntryHeight / loftHeight
+        let l1 = at(rampFlareLength, rampHalfWidth), r1 = at(rampFlareLength, -rampHalfWidth)
+        return [cut(CGPoint(x: rampMouthLeftX, y: rampMouth.y), l1, y: rampEntryBlockStartY), l1,
+                at(top, rampHalfWidth), at(top, -rampHalfWidth),
+                r1, cut(CGPoint(x: rampMouthRightX, y: rampMouth.y), r1, y: rampEntryBlockStartY)]
+    }
+    /// 860, not lower: the gaps left below it (to the fireplace roof's corner at (344, 850), 28 pt; to the mouth's right
+    /// post top at (470, 830), 31 pt) are wider than a ball (18), so nothing can wedge there.
+    static let rampEntryBlockStartY: CGFloat = 860
+    /// Inside the closed entry (the block's outline, closed along y 860). A floor ball found in here moving up the table
+    /// is put on the ramp: a fast shot can cross the entry switch and touch a block wall in the same physics step,
+    /// before the switch is checked; it then carries on up the ramp instead of bouncing back as a floor ball.
+    static let rampEntryArea: CGPath = {
+        let p = CGMutablePath(); p.addLines(between: rampEntryBlock); p.closeSubpath(); return p
+    }()
     /// Through the loft's door: the ramp is made.
     static let rampMadeSwitch = LmpSwitch(a: CGPoint(x: 262, y: 1100), b: CGPoint(x: 262, y: 1140),
                                           forward: CGVector(dx: -1, dy: 0))

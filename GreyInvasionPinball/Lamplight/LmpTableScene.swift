@@ -517,6 +517,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
         // The block under the loft (floor layer).
         addWall(points: LmpTableLayout.loftBlock)
         for post in LmpTableLayout.rampMouthPosts { addWall(points: post) }
+        addWall(points: LmpTableLayout.rampEntryBlock)    // T5 M9 v30: the ramp's closed entry stops floor balls
 
         // The loft's floor, drawn over the floor layer.
         let floorPath = CGMutablePath()
@@ -1699,7 +1700,10 @@ final class LmpTableScene: SKScene, RendererHostedScene {
                     body.velocity = CGVector(dx: v.dx * LmpSpinner.ballSpeedKept, dy: v.dy * LmpSpinner.ballSpeedKept)
                 }
                 // Into the ramp's mouth: up onto the upper layer.
-                if ball.heldIn == nil, LmpTableLayout.rampEntrySwitch.crossing(from: p0, to: p) == .forward {
+                // T5 M9 v30: or found inside the ramp's closed entry going up (see LmpTableLayout.rampEntryArea).
+                if ball.heldIn == nil,
+                   LmpTableLayout.rampEntrySwitch.crossing(from: p0, to: p) == .forward
+                    || (body.velocity.dy > 0 && LmpTableLayout.rampEntryArea.contains(p)) {
                     ball.setUpper(true)
                 }
             }

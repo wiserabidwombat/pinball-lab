@@ -119,25 +119,15 @@ for _, i in post_at:
         cylinder(f'post{i}{s}', x, y, 1.6, 0, h + SIDE_ZS[0], M_BRASS, verts=16)
         cylinder(f'foot{i}{s}', x, y, 3.6, 0, 1.6, M_WALNUT)
 
-# the entry plate: a thin brass sheet on the floor in the mouth's flare, its far edge rising onto the carry wires
+# M9 v30 (Aaron: the ramp you hit to go up to the loft doesn't need to be so big): no brass entry plate filling the
+# mouth's flare any more; the flare is just its two wires each side (the physics mouth is unchanged), so the ramp reads
+# as the slim channel.
 lr, rr = art_rail(L.RAMP_HALF_W), art_rail(-L.RAMP_HALF_W)
 cylinder('leftStartPost', *ART_LEFT_START, 2.2, 0, 16, M_BRASS, verts=16)
-plate = [lr[0], rr[0], rr[1], lr[1]]
-bm = bmesh.new()
-top = [bm.verts.new((x, y, 0.3 + L.ramp_height((x, y)) * 0.5)) for x, y in plate]
-bot = [bm.verts.new((x, y, 0.0)) for x, y in plate]
-bm.faces.new(top); bm.faces.new(list(reversed(bot)))
-for i in range(4):
-    j = (i + 1) % 4
-    bm.faces.new([bot[i], bot[j], top[j], top[i]])
-bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 m = bpy.data.materials.new('satin'); m.use_nodes = True                        # satin brass: catches the soft boxes
 b = m.node_tree.nodes['Principled BSDF']
 b.inputs['Base Color'].default_value = (0.86, 0.66, 0.34, 1); b.inputs['Metallic'].default_value = 1.0
 b.inputs['Roughness'].default_value = 0.5
-me = bpy.data.meshes.new('plate'); bm.to_mesh(me); bm.free(); me.materials.append(m)
-link(bpy.data.objects.new('plate', me))
-tube3d('plateLip', [(*lr[0], 0.6), (*rr[0], 0.6)], 0.8, M_BRASS)
 
 # M9 v27 (Aaron: balls looked like they fell through the ramp): the low part of the climb, where the ramp is lower than
 # a ball (and a bit more), is a closed entry: a satin brass floor under the carry wires and walnut side skirts down to

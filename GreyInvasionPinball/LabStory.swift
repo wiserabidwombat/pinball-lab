@@ -88,6 +88,18 @@ extension LabTable {
                 LabStat(label: "Code", value: "About 7,300 lines in 22 files"),
                 LabStat(label: "Testing", value: "Shot Lab robot and the Play Lab, robots that play whole evenings"),
             ]
+        case .grandTour:
+            // T6 M1: a grey box so far; the numbers fill in as it's built.
+            return [
+                LabStat(label: "Table size", value: "600 × 1300 points, with raised Saturn and Moon playfields to come"),
+                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down"),
+                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones"),
+                LabStat(label: "Goal", value: "Tour the nine planets, from Mercury out to Pluto"),
+                LabStat(label: "Art", value: "Coming next: a real-table look with about 110 lamps"),
+                LabStat(label: "Sounds", value: "Monsoon's for now; its own come later"),
+                LabStat(label: "Code", value: "Milestone 1 of 10"),
+                LabStat(label: "Testing", value: "Shot Lab and Play Lab once the shots are in"),
+            ]
         }
     }
 
@@ -140,6 +152,12 @@ extension LabTable {
                 LabNote(title: "A new lower table", detail: "A rubber center post between the flippers and only one outlane, where every earlier table had two."),
                 LabNote(title: "A How to Play you can see", detail: "Every goal is shown on the table, with its lamps lit and the shot drawn on."),
             ]
+        case .grandTour:
+            return [
+                LabNote(title: "Four rollover lanes", detail: "O-R-B-T in both inlanes and both outlanes. The flippers move the lit letters, and all four raise the multiplier."),
+                LabNote(title: "A rocket post", detail: "Spell ORBT and a post pops up between the flippers to save one ball."),
+                LabNote(title: "A kickback", detail: "The left outlane fires a draining ball back into play, once every ball."),
+            ]
         }
     }
 
@@ -182,6 +200,10 @@ extension LabTable {
                 LabNote(title: "Measure contrast on the phone", detail: "Walnut flippers and a ginger cat vanished on the oak floor. Measured on a screenshot, they became ivory flippers and a black-and-white cat."),
                 LabNote(title: "Draw height, keep physics simple", detail: "Balls seemed to fall through the ramp. Drawing the loft and ramp twice as tall fixed the look without a solid ramp that could trap balls."),
                 LabNote(title: "Shapes, not boxes", detail: "A box round the fireplace's pointed roof caught balls rolling off its outside. The check now follows the roof."),
+            ]
+        case .grandTour:
+            return [
+                LabNote(title: "Start from what works", detail: "The walls, flippers and slings are the proven ones from Monsoon, so the new work goes into what sits around them."),
             ]
         }
     }

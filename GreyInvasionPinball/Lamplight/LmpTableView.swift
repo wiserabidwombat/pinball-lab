@@ -419,6 +419,8 @@ struct LmpTableView: View {
             debugButton("Watch the robots") { PlayLab.nextRunIsWatch = true; scene.debugStartPlayLab(); setPaused(false) }
             // Plan 2 round 12: one game of your own, watched by the lab (no robot), the report shared when it ends.
             debugButton("Record me") { PlayLab.nextRunIsRecording = true; scene.debugStartPlayLab(); setPaused(false) }
+            // What-if overrides typed here (LabOverrides.swift): applied at once, until the app quits.
+            LabOverridesField()
             // iPad pacing (2026-10-26): the frame loop (SKRenderer fixes the iPad's 40 fps; SKView is SpriteKit's own),
             // for the next table opened; and the bare pacing test through either loop (watch the Metal HUD's FPS).
             debugButton("Loop: \(useSKView ? "SKView" : "SKRenderer") · next open") { useSKView.toggle() }

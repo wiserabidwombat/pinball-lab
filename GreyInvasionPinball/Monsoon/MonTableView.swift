@@ -376,6 +376,8 @@ struct MonTableView: View {
             debugButton("Watch the robots") { PlayLab.nextRunIsWatch = true; scene.debugStartPlayLab(); setPaused(false) }
             // Plan 2 round 12: one game of your own, watched by the lab (no robot), the report shared when it ends.
             debugButton("Record me") { PlayLab.nextRunIsRecording = true; scene.debugStartPlayLab(); setPaused(false) }
+            // What-if overrides typed here (LabOverrides.swift): applied at once, until the app quits.
+            LabOverridesField()
             #endif
         }
     }

@@ -111,6 +111,7 @@ struct PinballLabRoot: View {
         case "cthulhu": return .cthulhu
         case "monsoon": return .monsoon
         case "orbit": return .orbit
+        case "grandtour": return .grandTour          // Table 06 (its view starts the Shot Lab on -shotlab grandtour)
         default: return nil
         }
         #else

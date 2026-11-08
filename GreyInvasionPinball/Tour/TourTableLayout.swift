@@ -431,8 +431,29 @@ enum TourTableLayout {
     /// up slides down it into the lanes; weaker ones still fall back onto the launch gate and down the right lane. For
     /// every other ball it is open, so the orbits still go round (Aaron chose this over an always-closed one-way flap,
     /// which would have turned the right orbit into a lane feeder). A full plunge no longer loops to the left lane.
-    static let plungeFlapHinge = CGPoint(x: 395, y: 1259.5)       // 1 pt inside the arch (arch y 1260.5 at x 395)
-    static let plungeFlapEnd = CGPoint(x: 330, y: 1214)           // over the A/R lanes, 14 above the posts
+    /// M3 v6: the straight flap became a curved GUIDE. The plunge probe in the Simulator (v5, `-shotlab-scenario
+    /// plungeprobe`) showed real plunges at 70–100% running into the flap's corner at the arch and bouncing back right,
+    /// down the right lane, and 60% dropping off right of the R lane — none reached S-T-A-R (Aaron: "launching the ball
+    /// hits a wall and it never reaches the lanes"). Like a real shooter-lane exit wireform, the guide leaves the arch
+    /// tangentially at x 420 and curves down-left (radius 70, to −130°), ending 31.8 pt over the R lane's right post:
+    /// a ball riding the arch follows it round and drops into R. pymunk tuned to the probe (damping 0.9/s): every plunge
+    /// from ~64% up → R at damping 0.88–0.93; weaker ones fall back down the right lane. With lane change it's the skill
+    /// shot (move the unlit letter to R, then plunge). Solid for the served ball only, as before.
+    static let plungeHook: [CGPoint] = [
+        CGPoint(x: 420, y: 1252.8),
+        CGPoint(x: 413.5, y: 1254.2),
+        CGPoint(x: 407.0, y: 1255.0),
+        CGPoint(x: 400.3, y: 1255.2),
+        CGPoint(x: 393.7, y: 1254.8),
+        CGPoint(x: 387.2, y: 1253.7),
+        CGPoint(x: 380.8, y: 1252.0),
+        CGPoint(x: 374.5, y: 1249.7),
+        CGPoint(x: 368.6, y: 1246.9),
+        CGPoint(x: 362.9, y: 1243.4),
+        CGPoint(x: 357.6, y: 1239.5),
+        CGPoint(x: 352.6, y: 1235.1),
+        CGPoint(x: 348.1, y: 1230.2)
+    ]
     static let plungeClearsBelowY: CGFloat = 900
     /// Aaron (8 Nov 2026): "from a caught ball any time I hit either orbit the ball went all the way around" — the
     /// real-table flippers send every orbit at 2,600–3,000 pt/s, far too fast to fall off the arch. Real tables route

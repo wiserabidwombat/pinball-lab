@@ -332,17 +332,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M3 v3: the plunge flap, a shallow blade hanging from the arch at the top right. Its edge is in the `diverter`
     /// category, which only the served ball (`isPlunge`) has in its collision mask; drawn bright while a plunge is up.
     private func addPlungeFlap() {
-        let a = TourTableLayout.plungeFlapHinge, b = TourTableLayout.plungeFlapEnd
-        let body = SKPhysicsBody(edgeFrom: a, to: b)
-        body.friction = 0.1
+        let path = CGMutablePath()
+        path.addLines(between: TourTableLayout.plungeHook)
+        let body = SKPhysicsBody(edgeChainFrom: path)
+        body.friction = 0.05
         body.restitution = 0.2
         body.categoryBitMask = TourPhysicsCategory.diverter
         body.collisionBitMask = TourPhysicsCategory.ball
         let holder = SKNode()
         holder.physicsBody = body
         addChild(holder)
-        let path = CGMutablePath()
-        path.move(to: a); path.addLine(to: b)
         let blade = SKShapeNode(path: path)
         blade.strokeColor = SKColor(white: 0.85, alpha: 1)
         blade.lineWidth = 4
@@ -897,7 +896,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M3 v5")
+        let label = SKLabelNode(text: "T6 M3 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -943,7 +942,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M3 v5 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T6 M3 v6 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),

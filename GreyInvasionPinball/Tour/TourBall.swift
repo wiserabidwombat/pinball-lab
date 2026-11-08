@@ -27,6 +27,12 @@ final class TourBall: SKNode {
     var releaseAt: TimeInterval = 0
     /// After a kick-out, the scoops leave this ball alone until then.
     var scoopIgnoreUntil: TimeInterval = 0
+    /// M3 v1: armed by crossing an orbit's arm switch going up; the made switch at the top centre then scores it.
+    var leftOrbitArmed = false
+    var rightOrbitArmed = false
+    /// When each was armed (game time): an orbit counts only if it's made within TourTableLayout.orbitMadeWithin.
+    var leftOrbitArmedAt: TimeInterval = -1_000
+    var rightOrbitArmedAt: TimeInterval = -1_000
 
     /// Milestone 1 has only the floor; the ramps add layers later.
     var isOnFloor: Bool { true }

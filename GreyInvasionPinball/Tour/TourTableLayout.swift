@@ -332,6 +332,68 @@ enum TourTableLayout {
     }
     static let roverEject = CGVector(dx: -240, dy: 60)       // out through the dropped bank, a lob onto the right flipper
 
+    // MARK: - Milestone 3 v1: the two orbits with spinners (tools/tour_layout_m3.py, checks tools/tour_render_m3.py)
+    // A shot up one orbit rides the arch round and comes down the other: onto the R-O-C roof (left) or the Mars bunker
+    // roof (right), which shed it toward the flippers. The inner walls are OFFSETS of the arch (the skill: never a second
+    // guessed curve) and smooth rails, like the outer wall; the top centre between them stays open for the lanes and
+    // bumpers. Each mouth is a funnel flared 10° flatter than the shot from the opposite flipper (Grey Invasion's proven
+    // funnel was 7°; a parallel one left ~3°, because the R-O-C bank caps the left orbit at 112° and the bunker roof caps
+    // the right at 62°): aim windows by geometry 107.7–112.1° (left, from the right flipper) and 62.3–67.0° (right, from
+    // the left flipper). The Shot Lab measures the real ones.
+
+    /// The outer arch's inward offset by `inset`: its left half (from the left wall's foot to the top centre) or its right
+    /// half (from the top centre down to the right wall), keeping points with x in `xRange`.
+    static func archOffset(inset: CGFloat, rightHalf: Bool, xRange: ClosedRange<CGFloat>) -> [CGPoint] {
+        let mid = CGPoint(x: worldSize.width / 2, y: topY)
+        let (p0, c, p1) = rightHalf
+            ? (mid, CGPoint(x: rightWallX, y: topY), CGPoint(x: rightWallX, y: archStartY))
+            : (CGPoint(x: leftWallX, y: archStartY), CGPoint(x: leftWallX, y: topY), mid)
+        var points: [CGPoint] = []
+        for i in 0...64 {
+            let t = CGFloat(i) / 64, u = 1 - t
+            let p = CGPoint(x: u * u * p0.x + 2 * u * t * c.x + t * t * p1.x,
+                            y: u * u * p0.y + 2 * u * t * c.y + t * t * p1.y)
+            let d = CGVector(dx: 2 * u * (c.x - p0.x) + 2 * t * (p1.x - c.x),
+                             dy: 2 * u * (c.y - p0.y) + 2 * t * (p1.y - c.y))
+            let l = max(hypot(d.dx, d.dy), 0.001)
+            let q = CGPoint(x: p.x + d.dy / l * inset, y: p.y - d.dx / l * inset)   // the right-hand side = inward
+            if xRange.contains(q.x) { points.append(q) }
+        }
+        return points
+    }
+    /// Left orbit: a 40 pt lane up the left wall (x 20…60); the inner wall stops at x 190.
+    static let leftOrbitTip = CGPoint(x: 105.1, y: 837.1)
+    static let leftOrbitBend = CGPoint(x: 60, y: 915)
+    static var leftOrbitInner: [CGPoint] {
+        [leftOrbitTip, leftOrbitBend] + archOffset(inset: 40, rightHalf: false, xRange: 0...190)
+    }
+    /// Right orbit: a 44 pt lane inside the plunger-lane wall (x 504…548); above the launch gate it shares the arch with
+    /// the shooter lane (76 pt to the right wall). The inner wall runs up from the funnel and over to x 384.
+    static let rightOrbitTip = CGPoint(x: 459.3, y: 664.8)
+    static let rightOrbitBend = CGPoint(x: 504, y: 725)
+    static var rightOrbitInner: [CGPoint] {
+        [rightOrbitTip, rightOrbitBend] + archOffset(inset: 76, rightHalf: true, xRange: 384...600).reversed()
+    }
+    /// Arm switches low in each lane (up arms that orbit, down disarms); the right one stops at the lane wall, so a plunge
+    /// up the shooter lane never arms it. Made = crossing the top centre line the right way (left orbit → right).
+    static let leftOrbitArm = TourSwitch(a: CGPoint(x: leftWallX, y: 990), b: CGPoint(x: 60, y: 990),
+                                         forward: CGVector(dx: 0, dy: 1))
+    static let rightOrbitArm = TourSwitch(a: CGPoint(x: 504, y: 900), b: CGPoint(x: laneWallX, y: 900),
+                                          forward: CGVector(dx: 0, dy: 1))
+    /// A ball armed this long ago or more no longer scores the made switch (a weak shot that dropped off the arch into the
+    /// open top centre would stay armed for good otherwise; a slow orbit takes well under a second).
+    static let orbitMadeWithin: TimeInterval = 2.0
+    static let orbitMade = TourSwitch(a: CGPoint(x: 284, y: 1150), b: CGPoint(x: 284, y: 1275),
+                                      forward: CGVector(dx: 1, dy: 0))
+    /// The spinners across each lane above its mouth (either direction spins them).
+    static let leftSpinnerLine = (a: CGPoint(x: leftWallX, y: 960), b: CGPoint(x: 60, y: 960))
+    static let rightSpinnerLine = (a: CGPoint(x: 504, y: 800), b: CGPoint(x: laneWallX, y: 800))
+    static let leftSpinnerSwitch = TourSwitch(a: leftSpinnerLine.a, b: leftSpinnerLine.b, forward: CGVector(dx: 0, dy: 1))
+    static let rightSpinnerSwitch = TourSwitch(a: rightSpinnerLine.a, b: rightSpinnerLine.b, forward: CGVector(dx: 0, dy: 1))
+    /// The spinner's rendered frames, when the art comes (none yet: TourSpinner draws its blade).
+    static let spinnerArtBox = CGRect(x: -22, y: -10, width: 44, height: 32)
+    static let spinnerFrames = (columns: 6, rows: 4)
+
     /// The height of a wall polyline at x (nil outside its x range).
     static func lineY(_ pts: [CGPoint], at x: CGFloat) -> CGFloat? {
         for (u, v) in zip(pts, pts.dropFirst()) {

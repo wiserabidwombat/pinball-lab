@@ -1,0 +1,69 @@
+"""Table 06 M3 v1: the two orbits with spinners (8 Nov 2026). Builds on tour_layout.py / tour_layout_a.py.
+Left orbit: a 40 pt lane up the left wall (x 20-60) following the arch, its mouth a funnel facing the right flipper above
+the R-O-C bank. Right orbit: a 44 pt lane inside the plunger-lane wall (x 504-548), its mouth a funnel facing the left
+flipper above the Mars bunker; above the launch gate it shares the arch with the plunger lane (76 pt to the right wall).
+Inner walls are OFFSETS of the arch (the skill: never a second guessed curve). A shot up one orbit rides the arch round
+and comes down the other: onto the R-O-C roof (left) or the bunker roof (right), which shed it toward the flippers."""
+import math
+import tour_layout as L
+import tour_layout_a as A
+
+W = 600
+LEFT_X, RIGHT_X, LANE_X = 20, 580, 548
+ARCH_Y, TOP = 1000, 1270
+
+def arch_points(n=64):
+    """The outer arch as one polyline, left (20,1000) over the top to right (580,1000)."""
+    left = [(LEFT_X, ARCH_Y)] + L.quad((LEFT_X, ARCH_Y), (LEFT_X, TOP), (W / 2, TOP), n)
+    right = L.quad((W / 2, TOP), (RIGHT_X, TOP), (RIGHT_X, ARCH_Y), n)
+    return left + right
+
+def offset(pts, d):
+    """Offset a polyline d pt to its right-hand side going left→right over the arch (= inward), by averaged normals."""
+    out = []
+    for i, p in enumerate(pts):
+        a = pts[max(i - 1, 0)]; b = pts[min(i + 1, len(pts) - 1)]
+        tx, ty = b[0] - a[0], b[1] - a[1]; l = math.hypot(tx, ty); tx, ty = tx / l, ty / l
+        out.append((p[0] + ty * d, p[1] - tx * d))
+    return out
+
+ARCH = arch_points()
+L_W, R_W = 40, RIGHT_X - 504          # lane widths: left 40; right 76 above the gate (the plunger lane shares it)
+L_INNER_X, R_INNER_X = LEFT_X + L_W, RIGHT_X - R_W     # 60, 504
+L_END_X, R_END_X = 190, 380           # where the inner walls stop (the top centre stays open for lanes / bumpers)
+
+def side_offset(d, side):
+    """The arch offset by d, from its foot on one side to the top centre."""
+    o = offset(ARCH, d)
+    mid = len(ARCH) // 2
+    return o[:mid + 1] if side == 'L' else o[mid:]
+
+_lo = side_offset(L_W, 'L'); _ro = side_offset(R_W, 'R')
+L_ARC = [p for p in _lo if p[0] <= L_END_X]
+R_ARC = [p for p in _ro if p[0] >= R_END_X]
+
+# Funnels: the bottom of each inner wall slants out along the shot from the opposite flipper (near-parallel, so the ball
+# isn't bounced out: the skill's funnel rule), giving a ~3-ball mouth.
+def unit(deg): t = math.radians(deg); return (math.cos(t), math.sin(t))
+L_SHOT = A.ang(A.TIP_R, (40, 900))          # ~110°
+R_SHOT = A.ang(A.TIP_L, (526, 700))         # ~63°
+# Flared 10° flatter than the shot (Grey Invasion's proven funnel was 7°; parallel left a ~3° window, because the R-O-C
+# bank caps the left orbit at 112° and the bunker roof caps the right at 62°): left 90 pt long, right 75 (its tip stays
+# clear of where the asteroid lane will go).
+FLARE = 10
+L_BEND = (L_INNER_X, 915)
+ux, uy = unit(L_SHOT + FLARE + 180); L_TIP = (L_BEND[0] + ux * 90, L_BEND[1] + uy * 90)
+R_BEND = (R_INNER_X, 725)
+ux, uy = unit(R_SHOT - FLARE + 180); R_TIP = (R_BEND[0] + ux * 75, R_BEND[1] + uy * 75)
+leftOrbitInner = [L_TIP, L_BEND] + L_ARC
+rightOrbitInner = [R_TIP, R_BEND] + list(reversed(R_ARC))   # from the tip up and over (right to left)
+
+# Spinners: across each lane above its mouth (either direction spins).
+L_SPIN_Y, R_SPIN_Y = 960, 800
+leftSpinner = ((LEFT_X, L_SPIN_Y), (L_INNER_X, L_SPIN_Y))
+rightSpinner = ((R_INNER_X, R_SPIN_Y), (LANE_X, R_SPIN_Y))
+# Arm switches low in each lane (going up arms that orbit; going down disarms) — the right one stops at the lane wall,
+# so plunges up the shooter lane never arm it; made = crossing the top centre line (x 284) the right way.
+leftArm = ((LEFT_X, 990), (L_INNER_X, 990))
+rightArm = ((R_INNER_X, 900), (LANE_X, 900))
+madeLine = ((284, 1150), (284, 1275))

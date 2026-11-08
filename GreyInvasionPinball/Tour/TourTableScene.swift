@@ -69,6 +69,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var countdownResetAt: TimeInterval?
     private var sampleResetAt: TimeInterval?
     private var rocketClearAt: TimeInterval?
+    // Milestone 3 v1: the orbits' spinners (left, right) and the last spinner tick (one sound per 50 ms).
+    private var spinners: [TourSpinner] = []
+    private var lastSpinSound: TimeInterval = -1
     // The ball save: once per player ball, on the plunger and for 10 s after launch.
     private var ballSaveUsed = false
     private var launchedAt: TimeInterval?
@@ -210,6 +213,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             rollovers.append(lane)
         }
         addLowerHalf()
+        addOrbits()
         addKickbackLamp()
         addRocketPost()
         addPlunger()
@@ -277,6 +281,19 @@ final class TourTableScene: SKScene, RendererHostedScene {
                                points: TourPoints.rover)
         addChild(missionScoop)
         addChild(roverScoop)
+    }
+
+    /// Milestone 3 v1: the two orbit lanes' inner walls (smooth rails, like the outer wall, so a ball keeps its speed
+    /// round the top) and a spinner across each lane above its mouth.
+    private func addOrbits() {
+        for inner in [TourTableLayout.leftOrbitInner, TourTableLayout.rightOrbitInner] {
+            addWall(points: inner, friction: TourTableLayout.railFriction, restitution: TourTableLayout.railRestitution)
+        }
+        for line in [TourTableLayout.leftSpinnerLine, TourTableLayout.rightSpinnerLine] {
+            let s = TourSpinner(from: line.a, to: line.b)
+            addChild(s)
+            spinners.append(s)
+        }
     }
 
     /// The playfield floor inside the outer wall.
@@ -655,6 +672,72 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    // MARK: - Orbits and spinners (milestone 3 v1, placeholder scoring)
+
+    /// The orbits' arm and made switches and the spinners, from the ball's move this frame (after physics; velocities and
+    /// score only, as in a contact callback).
+    private func orbitSwitches(_ ball: TourBall, from p0: CGPoint, to p: CGPoint) {
+        guard let body = ball.physicsBody else { return }
+        // The switches reach ~10 pt past their ends (TourSwitch's slack): count only a ball inside that lane, so a plunge
+        // beside the lane wall or a ball grazing an inner wall's outside never arms or spins anything.
+        let inLeftLane = p.x < 60
+        let inRightLane = p.x > 504 && p.x < TourTableLayout.laneWallX
+        for (i, sw) in [TourTableLayout.leftSpinnerSwitch, TourTableLayout.rightSpinnerSwitch].enumerated()
+            where i < spinners.count && (i == 0 ? inLeftLane : inRightLane) && sw.crossing(from: p0, to: p) != .none {
+            let v = body.velocity
+            spinners[i].kick(ballSpeed: hypot(v.dx, v.dy))
+            body.velocity = CGVector(dx: v.dx * TourSpinner.ballSpeedKept, dy: v.dy * TourSpinner.ballSpeedKept)
+            labEvent("spinner")
+        }
+        // Table time: the Shot Lab runs physics at its pass's speed, so it keeps its own clock.
+        var now = gameTime
+        #if DEBUG
+        if shotLab != nil { now = shotLabTime }
+        #endif
+        switch inLeftLane ? TourTableLayout.leftOrbitArm.crossing(from: p0, to: p) : .none {
+        case .forward: ball.leftOrbitArmed = true; ball.leftOrbitArmedAt = now
+        case .backward: ball.leftOrbitArmed = false
+        case .none: break
+        }
+        switch inRightLane ? TourTableLayout.rightOrbitArm.crossing(from: p0, to: p) : .none {
+        case .forward: ball.rightOrbitArmed = true; ball.rightOrbitArmedAt = now
+        case .backward: ball.rightOrbitArmed = false
+        case .none: break
+        }
+        let within = TourTableLayout.orbitMadeWithin
+        switch TourTableLayout.orbitMade.crossing(from: p0, to: p) {
+        case .forward where ball.leftOrbitArmed && now - ball.leftOrbitArmedAt < within:
+            ball.leftOrbitArmed = false
+            orbitMade("leftOrbit", banner: "LEFT ORBIT")
+        case .backward where ball.rightOrbitArmed && now - ball.rightOrbitArmedAt < within:
+            ball.rightOrbitArmed = false
+            orbitMade("rightOrbit", banner: "RIGHT ORBIT")
+        default:
+            break
+        }
+    }
+
+    private func orbitMade(_ event: String, banner: String) {
+        labEvent(event)
+        game.add(TourPoints.orbit)
+        hitHaptic.impactOccurred(intensity: 0.7)
+        sfx(.orbit)
+        showBanner(banner)
+    }
+
+    /// Turns the spinners; each half-turn scores, with one tick sound per 50 ms.
+    private func updateSpinners(_ dt: CGFloat, _ now: TimeInterval) {
+        for s in spinners where s.isSpinning {
+            let spins = s.update(dt: dt)
+            guard spins > 0 else { continue }
+            game.add(TourPoints.spin * spins)
+            if now - lastSpinSound >= 0.05 {
+                lastSpinSound = now
+                sfx(.spinner)
+            }
+        }
+    }
+
     // MARK: - Saves
 
     /// Whether a ball that drains now is saved: once per player ball, while it waits on the plunger and for the first
@@ -696,7 +779,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M2 v20")
+        let label = SKLabelNode(text: "T6 M3 v1")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -742,7 +825,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M2 v20 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T6 M3 v1 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1019,6 +1102,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         updateRocketPost(now)
         updateTargets(now)
         updateScoops(now)
+        updateSpinners(dt, now)
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil
@@ -1102,6 +1186,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             let wasAbove = gx * (p0.y - low.y) - gy * (p0.x - low.x) > 0
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
+            orbitSwitches(ball, from: p0, to: p)
             ball.previousPosition = ball.position
             ball.updateLook()
         }
@@ -1202,6 +1287,7 @@ extension TourTableScene {
         updateLanes(now)
         updateTargets(now)
         updateScoops(now)
+        updateSpinners(dt, now)
         if lab.update(now: now) {
             game.banner = lab.progressText
         } else {
@@ -1219,7 +1305,7 @@ extension TourTableScene: ShotLabHost {
     var shotLabTableName: String { "Grand Tour" }
 
     /// The shots a player aims for end a trial; slings and lanes are noted only.
-    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc"] }
+    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc", "leftOrbit", "rightOrbit"] }
 
     /// Left and right flippers, cradled as on the other tables: 40 pt out and 14 above the raised flipper.
     var shotLabFlippers: [ShotLab.FlipperSpec] {

@@ -258,12 +258,15 @@ enum TourTableLayout {
     /// v18 (Aaron on v17: launched the rocket off bounces, "didn't manage to hit from a caught ball"): the rig puts the
     /// crook shot (35 rad/s, rubber 0.3) at x ≈ 245 at this height — the v17 hull's left edge (246). Wings 24 → 40 pt:
     /// the hull is now 103 pt wide (x 232–336, ~7.5° from each flipper), a ball width past each crook shot.
-    static let rocketPad = [CGPoint(x: 232.4, y: 954.0), CGPoint(x: 266, y: 980), CGPoint(x: 284, y: 998),
-                            CGPoint(x: 302, y: 980), CGPoint(x: 335.6, y: 954.0)]
-    static let rocketWingSize = CGSize(width: 40, height: 8)
+    /// v20 (Shot Lab 11-08, 120 Hz, 1,098 trials): caught shots leave at 80–83°, not the rig's 87°, and cross the hull's
+    /// height at x 327–346 (left flipper) / 226–241 (right): the wing TIPS. The door was made only 7 times (late tip
+    /// flips off an inlane). Wings 40 → 52 pt: the hull is x 222–346, so the crook band lands on a wing, not its tip.
+    static let rocketPad = [CGPoint(x: 222.0, y: 960.0), CGPoint(x: 266, y: 980), CGPoint(x: 284, y: 998),
+                            CGPoint(x: 302, y: 980), CGPoint(x: 346.0, y: 960.0)]
+    static let rocketWingSize = CGSize(width: 52, height: 8)
     static let rocketWings: [(center: CGPoint, normal: CGFloat)] = [
-        (CGPoint(x: 249.7, y: 944.0), -.pi / 2 - .pi / 6),     // left wing faces down-left
-        (CGPoint(x: 318.3, y: 944.0), -.pi / 2 + .pi / 6),     // right wing faces down-right
+        (CGPoint(x: 244.5, y: 947.0), -.pi / 2 - .pi / 6),     // left wing faces down-left
+        (CGPoint(x: 323.5, y: 947.0), -.pi / 2 + .pi / 6),     // right wing faces down-right
     ]
     /// The blast door: a drop target across the pocket's mouth (1 pt to each wall), facing down the table. It stays up
     /// through the countdown (hits only count) and drops on the last hit.
@@ -282,8 +285,8 @@ enum TourTableLayout {
     /// Inside the pad behind the door: Mission Control catches any ball found here (tested against the peak, not a box).
     static func inMissionBay(_ p: CGPoint) -> Bool {
         // The pocket is wider at the front now (the wings' backs), so the zone is too; it's all behind the hull.
-        let roof = [CGPoint(x: 232.4, y: 954.0), CGPoint(x: 266, y: 980), CGPoint(x: 284, y: 998),
-                    CGPoint(x: 302, y: 980), CGPoint(x: 335.6, y: 954.0)]
+        let roof = [CGPoint(x: 222.0, y: 960.0), CGPoint(x: 266, y: 980), CGPoint(x: 284, y: 998),
+                    CGPoint(x: 302, y: 980), CGPoint(x: 346.0, y: 960.0)]
         guard p.x > 244, p.x < 324, p.y > 946, let top = lineY(roof, at: p.x) else { return false }
         return p.y < top
     }

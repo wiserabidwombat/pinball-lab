@@ -52,6 +52,23 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var rocketPostUp = false
     private var rocketPostDropAt: TimeInterval?
     private var rocketPostRaisePending = false     // raised in update(), never inside a contact callback
+    // Milestone 2: the lower half's targets and scoops (placeholder scoring).
+    /// The rocket pad's blast door (the bash target), the countdown lamps and the rocket toy (v10).
+    private var blastDoor: TourDropTarget!
+    private var blastWings: [TourDropTarget] = []
+    private var countdownLeft = TourTableLayout.countdownHits
+    private var countdownLampNodes: [SKShapeNode] = []
+    private var rocketToy: SKNode!
+    private var lastRocketHit: TimeInterval = -1
+    private var sampleBank: [TourDropTarget] = []
+    private var rocketStandups: [TourStandup] = []
+    private var pendingDrops: [TourDropTarget] = []
+    private var missionScoop: TourScoop!
+    private var roverScoop: TourScoop!
+    private var roverLit = false
+    private var countdownResetAt: TimeInterval?
+    private var sampleResetAt: TimeInterval?
+    private var rocketClearAt: TimeInterval?
     // The ball save: once per player ball, on the plunger and for 10 s after launch.
     private var ballSaveUsed = false
     private var launchedAt: TimeInterval?
@@ -77,12 +94,21 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var nextBallAt: TimeInterval?
     private var bannerClearAt: TimeInterval?
 
+    #if DEBUG
+    /// M2 v19: the Shot Lab robot (ShotLab.swift), as on Tables 02–05. Its own clock runs at the pass's physics speed.
+    private var shotLab: ShotLab?
+    private var shotLabTime: TimeInterval = 0
+    #endif
+
     /// The menu: physics stopped, whole-table camera, touches ignored.
     var isAttractMode = false {
         didSet {
             guard isAttractMode != oldValue else { return }
             physicsWorld.speed = isAttractMode ? 0 : 1
             if isAttractMode { releaseAllControls() }
+            #if DEBUG
+            if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
+            #endif
             refreshCamera()
         }
     }
@@ -139,7 +165,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     private var effectiveCameraMode: CameraMode {
-        isAttractMode ? .topDown : settings.cameraMode
+        #if DEBUG
+        if shotLab != nil { return .topDown }
+        #endif
+        return isAttractMode ? .topDown : settings.cameraMode
     }
 
     func refreshCamera() {
@@ -180,10 +209,74 @@ final class TourTableScene: SKScene, RendererHostedScene {
             addChild(lane)
             rollovers.append(lane)
         }
+        addLowerHalf()
         addKickbackLamp()
         addRocketPost()
         addPlunger()
         addLaunchGate()
+    }
+
+    /// Milestone 2 (Concept C, v10): the rocket pad (blast door + Mission Control) at the back of the open centre, the ROCKET standups up the
+    /// right wall, and the Mars bunker (sample bank in front of the rover scoop) on the left wall.
+    private func addLowerHalf() {
+        addWall(points: TourTableLayout.rocketPad)
+        addWall(points: TourTableLayout.bunkerRoof)
+        addWall(points: TourTableLayout.bunkerFloor)
+        addWall(points: TourTableLayout.rocStructure)
+        blastDoor = TourDropTarget(at: TourTableLayout.blastDoor, normal: -.pi / 2, label: "",
+                                   size: TourTableLayout.blastDoorSize,
+                                   color: SKColor(red: 0.72, green: 0.76, blue: 0.84, alpha: 1))
+        addChild(blastDoor)
+        for w in TourTableLayout.rocketWings {
+            let wing = TourDropTarget(at: w.center, normal: w.normal, label: "", size: TourTableLayout.rocketWingSize,
+                                      color: SKColor(red: 0.60, green: 0.64, blue: 0.72, alpha: 1))
+            addChild(wing)
+            blastWings.append(wing)
+        }
+        for (i, c) in TourTableLayout.countdownLamps.enumerated() {
+            let lamp = SKShapeNode(circleOfRadius: 6)
+            lamp.position = c
+            lamp.fillColor = SKColor(red: 1.0, green: 0.70, blue: 0.28, alpha: 1)
+            lamp.strokeColor = SKColor(white: 1, alpha: 0.5)
+            lamp.lineWidth = 1
+            lamp.zPosition = -17
+            let n = SKLabelNode(text: "\(TourTableLayout.countdownHits - i)")
+            n.fontName = "AvenirNext-Bold"; n.fontSize = 8; n.verticalAlignmentMode = .center
+            n.fontColor = SKColor(white: 0.1, alpha: 1)
+            lamp.addChild(n)
+            addChild(lamp)
+            countdownLampNodes.append(lamp)
+        }
+        // The rocket toy: a tall triangle on the pad (grey box). It lifts off on the last countdown hit.
+        let rocketPath = CGMutablePath()
+        rocketPath.move(to: CGPoint(x: 0, y: 36)); rocketPath.addLine(to: CGPoint(x: 11, y: -8))
+        rocketPath.addLine(to: CGPoint(x: -11, y: -8)); rocketPath.closeSubpath()
+        let rocket = SKShapeNode(path: rocketPath)
+        rocket.fillColor = SKColor(red: 0.90, green: 0.92, blue: 0.96, alpha: 1)
+        rocket.strokeColor = SKColor(red: 1.0, green: 0.55, blue: 0.2, alpha: 1)
+        rocket.lineWidth = 1.5
+        rocket.position = TourTableLayout.rocketToy
+        rocket.zPosition = 25
+        addChild(rocket)
+        rocketToy = rocket
+        showCountdown()
+        for (i, c) in TourTableLayout.sampleCenters.enumerated() {
+            let t = TourDropTarget(at: c, normal: TourTableLayout.sampleNormal, label: "\(i + 1)",
+                                   color: SKColor(red: 0.90, green: 0.42, blue: 0.29, alpha: 1))
+            addChild(t)
+            sampleBank.append(t)
+        }
+        for (i, c) in TourTableLayout.rocketCenters.enumerated() {
+            let s = TourStandup(at: c, normal: TourTableLayout.rocketNormal, label: TourTableLayout.rocketLabels[i])
+            addChild(s)
+            rocketStandups.append(s)
+        }
+        missionScoop = TourScoop(at: TourTableLayout.missionScoop, ejectVelocity: TourTableLayout.missionEject,
+                                 points: TourPoints.missionControl)
+        roverScoop = TourScoop(at: TourTableLayout.roverScoop, ejectVelocity: TourTableLayout.roverEject,
+                               points: TourPoints.rover)
+        addChild(missionScoop)
+        addChild(roverScoop)
     }
 
     /// The playfield floor inside the outer wall.
@@ -402,6 +495,166 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    // MARK: - Targets and scoops (milestone 2, placeholder rules)
+
+    /// Drops hit this frame (marked in the contact callback), then whether a bank is complete.
+    private func updateTargets(_ now: TimeInterval) {
+        if !pendingDrops.isEmpty {
+            // Only the bank that was hit this frame can complete (a full bank waiting for its scoop doesn't re-award).
+            let hitSample = pendingDrops.contains { d in sampleBank.contains { $0 === d } }
+            for t in pendingDrops {
+                if t === blastDoor || blastWings.contains(where: { $0 === t }) {
+                    rocketHit(now, on: t)
+                    continue
+                }
+                t.drop()
+                labEvent("sample")
+                game.add(TourPoints.sampleDrop)
+                hitHaptic.impactOccurred(intensity: 0.7)
+                sfx(.standup)
+            }
+            pendingDrops.removeAll()
+            if hitSample, sampleBank.allSatisfy({ $0.isDown }), !roverLit, sampleResetAt == nil {
+                roverLit = true
+                game.add(TourPoints.samplesComplete)
+                bigHaptic.impactOccurred()
+                showBanner("SAMPLES COLLECTED · ROVER OPEN")
+            }
+        }
+        if let due = countdownResetAt, now >= due {
+            countdownResetAt = nil
+            blastDoor.raise()
+            countdownLeft = TourTableLayout.countdownHits
+            showCountdown()
+        }
+        if let due = sampleResetAt, now >= due {
+            sampleResetAt = nil
+            sampleBank.forEach { $0.raise() }
+        }
+        if let due = rocketClearAt, now >= due {
+            rocketClearAt = nil
+            rocketStandups.forEach { $0.isLit = false }
+        }
+    }
+
+    /// A ball hit the rocket pad's blast door: one count off the countdown (the door stays up). On the last hit the
+    /// rocket lifts off, the door drops and Mission Control behind it is open until the kick-out.
+    private func rocketHit(_ now: TimeInterval, on target: TourDropTarget) {
+        target.clearHit()                          // a bash target: ready for the next hit (the wings never drop)
+        guard now - lastRocketHit > 0.25, countdownResetAt == nil, !blastDoor.isDown else { return }
+        lastRocketHit = now
+        labEvent("rocket")
+        hitHaptic.impactOccurred(intensity: 0.7)
+        sfx(.standup)
+        countdownLeft = max(0, countdownLeft - 1)
+        showCountdown()
+        if countdownLeft > 0 {
+            game.add(TourPoints.countdownDrop)
+            showBanner("T-MINUS \(countdownLeft)")
+            return
+        }
+        game.add(TourPoints.countdownComplete)
+        bigHaptic.impactOccurred()
+        showBanner("LIFTOFF · MISSION CONTROL OPEN")
+        blastDoor.drop()
+        Effects.burst(in: self, at: TourTableLayout.rocketToy, color: SKColor(red: 1, green: 0.6, blue: 0.2, alpha: 1),
+                      count: 30, speed: 260, lifetime: 0.7)
+        rocketToy.removeAllActions()
+        rocketToy.position = TourTableLayout.rocketToy
+        rocketToy.run(.sequence([
+            .group([.moveBy(x: 0, y: 160, duration: 0.9), .fadeOut(withDuration: 0.9)]),
+            .wait(forDuration: 1.2),
+            .run { [weak self] in self?.rocketToy.position = TourTableLayout.rocketToy },
+            .fadeIn(withDuration: 0.4)]))
+    }
+
+    private func showCountdown() {
+        for (i, lamp) in countdownLampNodes.enumerated() {
+            // Lamp i reads (5 − i); it's lit while that count is still to come.
+            lamp.alpha = (TourTableLayout.countdownHits - i) <= countdownLeft ? 1 : 0.2
+        }
+    }
+
+    private func hitStandup(_ s: TourStandup) {
+        guard s.hit(at: gameTime) else { return }
+        labEvent("roc")
+        sfx(.standup)
+        hitHaptic.impactOccurred(intensity: 0.5)
+        guard rocketClearAt == nil else { return }
+        if s.isLit {
+            game.add(TourPoints.rocketRepeat)
+            return
+        }
+        s.isLit = true
+        game.add(TourPoints.rocketLetter)
+        guard rocketStandups.allSatisfy({ $0.isLit }) else { return }
+        game.add(TourPoints.rocketComplete)
+        bigHaptic.impactOccurred()
+        showBanner(TourTableLayout.rocketLabels.prefix(rocketStandups.count).joined(separator: "-"))
+        rocketClearAt = gameTime + 1.0
+    }
+
+    /// Catches a ball that rolls into an empty hole, holds it, then kicks it out (Table 04's pattern).
+    private func updateScoops(_ now: TimeInterval) {
+        for ball in balls {
+            guard let body = ball.physicsBody else { continue }
+            if let scoop = ball.heldIn {
+                ball.position = scoop.position
+                body.velocity = .zero
+                body.angularVelocity = 0
+                if now >= ball.releaseAt {
+                    ball.heldIn = nil
+                    ball.scoopIgnoreUntil = now + TourTableLayout.scoopRecapture
+                    body.affectedByGravity = true
+                    body.velocity = scoop.ejectVelocity
+                    sfx(.scoopOut)
+                    // The kick-out clears the bank in front (no score), and the bank comes back up once the ball is
+                    // through it: the eject would otherwise hit the standing drops from behind.
+                    if scoop === missionScoop {
+                        // Out through the subway at the top of the left inlane; the countdown resets behind it.
+                        ball.position = TourTableLayout.missionSubwayExit
+                        ball.previousPosition = ball.position
+                        countdownResetAt = now + TourTableLayout.bankResetDelay
+                    } else if scoop === roverScoop {
+                        sampleBank.filter { !$0.isDown }.forEach { $0.drop() }
+                        sampleResetAt = now + TourTableLayout.bankResetDelay
+                    }
+                }
+                continue
+            }
+            guard now >= ball.scoopIgnoreUntil else { continue }
+            let v = body.velocity
+            let from = CGPoint(x: ball.position.x - v.dx * lastStep, y: ball.position.y - v.dy * lastStep)
+            // Caught by its path past the hole, or anywhere inside the bay / bunker (so no ball can rest in there).
+            let p = ball.position
+            guard let scoop = [missionScoop!, roverScoop!].first(where: { candidate in
+                let inside = candidate === missionScoop ? TourTableLayout.inMissionBay(p) : TourTableLayout.inBunker(p)
+                return (candidate.catches(from: from, to: p) || inside)
+                    && !balls.contains(where: { $0.heldIn === candidate })
+            }) else { continue }
+            ball.heldIn = scoop
+            ball.releaseAt = now + TourTableLayout.scoopHold
+            body.affectedByGravity = false
+            body.velocity = .zero
+            scoop.flash()
+            sfx(.scoopIn)
+            hitHaptic.impactOccurred(intensity: 0.8)
+            Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
+            labEvent(scoop === missionScoop ? "missionControl" : "rover")
+            if scoop === missionScoop {
+                game.add(TourPoints.missionControl)
+                showBanner("MISSION CONTROL")
+            } else if roverLit {
+                roverLit = false
+                game.add(TourPoints.roverHome)
+                showBanner("ROVER HOME · SAMPLES SAFE")
+            } else {
+                game.add(TourPoints.rover)
+                showBanner("ROVER")
+            }
+        }
+    }
+
     // MARK: - Saves
 
     /// Whether a ball that drains now is saved: once per player ball, while it waits on the plunger and for the first
@@ -419,6 +672,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
             guard let body = ball.physicsBody else { continue }
             let p = ball.position
             if p.x < TourTableLayout.kickbackMaxX, p.y < TourTableLayout.kickbackTriggerY, p.y > 0, body.velocity.dy < 0 {
+                // From the lane centre, so it meets the R-O-C '/' where the sim says it turns into the table.
+                ball.position.x = TourTableLayout.kickbackLaneX
                 body.velocity = CGVector(dx: 0, dy: TourTableLayout.kickbackSpeed)
                 setKickbackLit(false)
                 bigHaptic.impactOccurred()
@@ -441,7 +696,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M1 v1")
+        let label = SKLabelNode(text: "T6 M2 v19")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -487,7 +742,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M1 v1 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T6 M2 v19 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -538,6 +793,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     func newGame() {
         fpsLow = 0
+        #if DEBUG
+        if shotLab != nil { physicsWorld.speed = 1 }
+        shotLab = nil                              // a new game stops the Shot Lab
+        #endif
         isAttractMode = false
         padAArmed = false                          // the A press that started the game isn't a plunger pull
         removeAllBalls()
@@ -547,6 +806,17 @@ final class TourTableScene: SKScene, RendererHostedScene {
         lanesResetAt = nil
         rollovers.forEach { $0.isLit = false }
         setKickbackLit(true)
+        pendingDrops.removeAll()
+        blastDoor.raise()
+        countdownLeft = TourTableLayout.countdownHits
+        showCountdown()
+        lastRocketHit = -1
+        sampleBank.forEach { $0.raise() }
+        rocketStandups.forEach { $0.isLit = false }
+        roverLit = false
+        countdownResetAt = nil
+        sampleResetAt = nil
+        rocketClearAt = nil
         rocketPostRaisePending = false
         setRocketPost(up: false)
         ballSaveUsed = false
@@ -568,6 +838,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let view = view ?? hostView, !isAttractMode else { return }
+        #if DEBUG
+        if shotLab != nil { return }               // the robot has the flippers
+        #endif
         for touch in touches {
             let p = touch.location(in: view)   // screen points: the camera moves the table
             if isBallOnPlunger,
@@ -726,6 +999,12 @@ final class TourTableScene: SKScene, RendererHostedScene {
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
+        #if DEBUG
+        if shotLab != nil {                        // Shot Lab: the robot's frame instead of a game frame
+            updateShotLab(CGFloat(step))
+            return
+        }
+        #endif
         if isAttractMode { return }
 
         let dt = CGFloat(step)
@@ -738,6 +1017,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
         updateGates()
         updateLanes(now)
         updateRocketPost(now)
+        updateTargets(now)
+        updateScoops(now)
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil
@@ -851,6 +1132,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         case TourPhysicsCategory.slingshot:
             // The kicking face is a child of the slingshot node.
             if let sling = node.parent as? TourSlingshot, sling.hit(ball: ballBody, at: gameTime) {
+                labEvent("sling")
                 game.add(TourPoints.slingshot)
                 hitHaptic.impactOccurred(intensity: 0.6)
                 Effects.burst(in: self, at: ballNode.position, color: Self.wallColor, count: 8,
@@ -868,13 +1150,141 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 sfx(.ballSave)
                 showBanner("ROCKET POST SAVE")
             }
+        case TourPhysicsCategory.target:
+            // The plate carrying the body is a child of the target node.
+            if let drop = node.parent as? TourDropTarget {
+                if drop.registerHit() { pendingDrops.append(drop) }
+            } else if let standup = node.parent as? TourStandup {
+                hitStandup(standup)
+            }
         case TourPhysicsCategory.rollover:
-            if let lane = node as? TourRollover { rollOver(lane, at: gameTime) }
+            if let lane = node as? TourRollover { labEvent("lane"); rollOver(lane, at: gameTime) }
         default:
             break
         }
     }
 }
+
+extension TourTableScene {
+    /// A shot event for the labs (a no-op in play and in Release builds).
+    fileprivate func labEvent(_ name: String) {
+        #if DEBUG
+        shotLab?.event(name, at: shotLabTime)
+        #endif
+    }
+}
+
+#if DEBUG
+extension TourTableScene {
+    /// Starts the robot: it takes over the flippers and sweeps flip timings from a cradled ball on each flipper at
+    /// 120 Hz and 60 Hz physics steps (~25 min in the Simulator). Menu or a new game stops it.
+    func debugStartShotLab() {
+        isAttractMode = false
+        shotLabTime = 0
+        shotLab = ShotLab(host: self)
+        refreshCamera()
+    }
+
+    /// The robot's frame: only what the physics and shot detection need (no serving, drains, saves or banners).
+    fileprivate func updateShotLab(_ realDt: CGFloat) {
+        guard let lab = shotLab else { return }
+        let speed = CGFloat(lab.physicsSpeed)
+        physicsWorld.speed = speed
+        let dt = realDt * speed
+        shotLabTime += TimeInterval(dt)
+        let now = shotLabTime
+        lastStep = dt
+        leftFlipper.step(dt: dt)
+        rightFlipper.step(dt: dt)
+        slingshots.forEach { $0.settle() }
+        governInlanes()
+        updateGates()
+        updateLanes(now)
+        updateTargets(now)
+        updateScoops(now)
+        if lab.update(now: now) {
+            game.banner = lab.progressText
+        } else {
+            let saved = lab.save(now: now)
+            shotLab = nil
+            physicsWorld.speed = 1
+            shotLabResetTable()
+            game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+            ShotLab.quitIfLaunchedForLab()          // launched by tools/shotlab_run.sh grandtour → quit
+        }
+    }
+}
+
+extension TourTableScene: ShotLabHost {
+    var shotLabTableName: String { "Grand Tour" }
+
+    /// The shots a player aims for end a trial; slings and lanes are noted only.
+    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc"] }
+
+    /// Left and right flippers, cradled as on the other tables: 40 pt out and 14 above the raised flipper.
+    var shotLabFlippers: [ShotLab.FlipperSpec] {
+        let up = TourTableLayout.flipperTravel - TourTableLayout.flipperRestAngle      // 30° above horizontal
+        let along: CGFloat = 40, above: CGFloat = 14
+        let l = TourTableLayout.leftFlipperPivot
+        let left = CGPoint(x: l.x + along * cos(up) - above * sin(up), y: l.y + along * sin(up) + above * cos(up))
+        let right = CGPoint(x: TourTableLayout.mirrorSum - left.x, y: left.y)
+        let ix = TourTableLayout.laneGuideX + 17, iy = TourTableLayout.laneGuideTop + 10
+        let r = TourTableLayout.rightFlipperPivot
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left,
+                                    starts: ShotLab.lowerStarts(pivot: l, pointsLeft: false, inlaneX: ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: right,
+                                    starts: ShotLab.lowerStarts(pivot: r, pointsLeft: true, inlaneX: TourTableLayout.mirrorSum - ix, inlaneTopY: iy))]
+    }
+
+    func shotLabSetFlipper(_ index: Int, pressed: Bool) {
+        if index == 0 { leftFlipper.isPressed = pressed } else { rightFlipper.isPressed = pressed }
+    }
+
+    func shotLabPlaceBall(at point: CGPoint) {
+        let ball = TourBall(at: point)
+        addChild(ball)
+        balls.append(ball)
+    }
+
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector) {
+        shotLabPlaceBall(at: point)
+        balls.last?.physicsBody?.velocity = velocity
+    }
+
+    /// Every ball gone, targets up, the countdown back to 5, no saves lit, scoops empty.
+    func shotLabResetTable() {
+        removeAllBalls()
+        nextBallAt = nil
+        lanesResetAt = nil
+        rollovers.forEach { $0.isLit = false }
+        pendingDrops.removeAll()
+        blastDoor.raise()
+        countdownLeft = TourTableLayout.countdownHits
+        showCountdown()
+        lastRocketHit = -1
+        sampleBank.forEach { $0.raise() }
+        rocketStandups.forEach { $0.isLit = false }
+        roverLit = false
+        countdownResetAt = nil
+        sampleResetAt = nil
+        rocketClearAt = nil
+        rocketPostRaisePending = false
+        setRocketPost(up: false)
+        setKickbackLit(false)
+    }
+
+    /// Where shots cross just below the rocket's hull and at the shot line (the ramp mouths' height).
+    var shotLabProbes: [ShotLab.Probe] {
+        [ShotLab.Probe(name: "hull", y: TourTableLayout.blastDoor.y - 30),
+         ShotLab.Probe(name: "shotLine", y: 600)]
+    }
+
+    var shotLabBall: (position: CGPoint, velocity: CGVector)? {
+        guard let ball = balls.first else { return nil }
+        return (ball.position, ball.physicsBody?.velocity ?? .zero)
+    }
+}
+#endif
 
 extension TourTableScene: SKPhysicsContactDelegate {
     nonisolated func didBegin(_ contact: SKPhysicsContact) {

@@ -59,6 +59,19 @@ struct TourTableView: View {
         .onAppear {
             // Game controller: A = Play / Resume / Play Again, Menu = pause (flippers and plunger: the scene)
             LabGamepad.shared.claim("grandtour", onA: { gamepadA() }, onMenu: { gamepadMenu() })
+            #if DEBUG
+            // `-shotlab grandtour [-shotlab-flippers left,right] [-shotlab-start inlane|drop]`: the Shot Lab sweep
+            // unattended (tools/shotlab_run.sh grandtour), as on the other tables.
+            if PlayLab.launchTable == nil, ShotLab.launchTable == "grandtour" {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartShotLab()
+                }
+            }
+            #endif
         }
         .onDisappear { LabGamepad.shared.release("grandtour") }
         .onChange(of: scenePhase) { _, phase in
@@ -273,8 +286,27 @@ struct TourTableView: View {
             volumeRow
             overlayButton("Restart", action: startGame)
             overlayButton("Menu", action: goToMenu)
+            #if DEBUG
+            // What-if overrides typed here (LabOverrides.swift): applied at once, until the app quits (Tour.flipUp …).
+            LabOverridesField()
+            // The Shot Lab robot (~25 min in the Simulator; results go to ShotLab/ on the Mac).
+            debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
+            #endif
         }
     }
+
+    #if DEBUG
+    private func debugButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.25), in: Capsule())
+        }
+        .foregroundStyle(.orange)
+    }
+    #endif
 
     private var gameOverOverlay: some View {
         overlayCard {

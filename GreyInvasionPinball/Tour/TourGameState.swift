@@ -12,6 +12,17 @@ enum TourPoints {
     static let laneRepeat = 50
     static let lanesComplete = 5_000
     static let rocketPost = 1_000
+    // Milestone 2 (placeholder scoring until the rules milestone)
+    static let countdownDrop = 500
+    static let countdownComplete = 5_000
+    static let missionControl = 10_000
+    static let sampleDrop = 750
+    static let samplesComplete = 3_000
+    static let rover = 2_000
+    static let roverHome = 15_000
+    static let rocketLetter = 250
+    static let rocketRepeat = 50
+    static let rocketComplete = 10_000
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

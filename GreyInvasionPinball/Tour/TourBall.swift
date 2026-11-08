@@ -22,6 +22,11 @@ final class TourBall: SKNode {
     var previousPosition: CGPoint
     /// Whether the one-way launch gate is solid for this ball (while it's above the gate moving down).
     private(set) var launchGateSolid = false
+    /// The scoop holding this ball, when it's caught in one; and when it's kicked out.
+    var heldIn: TourScoop?
+    var releaseAt: TimeInterval = 0
+    /// After a kick-out, the scoops leave this ball alone until then.
+    var scoopIgnoreUntil: TimeInterval = 0
 
     /// Milestone 1 has only the floor; the ramps add layers later.
     var isOnFloor: Bool { true }

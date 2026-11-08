@@ -83,6 +83,8 @@ final class TourFlipper: SKNode {
         let speed = min(max(wanted, -TourTableLayout.flipperDownSpeed), TourTableLayout.flipperUpSpeed)
         body.isResting = false                        // a sleeping body ignores new velocities
         body.angularVelocity = raiseSign * speed
+        let bounce = TourTableLayout.flipperRestitution       // a what-if, so it's read every frame (v14)
+        if body.restitution != bounce { body.restitution = bounce }
     }
 
     /// The flip assist (Lamplight T5 M8 v12; Monsoon Play Lab runs 3–4: the 60 Hz robots were the weak rows). At 60 Hz
@@ -180,7 +182,7 @@ final class TourFlipper: SKNode {
         body.angularDamping = 0
         body.linearDamping = 0
         body.friction = TourTableLayout.flipperFriction
-        body.restitution = 0                         // dead rubber: no extra bounce
+        body.restitution = TourTableLayout.flipperRestitution
         body.usesPreciseCollisionDetection = true
         body.categoryBitMask = TourPhysicsCategory.flipper
         body.collisionBitMask = TourPhysicsCategory.ball

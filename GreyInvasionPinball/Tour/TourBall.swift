@@ -22,6 +22,10 @@ final class TourBall: SKNode {
     var previousPosition: CGPoint
     /// Whether the one-way launch gate is solid for this ball (while it's above the gate moving down).
     private(set) var launchGateSolid = false
+    /// M3 v3: the ball just served, until it is in play below the top (the plunge flap is closed for it alone).
+    var isPlunge = false
+    private(set) var plungeFlapSolid = false
+    private(set) var orbitGateSolid = false
     /// The scoop holding this ball, when it's caught in one; and when it's kicked out.
     var heldIn: TourScoop?
     var releaseAt: TimeInterval = 0
@@ -89,6 +93,18 @@ final class TourBall: SKNode {
         if trail.particleBirthRate != rate { trail.particleBirthRate = rate }
     }
 
+    func setPlungeFlapSolid(_ solid: Bool) {
+        guard solid != plungeFlapSolid else { return }
+        plungeFlapSolid = solid
+        updateCollisionMask()
+    }
+
+    func setOrbitGateSolid(_ solid: Bool) {
+        guard solid != orbitGateSolid else { return }
+        orbitGateSolid = solid
+        updateCollisionMask()
+    }
+
     func setLaunchGateSolid(_ solid: Bool) {
         guard solid != launchGateSolid else { return }
         launchGateSolid = solid
@@ -100,6 +116,8 @@ final class TourBall: SKNode {
         var mask = TourPhysicsCategory.wall | TourPhysicsCategory.flipper | TourPhysicsCategory.slingshot
             | TourPhysicsCategory.bumper | TourPhysicsCategory.target | TourPhysicsCategory.ball
         if launchGateSolid { mask |= TourPhysicsCategory.launchGate }
+        if plungeFlapSolid { mask |= TourPhysicsCategory.diverter }
+        if orbitGateSolid { mask |= TourPhysicsCategory.orbitGate }
         body.collisionBitMask = mask
     }
 }

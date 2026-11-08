@@ -68,7 +68,7 @@ struct TourTableView: View {
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
-                    scene.debugStartShotLab()
+                    if ShotLab.launchScenario == "plungeprobe" { scene.debugPlungeProbe() } else { scene.debugStartShotLab() }
                 }
             }
             #endif

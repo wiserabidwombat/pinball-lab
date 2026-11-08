@@ -26,6 +26,10 @@ enum TourPoints {
     // Milestone 3 (placeholder)
     static let orbit = 5_000
     static let spin = 20
+    static let starLit = 500
+    static let starRepeat = 50
+    static let starComplete = 5_000
+    static let bumper = 100
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

@@ -72,6 +72,18 @@ final class TourTableScene: SKScene, RendererHostedScene {
     // Milestone 3 v1: the orbits' spinners (left, right) and the last spinner tick (one sound per 50 ms).
     private var spinners: [TourSpinner] = []
     private var lastSpinSound: TimeInterval = -1
+    // Milestone 3 v2: the S-T-A-R top lanes (their own lane change and completion blink) and the bumper nest.
+    private var starLanes: [TourRollover] = []
+    private var starResetAt: TimeInterval?
+    private var bumpers: [TourBumper] = []
+    /// M3 v3: the plunge flap's drawn blade (solid per ball, for the served ball only).
+    private var plungeFlap: SKShapeNode?
+    #if DEBUG
+    /// DEBUG plunge probe (`-shotlab grandtour -shotlab-scenario plungeprobe`): powers left, current power, trial time.
+    fileprivate var plungeProbe: (powers: [CGFloat], power: CGFloat, t: CGFloat, logT: CGFloat, fired: Bool)?
+    #endif
+    /// M3 v3: the top orbit gate's drawn flap (swings when a ball passes it going left).
+    private var orbitGateFlap: SKShapeNode?
     // The ball save: once per player ball, on the plunger and for 10 s after launch.
     private var ballSaveUsed = false
     private var launchedAt: TimeInterval?
@@ -214,6 +226,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
         addLowerHalf()
         addOrbits()
+        addTopLanes()
+        addPlungeFlap()
+        addOrbitGate()
         addKickbackLamp()
         addRocketPost()
         addPlunger()
@@ -294,6 +309,70 @@ final class TourTableScene: SKScene, RendererHostedScene {
             addChild(s)
             spinners.append(s)
         }
+    }
+
+    /// Milestone 3 v2: the S-T-A-R lanes (five short posts, a rollover with its lamp in each lane) and the bumper nest.
+    private func addTopLanes() {
+        for x in TourTableLayout.starPostXs {
+            addWall(points: [CGPoint(x: x, y: TourTableLayout.starPostBottom), CGPoint(x: x, y: TourTableLayout.starPostTop)])
+        }
+        for (i, x) in TourTableLayout.starLaneXs.enumerated() {
+            let lane = TourRollover(letter: TourTableLayout.starLetters[i], x: x, y: TourTableLayout.starRolloverY,
+                                    lampDy: TourTableLayout.starLampY - TourTableLayout.starRolloverY)
+            addChild(lane)
+            starLanes.append(lane)
+        }
+        for c in TourTableLayout.bumperCenters {
+            let b = TourBumper(at: c)
+            addChild(b)
+            bumpers.append(b)
+        }
+    }
+
+    /// M3 v3: the plunge flap, a shallow blade hanging from the arch at the top right. Its edge is in the `diverter`
+    /// category, which only the served ball (`isPlunge`) has in its collision mask; drawn bright while a plunge is up.
+    private func addPlungeFlap() {
+        let a = TourTableLayout.plungeFlapHinge, b = TourTableLayout.plungeFlapEnd
+        let body = SKPhysicsBody(edgeFrom: a, to: b)
+        body.friction = 0.1
+        body.restitution = 0.2
+        body.categoryBitMask = TourPhysicsCategory.diverter
+        body.collisionBitMask = TourPhysicsCategory.ball
+        let holder = SKNode()
+        holder.physicsBody = body
+        addChild(holder)
+        let path = CGMutablePath()
+        path.move(to: a); path.addLine(to: b)
+        let blade = SKShapeNode(path: path)
+        blade.strokeColor = SKColor(white: 0.85, alpha: 1)
+        blade.lineWidth = 4
+        blade.lineCap = .round
+        blade.zPosition = 2
+        blade.alpha = 0.3
+        addChild(blade)
+        plungeFlap = blade
+    }
+
+    /// M3 v3: the top orbit gate (one-way: solid per ball, only for a ball moving right that isn't the plunge).
+    private func addOrbitGate() {
+        let a = TourTableLayout.orbitGateTop, b = TourTableLayout.orbitGateBottom
+        let body = SKPhysicsBody(edgeFrom: a, to: b)
+        body.friction = 0.1
+        body.restitution = 0.1
+        body.categoryBitMask = TourPhysicsCategory.orbitGate
+        body.collisionBitMask = TourPhysicsCategory.ball
+        let holder = SKNode()
+        holder.physicsBody = body
+        addChild(holder)
+        // The drawn flap hangs from its hinge on the arch.
+        let flap = SKShapeNode(rect: CGRect(x: -2.5, y: -(a.y - b.y), width: 5, height: a.y - b.y), cornerRadius: 2)
+        flap.position = a
+        flap.fillColor = SKColor(white: 0.82, alpha: 1)
+        flap.strokeColor = SKColor(white: 0.25, alpha: 1)
+        flap.lineWidth = 1
+        flap.zPosition = 2
+        addChild(flap)
+        orbitGateFlap = flap
     }
 
     /// The playfield floor inside the outer wall.
@@ -446,12 +525,19 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func updateGates() {
         let low = TourTableLayout.gateLow, high = TourTableLayout.gateHigh
         let gx = high.x - low.x, gy = high.y - low.y
+        var plungeUp = false
         for ball in balls {
             let v = ball.physicsBody?.velocity ?? .zero
             let p = ball.position
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             ball.setLaunchGateSolid(above && v.dy < 0)
+            // M3 v3: the plunge flap is closed for the served ball until it is in play below the top.
+            if ball.isPlunge, p.y < TourTableLayout.plungeClearsBelowY, p.x < TourTableLayout.laneWallX { ball.isPlunge = false }
+            ball.setPlungeFlapSolid(ball.isPlunge)
+            ball.setOrbitGateSolid(v.dx > 0 && !ball.isPlunge)
+            if ball.isPlunge && !isOnPlunger(ball) { plungeUp = true }
         }
+        plungeFlap?.alpha = plungeUp ? 1 : 0.3
     }
 
     private func swingLaunchGate() {
@@ -493,21 +579,53 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     private func updateLanes(_ now: TimeInterval) {
-        guard let due = lanesResetAt else { return }
-        let blinkOn = Int((due - now) * 10) % 2 == 0
-        rollovers.forEach { $0.isLit = blinkOn }
-        if now >= due {
-            lanesResetAt = nil
-            rollovers.forEach { $0.isLit = false }
+        if let due = lanesResetAt {
+            let blinkOn = Int((due - now) * 10) % 2 == 0
+            rollovers.forEach { $0.isLit = blinkOn }
+            if now >= due {
+                lanesResetAt = nil
+                rollovers.forEach { $0.isLit = false }
+            }
         }
+        if let due = starResetAt {
+            let blinkOn = Int((due - now) * 10) % 2 == 0
+            starLanes.forEach { $0.isLit = blinkOn }
+            if now >= due {
+                starResetAt = nil
+                starLanes.forEach { $0.isLit = false }
+            }
+        }
+    }
+
+    /// M3 v2: a S-T-A-R lane rolled over: it lights; all four score and blink, then clear (placeholder rules).
+    private func starOver(_ lane: TourRollover, at now: TimeInterval) {
+        guard starResetAt == nil else { return }
+        if lane.isLit {
+            game.add(TourPoints.starRepeat)
+            return
+        }
+        lane.isLit = true
+        game.add(TourPoints.starLit)
+        sfx(.lane)
+        guard starLanes.allSatisfy({ $0.isLit }) else { return }
+        game.add(TourPoints.starComplete)
+        bigHaptic.impactOccurred()
+        sfx(.lanesComplete)
+        starResetAt = now + 0.6
+        showBanner("S-T-A-R")
     }
 
     /// Lane change: each new flipper press shifts the lit lanes that way.
     private func rotateLanes(by step: Int) {
-        guard lanesResetAt == nil, !rollovers.isEmpty else { return }
-        let lit = rollovers.map { $0.isLit }
+        if lanesResetAt == nil { Self.rotate(rollovers, by: step) }
+        if starResetAt == nil { Self.rotate(starLanes, by: step) }     // M3 v2: the top lanes change too
+    }
+
+    private static func rotate(_ lanes: [TourRollover], by step: Int) {
+        guard !lanes.isEmpty else { return }
+        let lit = lanes.map { $0.isLit }
         let n = lit.count
-        for (i, lane) in rollovers.enumerated() {
+        for (i, lane) in lanes.enumerated() {
             lane.isLit = lit[((i - step) % n + n) % n]
         }
     }
@@ -779,7 +897,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M3 v1")
+        let label = SKLabelNode(text: "T6 M3 v5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -825,7 +943,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M3 v1 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T6 M3 v5 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -846,6 +964,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         if nudge.tilted { nudge.newBall(); updateFlippers() } else { nudge.newBall() }   // a tilt ends here
         let r = TourTableLayout.ballRadius
         let ball = TourBall(at: CGPoint(x: TourTableLayout.laneCenterX, y: TourTableLayout.plungerRestTop + r + 2))
+        ball.isPlunge = true                       // M3 v3: the plunge flap is closed for it
         addChild(ball)
         balls.append(ball)
         servedBall = ball
@@ -888,6 +1007,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
         plunger.position = TourTableLayout.plungerRestPosition
         lanesResetAt = nil
         rollovers.forEach { $0.isLit = false }
+        starResetAt = nil
+        starLanes.forEach { $0.isLit = false }
         setKickbackLit(true)
         pendingDrops.removeAll()
         blastDoor.raise()
@@ -1087,6 +1208,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
             updateShotLab(CGFloat(step))
             return
         }
+        if plungeProbe != nil {                    // plunge probe: fires plunges at set powers and logs the ball
+            updatePlungeProbe(CGFloat(step))
+            return
+        }
         #endif
         if isAttractMode { return }
 
@@ -1187,6 +1312,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
             orbitSwitches(ball, from: p0, to: p)
+            // M3 v3: a ball passing the top orbit gate going left (a right-orbit loop, a plunge) swings its flap.
+            let gx0 = TourTableLayout.orbitGateTop.x
+            if p0.x >= gx0, p.x < gx0, p.y > TourTableLayout.orbitGateBottom.y, let flap = orbitGateFlap,
+               flap.action(forKey: "swing") == nil {
+                flap.run(.sequence([.rotate(toAngle: -1.3, duration: 0.07, shortestUnitArc: true),
+                                    .rotate(toAngle: 0, duration: 0.5, shortestUnitArc: true)]), withKey: "swing")
+            }
             ball.previousPosition = ball.position
             ball.updateLook()
         }
@@ -1226,7 +1358,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
             }
         case TourPhysicsCategory.bumper:
             // The raised rocket post saved a ball: it scores, flashes and drops a moment later.
-            if node === rocketPost, rocketPostUp, rocketPostDropAt == nil {
+            if let bumper = node as? TourBumper,
+               bumper.hit(ball: ballBody, ballPosition: ballNode.position, at: gameTime) {
+                labEvent("bumper")
+                game.add(TourPoints.bumper)
+                hitHaptic.impactOccurred(intensity: 0.8)
+                sfx(.bumper)
+            } else if node === rocketPost, rocketPostUp, rocketPostDropAt == nil {
                 rocketPostDropAt = gameTime + TourTableLayout.rocketPostDropDelay
                 game.add(TourPoints.rocketPost)
                 bigHaptic.impactOccurred()
@@ -1243,7 +1381,15 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 hitStandup(standup)
             }
         case TourPhysicsCategory.rollover:
-            if let lane = node as? TourRollover { labEvent("lane"); rollOver(lane, at: gameTime) }
+            if let lane = node as? TourRollover {
+                if starLanes.contains(where: { $0 === lane }) {
+                    labEvent("star")
+                    starOver(lane, at: gameTime)
+                } else {
+                    labEvent("lane")
+                    rollOver(lane, at: gameTime)
+                }
+            }
         default:
             break
         }
@@ -1268,6 +1414,47 @@ extension TourTableScene {
         shotLabTime = 0
         shotLab = ShotLab(host: self)
         refreshCamera()
+    }
+
+    /// DEBUG: fires a plunge at each power (0.40 … 1.00) at 120 Hz steps (physics speed 0.5 at the Simulator's 60 fps)
+    /// and prints the ball every 1/30 s as `PROBE power t x y vx vy`, 4 s a plunge; then quits. Read with
+    /// `xcrun simctl launch --console-pty`.
+    func debugPlungeProbe() {
+        isAttractMode = false
+        removeAllBalls()
+        placeBallOnPlunger()
+        plungeProbe = (powers: stride(from: 0.4, through: 1.0001, by: 0.1).map { CGFloat($0) }, power: 0, t: 0, logT: 0, fired: false)
+    }
+
+    fileprivate func updatePlungeProbe(_ realDt: CGFloat) {
+        guard var probe = plungeProbe else { return }
+        physicsWorld.speed = 0.5
+        let dt = realDt * 0.5
+        shotLabTime += TimeInterval(dt)
+        let now = shotLabTime
+        lastStep = dt
+        leftFlipper.step(dt: dt); rightFlipper.step(dt: dt)
+        updateGates(); updateLanes(now); updateSpinners(dt, now)
+        probe.t += dt
+        if !probe.fired, probe.t > 0.5 {
+            guard !probe.powers.isEmpty else { print("PROBE done"); exit(0) }
+            probe.power = probe.powers.removeFirst()
+            plungerPull = probe.power * TourTableLayout.plungerMaxPull
+            releasePlunger()
+            probe.fired = true; probe.t = 0; probe.logT = 0
+            print("PROBE fire \(probe.power)")
+        } else if probe.fired {
+            if probe.t >= probe.logT, let b = servedBall, let v = b.physicsBody?.velocity {
+                print(String(format: "PROBE %.1f %.3f %.0f %.0f %.0f %.0f %@", probe.power, probe.t, b.position.x, b.position.y,
+                             v.dx, v.dy, b.isPlunge ? "P" : "-"))
+                probe.logT += 1.0 / 30
+            }
+            if probe.t > 4 {
+                removeAllBalls(); placeBallOnPlunger()
+                probe.fired = false; probe.t = 0
+            }
+        }
+        plungeProbe = probe
     }
 
     /// The robot's frame: only what the physics and shot detection need (no serving, drains, saves or banners).
@@ -1343,6 +1530,8 @@ extension TourTableScene: ShotLabHost {
         nextBallAt = nil
         lanesResetAt = nil
         rollovers.forEach { $0.isLit = false }
+        starResetAt = nil
+        starLanes.forEach { $0.isLit = false }
         pendingDrops.removeAll()
         blastDoor.raise()
         countdownLeft = TourTableLayout.countdownHits

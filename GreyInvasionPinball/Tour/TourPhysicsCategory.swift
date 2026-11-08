@@ -37,4 +37,7 @@ enum TourPhysicsCategory {
     /// walls; it takes this category, which nothing collides with.
     static let rideBall: UInt32 = 1 << 16
     static let rideWall: UInt32 = 1 << 17
+    /// Table 06 M3 v3: the top orbit gate, solid per ball only for a ball moving right (a left-orbit shot stops and
+    /// drops into the S-T-A-R lanes; right-orbit loops and plunges pass the other way).
+    static let orbitGate: UInt32 = 1 << 18
 }

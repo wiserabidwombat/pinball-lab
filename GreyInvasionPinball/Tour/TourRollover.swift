@@ -25,11 +25,14 @@ final class TourRollover: SKNode {
     private let glow = SKShapeNode(circleOfRadius: 14)
     private let label = SKLabelNode(fontNamed: "Menlo-Bold")
 
-    init(letter: String, x: CGFloat) {
+    /// `y` and `lampDy` (the lamp insert's offset from the wire) default to the O-R-B-T lanes' (M3 v2: the S-T-A-R top
+    /// lanes pass their own).
+    init(letter: String, x: CGFloat, y: CGFloat = TourTableLayout.laneRolloverY,
+         lampDy: CGFloat = TourTableLayout.laneLampY - TourTableLayout.laneRolloverY) {
         self.letter = letter
         super.init()
-        position = CGPoint(x: x, y: TourTableLayout.laneRolloverY)
-        let lamp = CGPoint(x: 0, y: TourTableLayout.laneLampY - TourTableLayout.laneRolloverY)
+        position = CGPoint(x: x, y: y)
+        let lamp = CGPoint(x: 0, y: lampDy)
 
         // The rollover wire: a thin steel bar across the lane.
         let wire = SKShapeNode(rectOf: CGSize(width: TourTableLayout.laneSensorSize.width, height: 3), cornerRadius: 1.5)

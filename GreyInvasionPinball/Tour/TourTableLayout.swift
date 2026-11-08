@@ -261,23 +261,28 @@ enum TourTableLayout {
     /// v20 (Shot Lab 11-08, 120 Hz, 1,098 trials): caught shots leave at 80–83°, not the rig's 87°, and cross the hull's
     /// height at x 327–346 (left flipper) / 226–241 (right): the wing TIPS. The door was made only 7 times (late tip
     /// flips off an inlane). Wings 40 → 52 pt: the hull is x 222–346, so the crook band lands on a wing, not its tip.
-    static let rocketPad = [CGPoint(x: 222.0, y: 960.0), CGPoint(x: 266, y: 980), CGPoint(x: 284, y: 998),
-                            CGPoint(x: 302, y: 980), CGPoint(x: 346.0, y: 960.0)]
+    /// M3 v5 (Aaron 8 Nov 2026: "a real table would move the rocket down a bit and move the bumpers under the lanes"):
+    /// the whole rocket — pad, wings, door, toy, scoop, Mission Control's zone — 60 pt down, so the lower pop under the
+    /// S-T-A-R lanes has room above the pad's peak (44 pt). The crook shots still land on the wings (~9 pt less drift).
+    static let rocketDrop: CGFloat = 60
+    static let rocketPad = [CGPoint(x: 222.0, y: 960.0 - rocketDrop), CGPoint(x: 266, y: 980 - rocketDrop),
+                            CGPoint(x: 284, y: 998 - rocketDrop),
+                            CGPoint(x: 302, y: 980 - rocketDrop), CGPoint(x: 346.0, y: 960.0 - rocketDrop)]
     static let rocketWingSize = CGSize(width: 52, height: 8)
     static let rocketWings: [(center: CGPoint, normal: CGFloat)] = [
-        (CGPoint(x: 244.5, y: 947.0), -.pi / 2 - .pi / 6),     // left wing faces down-left
-        (CGPoint(x: 323.5, y: 947.0), -.pi / 2 + .pi / 6),     // right wing faces down-right
+        (CGPoint(x: 244.5, y: 947.0 - rocketDrop), -.pi / 2 - .pi / 6),     // left wing faces down-left
+        (CGPoint(x: 323.5, y: 947.0 - rocketDrop), -.pi / 2 + .pi / 6),     // right wing faces down-right
     ]
     /// The blast door: a drop target across the pocket's mouth (1 pt to each wall), facing down the table. It stays up
     /// through the countdown (hits only count) and drops on the last hit.
-    static let blastDoor = CGPoint(x: 284, y: 934)
+    static let blastDoor = CGPoint(x: 284, y: 934 - rocketDrop)
     static let blastDoorSize = CGSize(width: 34, height: 8)
     static let countdownHits = 5
     /// The five countdown lamps, a column under the centre arrow in the insert field (grey box: plain circles).
     static let countdownLamps = (0..<5).map { CGPoint(x: 284, y: 500 + 18 * CGFloat($0)) }
     /// The rocket toy stands over the pad (no body; it lifts off on the last hit).
-    static let rocketToy = CGPoint(x: 284, y: 986)
-    static let missionScoop = CGPoint(x: 284, y: 966)
+    static let rocketToy = CGPoint(x: 284, y: 986 - rocketDrop)
+    static let missionScoop = CGPoint(x: 284, y: 966 - rocketDrop)
     /// Mission Control kicks the ball into a subway: it comes out at the top of the left inlane (between the lane guide,
     /// x 54, and the sling, x 88), rolling down onto the left flipper — never back down the middle (AFM's hole).
     static let missionSubwayExit = CGPoint(x: 71, y: 490)
@@ -285,9 +290,8 @@ enum TourTableLayout {
     /// Inside the pad behind the door: Mission Control catches any ball found here (tested against the peak, not a box).
     static func inMissionBay(_ p: CGPoint) -> Bool {
         // The pocket is wider at the front now (the wings' backs), so the zone is too; it's all behind the hull.
-        let roof = [CGPoint(x: 222.0, y: 960.0), CGPoint(x: 266, y: 980), CGPoint(x: 284, y: 998),
-                    CGPoint(x: 302, y: 980), CGPoint(x: 346.0, y: 960.0)]
-        guard p.x > 244, p.x < 324, p.y > 946, let top = lineY(roof, at: p.x) else { return false }
+        let roof = rocketPad
+        guard p.x > 244, p.x < 324, p.y > 946 - rocketDrop, let top = lineY(roof, at: p.x) else { return false }
         return p.y < top
     }
 
@@ -368,11 +372,12 @@ enum TourTableLayout {
         [leftOrbitTip, leftOrbitBend] + archOffset(inset: 40, rightHalf: false, xRange: 0...190)
     }
     /// Right orbit: a 44 pt lane inside the plunger-lane wall (x 504…548); above the launch gate it shares the arch with
-    /// the shooter lane (76 pt to the right wall). The inner wall runs up from the funnel and over to x 384.
+    /// the shooter lane (76 pt to the right wall). The inner wall runs up from the funnel and over to x 400 (M3 v2: was
+    /// 384, which left a 26 pt wedge beside the last S-T-A-R post).
     static let rightOrbitTip = CGPoint(x: 459.3, y: 664.8)
     static let rightOrbitBend = CGPoint(x: 504, y: 725)
     static var rightOrbitInner: [CGPoint] {
-        [rightOrbitTip, rightOrbitBend] + archOffset(inset: 76, rightHalf: true, xRange: 384...600).reversed()
+        [rightOrbitTip, rightOrbitBend] + archOffset(inset: 76, rightHalf: true, xRange: 400...600).reversed()
     }
     /// Arm switches low in each lane (up arms that orbit, down disarms); the right one stops at the lane wall, so a plunge
     /// up the shooter lane never arms it. Made = crossing the top centre line the right way (left orbit → right).
@@ -383,7 +388,8 @@ enum TourTableLayout {
     /// A ball armed this long ago or more no longer scores the made switch (a weak shot that dropped off the arch into the
     /// open top centre would stay armed for good otherwise; a slow orbit takes well under a second).
     static let orbitMadeWithin: TimeInterval = 2.0
-    static let orbitMade = TourSwitch(a: CGPoint(x: 284, y: 1150), b: CGPoint(x: 284, y: 1275),
+    /// M3 v2: from y 1215, above the S-T-A-R posts (a ball riding the arch is at ~1261).
+    static let orbitMade = TourSwitch(a: CGPoint(x: 284, y: 1215), b: CGPoint(x: 284, y: 1275),
                                       forward: CGVector(dx: 1, dy: 0))
     /// The spinners across each lane above its mouth (either direction spins them).
     static let leftSpinnerLine = (a: CGPoint(x: leftWallX, y: 960), b: CGPoint(x: 60, y: 960))
@@ -393,6 +399,50 @@ enum TourTableLayout {
     /// The spinner's rendered frames, when the art comes (none yet: TourSpinner draws its blade).
     static let spinnerArtBox = CGRect(x: -22, y: -10, width: 44, height: 32)
     static let spinnerFrames = (columns: 6, rows: 4)
+
+    // MARK: - Milestone 3 v2: the S-T-A-R top lanes and the bumper nest (tools/tour_layout_m3.py, tour_render_m3.py)
+    /// Four 36 pt lanes between five posts in the gap between the orbits' inner walls, under the arch: the only place a
+    /// ball drops off the arch (a weak orbit or plunge, or a centre shot that misses the rocket). The first post is 28.5 pt
+    /// from the left inner wall's end, the last 46 from the right one; a ball on the arch passes 44–52 pt over the posts.
+    static let starLetters = ["S", "T", "A", "R"]
+    static let starPostXs: [CGFloat] = [214, 250, 286, 322, 358]
+    static let starPostBottom: CGFloat = 1150
+    static let starPostTop: CGFloat = 1200
+    static var starLaneXs: [CGFloat] { zip(starPostXs, starPostXs.dropFirst()).map { ($0 + $1) / 2 } }
+    static let starRolloverY: CGFloat = 1178
+    static let starLampY: CGFloat = 1132
+    /// The bumper nest top-left, between the left orbit's inner wall, the lanes and the rocket pad (the raised Moon goes
+    /// over it later): an even nest, gaps ~79 pt, every wall and part >= 27 pt away. The leftmost lane drops onto the
+    /// top bumper. Kick: the proven 1,150 pt/s (Tables 02–04).
+    static let bumperRadius: CGFloat = 24
+    static let bumperKickSpeed: CGFloat = 1150
+    /// M3 v5: the classic top — the S-T-A-R lanes drop straight onto a triangle of pops: one under each outer lane, the
+    /// third below between them (Aaron on v4's lane guide: "doesn't feel like what a real table would do"). pymunk
+    /// (tools/tour_nest_sim.py): every lane gets 12–30 hits, a ball among the pops ~4.7, and they kick balls back up the
+    /// lanes; nothing stays (all leave within 15 s). Gaps: 60 between the top pair, 31 to the lower one, 40.7 to the
+    /// posts, 44 to the pad's peak.
+    static let bumperCenters = [CGPoint(x: 232, y: 1088), CGPoint(x: 340, y: 1088), CGPoint(x: 286, y: 1030)]
+
+    // MARK: - Milestone 3 v3: the plunge flap (tools/tour_plunge_sim.py)
+    /// Aaron (8 Nov 2026): "it doesn't seem like you can hit a weak enough plunge for the ball to drop into the lanes".
+    /// The 2D sim agreed: only 58–62% plunger power fell off the arch into S-T-A-R (the arch is a ceiling; a ball leaves
+    /// it only once slow, right at the top). A real table's skill-shot gate: a shallow flap hanging from the arch at the
+    /// top right, closed for the PLUNGE ONLY (the served ball, until it is in play below y 900): every plunge from ~60%
+    /// up slides down it into the lanes; weaker ones still fall back onto the launch gate and down the right lane. For
+    /// every other ball it is open, so the orbits still go round (Aaron chose this over an always-closed one-way flap,
+    /// which would have turned the right orbit into a lane feeder). A full plunge no longer loops to the left lane.
+    static let plungeFlapHinge = CGPoint(x: 395, y: 1259.5)       // 1 pt inside the arch (arch y 1260.5 at x 395)
+    static let plungeFlapEnd = CGPoint(x: 330, y: 1214)           // over the A/R lanes, 14 above the posts
+    static let plungeClearsBelowY: CGFloat = 900
+    /// Aaron (8 Nov 2026): "from a caught ball any time I hit either orbit the ball went all the way around" — the
+    /// real-table flippers send every orbit at 2,600–3,000 pt/s, far too fast to fall off the arch. Real tables route
+    /// orbits instead (one loops, the other feeds the pops). Aaron chose: the LEFT orbit feeds the lanes. Cthulhu's proven
+    /// top gate: a one-way gate hanging from the arch just right of the R lane, solid only for a ball moving right (and
+    /// not the plunge). A left-orbit shot scores its orbit at the top centre (x 284), stops here and drops through the
+    /// lanes; right-orbit loops and plunges move left and pass. pymunk (tools/tour_plunge_sim.py): left orbit 17/17 into
+    /// S-T-A-R, right orbit still loops (weak ones fall back), plunges unchanged, nothing sticks.
+    static let orbitGateTop = CGPoint(x: 352, y: 1266.4)          // 1 pt inside the arch (arch y 1267.4 at x 352)
+    static let orbitGateBottom = CGPoint(x: 352, y: 1214)         // 13.4 pt from the R post's top (closed)
 
     /// The height of a wall polyline at x (nil outside its x range).
     static func lineY(_ pts: [CGPoint], at x: CGFloat) -> CGFloat? {

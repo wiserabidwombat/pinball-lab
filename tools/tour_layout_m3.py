@@ -30,7 +30,7 @@ def offset(pts, d):
 ARCH = arch_points()
 L_W, R_W = 40, RIGHT_X - 504          # lane widths: left 40; right 76 above the gate (the plunger lane shares it)
 L_INNER_X, R_INNER_X = LEFT_X + L_W, RIGHT_X - R_W     # 60, 504
-L_END_X, R_END_X = 190, 380           # where the inner walls stop (the top centre stays open for lanes / bumpers)
+L_END_X, R_END_X = 190, 400           # where the inner walls stop (v2: right 384 -> 400, 46 pt clear of the last lane post)
 
 def side_offset(d, side):
     """The arch offset by d, from its foot on one side to the top centre."""
@@ -66,4 +66,26 @@ rightSpinner = ((R_INNER_X, R_SPIN_Y), (LANE_X, R_SPIN_Y))
 # so plunges up the shooter lane never arm it; made = crossing the top centre line (x 284) the right way.
 leftArm = ((LEFT_X, 990), (L_INNER_X, 990))
 rightArm = ((R_INNER_X, 900), (LANE_X, 900))
-madeLine = ((284, 1150), (284, 1275))
+madeLine = ((284, 1215), (284, 1275))      # v2: above the S-T-A-R posts (top 1200); a ball riding the arch is at ~1261
+
+# --- M3 v2 (8 Nov 2026): the S-T-A-R top lanes and the bumper nest. ---
+# The lanes sit in the gap between the two inner walls under the arch, the only place a ball drops off the arch (a weak
+# orbit or plunge, or a centre shot that misses the rocket): four 36 pt lanes between five posts. The leftmost post is
+# 28.5 pt from the left inner wall's end (a passage, not a wedge), the rightmost 46 from the right one. A ball on the
+# arch passes 53-61 pt over the post tops. The bumpers fill the open floor top-left between the left orbit's inner wall,
+# the lanes and the rocket pad (the raised Moon goes over them in a later round): an even nest, gaps ~79 pt, every wall
+# and part >= 27 pt away (tools search: maximise the smallest gap). The leftmost lane drops onto the top bumper.
+lanePostXs = [214, 250, 286, 322, 358]
+lanePostBottom, lanePostTop = 1150, 1200
+laneCenters = [(a + b) / 2 for a, b in zip(lanePostXs, lanePostXs[1:])]    # 232, 268, 304, 340
+laneRolloverY, laneLampY = 1178, 1132
+bumperRadius = 24
+bumperCenters = [(115, 985), (140, 1110), (235, 1025)]
+# --- M3 v5 (8 Nov 2026): pops under the lanes, the rocket 60 pt down. Aaron on v4's lane guide: "doesn't feel like
+# what a real table would do"; "a real table would move the rocket down a bit and move the bumpers under the lanes".
+# The classic top: the lanes drop straight onto a triangle of pops (two under the lane exits, one below between them).
+# The rocket (pad, wings, door, scoop, toy) comes down ROCKET_DROP so the lower pop has room above the pad's peak.
+ROCKET_DROP = 60
+rocketPad = [(x, y - ROCKET_DROP) for x, y in [(222.0, 960.0), (266, 980), (284, 998), (302, 980), (346.0, 960.0)]]
+rocketHull = [(x, y - ROCKET_DROP) for x, y in [(222.0, 960.0), (267, 934), (301, 934), (346.0, 960.0)]]
+bumperCenters = [(232, 1088), (340, 1088), (286, 1030)]   # a pop under each outer lane, one below between (search: every lane >= 7 hits)

@@ -118,7 +118,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M2 v19: the Shot Lab robot (ShotLab.swift), as on Tables 02–05. Its own clock runs at the pass's physics speed.
     private var shotLab: ShotLab?
     private var shotLabTime: TimeInterval = 0
+    /// M4 v1: the Play Lab (shared, PlayLab.swift): the run, when its next game starts.
+    private var playLab: PlayLab?
+    private var playLabNextAt: TimeInterval?
+    private var playLabStarting = false
     #endif
+    /// The Play Lab robot's buttons (always false outside it).
+    private var robotLeft = false
+    private var robotRight = false
 
     /// The menu: physics stopped, whole-table camera, touches ignored.
     var isAttractMode = false {
@@ -128,6 +135,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             if isAttractMode { releaseAllControls() }
             #if DEBUG
             if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
+            if isAttractMode { stopPlayLab(saving: true) }      // and the Play Lab (saving the games so far)
             #endif
             refreshCamera()
         }
@@ -1065,7 +1073,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M3 v14")
+        let label = SKLabelNode(text: "T6 M4 v1")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1111,7 +1119,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M3 v14 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M4 v1 \(effectiveCameraMode.tag) · \(speed)"
+        #if DEBUG
+        if let lab = playLab { text += "\n" + lab.progressText }
+        #endif
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1166,6 +1177,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                              // a new game stops the Shot Lab
+        if !playLabStarting { stopPlayLab(saving: true) }   // and the Play Lab, unless it's starting its next game
         #endif
         isAttractMode = false
         padAArmed = false                          // the A press that started the game isn't a plunger pull
@@ -1198,11 +1210,18 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     private func showBanner(_ text: String) {
+        #if DEBUG
+        playLab?.banner(text)
+        labObjective(forBanner: text)
+        #endif
         game.banner = text
         bannerClearAt = gameTime + TourTableLayout.bannerSeconds
     }
 
     private func sfx(_ s: MonSound) {
+        #if DEBUG
+        if playLab != nil, playLab?.isWatching != true { return }   // the robot plays silently unless watched
+        #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }
 
@@ -1271,8 +1290,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     private func updateFlippers() {
-        var left = activeTouches.values.contains(.left) || padLeft
-        var right = activeTouches.values.contains(.right) || padRight
+        var left = activeTouches.values.contains(.left) || padLeft || robotLeft
+        var right = activeTouches.values.contains(.right) || padRight || robotRight
         if nudge.tilted { left = false; right = false }      // tilted: dead flippers until the next ball
         if left && !leftFlipper.isPressed { rotateLanes(by: -1); sfx(.flipper) }
         if right && !rightFlipper.isPressed { rotateLanes(by: 1); sfx(.flipper) }
@@ -1367,7 +1386,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
     // MARK: - Game loop
 
     override func update(_ realTime: TimeInterval) {
-        let step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        var step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        #if DEBUG
+        if let lab = playLab { step *= Double(lab.physicsSpeed) }   // the Play Lab's pass: 120 Hz or 60 Hz steps
+        #endif
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
@@ -1386,6 +1408,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let dt = CGFloat(step)
         lastStep = dt
         updateGamepad()
+        #if DEBUG
+        updatePlayLab(now)
+        #endif
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         slingshots.forEach { $0.settle() }
@@ -1442,6 +1467,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
             placeBallOnPlunger()
         }
 
+        #if DEBUG
+        checkPlayLabGame(now)
+        #endif
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
             game.ballOnPlunger = waiting
@@ -1573,6 +1601,7 @@ extension TourTableScene {
     fileprivate func labEvent(_ name: String) {
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
+        playLab?.shot(name, now: gameTime)
         #endif
     }
 }
@@ -1582,6 +1611,7 @@ extension TourTableScene {
     /// Starts the robot: it takes over the flippers and sweeps flip timings from a cradled ball on each flipper at
     /// 120 Hz and 60 Hz physics steps (~25 min in the Simulator). Menu or a new game stops it.
     func debugStartShotLab() {
+        stopPlayLab(saving: true)
         isAttractMode = false
         removeAllBalls()                           // M3 v7 review: no ball left mid Moon hold on the game clock
         shotLabTime = 0
@@ -1740,3 +1770,188 @@ extension TourTableScene: SKPhysicsContactDelegate {
         MainActor.assumeIsolated { handleContact(contact) }
     }
 }
+
+#if DEBUG
+// MARK: - M4 v1: the Play Lab host (Monsoon's pattern). Robot players at four skills, 120 Hz and 60 Hz passes; the
+// report says what a player meets and which shots get made. No rules yet, so the objectives are the M1–M3 banners.
+extension TourTableScene: PlayLabHost {
+    var playLabTableName: String { "Grand Tour" }
+    var playLabBallRadius: CGFloat { TourTableLayout.ballRadius }
+    var playLabVariantCount: Int { 1 }
+
+    var playLabObjectives: [PlayObjective] {
+        [PlayObjective(name: "orbt", text: "Light O-R-B-T in the lanes (rocket post up, +1X)"),
+         PlayObjective(name: "multiplier", text: "Reach 2X or more"),
+         PlayObjective(name: "star", text: "Light S-T-A-R in the top lanes"),
+         PlayObjective(name: "countdown", text: "Hit the rocket's blast door (T-minus)"),
+         PlayObjective(name: "liftoff", text: "Count down to liftoff (Mission Control opens)"),
+         PlayObjective(name: "missionControl", text: "Shoot Mission Control after liftoff"),
+         PlayObjective(name: "rocketWord", text: "Light R-O-C-K-E-T (both banks)"),
+         PlayObjective(name: "moon", text: "Make the Moon ramp"),
+         PlayObjective(name: "saturn", text: "Make the Saturn ramp"),
+         PlayObjective(name: "leftOrbit", text: "Make the left orbit"),
+         PlayObjective(name: "rightOrbit", text: "Make the right orbit"),
+         PlayObjective(name: "samples", text: "Collect the three Mars samples (rover opens)"),
+         PlayObjective(name: "rover", text: "Shoot the rover"),
+         PlayObjective(name: "kickback", text: "Use the kickback"),
+         PlayObjective(name: "rocketPostSave", text: "The rocket post saves a ball"),
+         PlayObjective(name: "ballSaved", text: "The ball save saves a ball")]
+    }
+
+    /// Flip delays = the middle of each Shot Lab window (cradle): 120 Hz from shotlab-grand-tour-2026-11-09T14-12-00Z
+    /// (left, v14) and 13-15-52Z (right, v12; nothing on the right moved since), 60 Hz from the same runs. At 60 Hz the
+    /// left flipper's K-E-T band lands on T and Saturn has no window. Inlane feeds aren't measured yet.
+    var playLabFlippers: [PlayRobotFlipper] {
+        let specs = shotLabFlippers
+        let rest = TourTableLayout.flipperRestAngle
+        return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: TourTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
+                                 shots: [("rocket", 0.330), ("ketK", 0.385), ("ketE", 0.444), ("saturn", 0.500),
+                                         ("rightOrbit", 0.530)],
+                                 shots60: [("rocket", 0.366), ("ketT", 0.450), ("rightOrbit", 0.525)]),
+                PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: TourTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
+                                 shots: [("rocket", 0.330), ("moon", 0.458), ("leftOrbit", 0.508), ("roc", 0.534)],
+                                 shots60: [("rocket", 0.350), ("moon", 0.450), ("leftOrbit", 0.492), ("roc", 0.525)])]
+    }
+
+    func playLabStartGame(variant: Int) -> String {
+        game.isRobot = true
+        playLabStarting = true
+        newGame()
+        playLabStarting = false
+        physicsWorld.speed = playLab?.physicsSpeed ?? 1
+        return ""
+    }
+
+    func playLabEndGame() -> [String: Int] {
+        if !game.isGameOver {
+            removeAllBalls()
+            nextBallAt = nil
+        }
+        return ["countdownLeft": countdownLeft, "rocketLit": rocketStandups.filter { $0.isLit }.count]
+    }
+
+    func playLabStop() {
+        game.isRobot = false
+    }
+
+    /// Starts the Play Lab (robot players at four skills, 120 Hz and 60 Hz passes, or as the launch arguments say).
+    /// Menu or a new game stops it, saving the games played so far.
+    func debugStartPlayLab() {
+        shotLab = nil
+        stopPlayLab(saving: true)
+        isAttractMode = false
+        let lab = PlayLab(host: self)
+        playLab = lab
+        lab.beginGame(now: gameTime)
+    }
+
+    /// Everything the robot needs to know this frame, and its buttons and plunger applied.
+    fileprivate func updatePlayLab(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if game.isGameOver || playLabNextAt != nil {
+            if robotLeft || robotRight { robotLeft = false; robotRight = false; updateFlippers() }
+            return
+        }
+        let view = PlayRobotView(now: now, balls: balls.map { b in
+            PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: !b.isOnFloor,
+                               isHeld: b.heldIn != nil || b.moonReleaseAt != nil, onPlunger: isOnPlunger(b),
+                               id: ObjectIdentifier(b).hashValue)
+        }, wanted: robotWanted(), lanes: starResetAt == nil && !starLanes.isEmpty
+            ? PlayRobotView.Lanes(xs: starLanes.map { $0.position.x }, y: starLanes[0].position.y, lit: starLanes.map { $0.isLit })
+            : nil)
+        guard let cmd = lab.frame(view) else { return }
+        if let direction = cmd.nudge { applyNudge(direction) }
+        if cmd.left != robotLeft || cmd.right != robotRight {
+            robotLeft = cmd.left
+            robotRight = cmd.right
+            updateFlippers()
+        }
+        if let power = cmd.plunge, isBallOnPlunger {
+            plungerPull = power * TourTableLayout.plungerMaxPull
+            releasePlunger()
+        }
+    }
+
+    /// The shots the table wants, most wanted first (no arrows until the rules): unlit R-O-C-K-E-T letters, the two
+    /// ramps, the rocket (the countdown / Mission Control), then the orbits.
+    private func robotWanted() -> [String] {
+        var w: [String] = []
+        let lit = rocketStandups.map { $0.isLit }
+        if lit.count >= 6 {
+            if lit[0..<3].contains(false) { w.append("roc") }
+            for (i, name) in ["ketK", "ketE", "ketT"].enumerated() where !lit[3 + i] { w.append(name) }
+        }
+        w += ["moon", "saturn", "rocket", "leftOrbit", "rightOrbit", "roc", "ketK", "ketE", "ketT"]
+        return w
+    }
+
+    /// Banners double as the objective record: the first of each per game is what the report shows.
+    fileprivate func labObjective(forBanner text: String) {
+        guard let lab = playLab else { return }
+        let name: String?
+        switch text {
+        case "S-T-A-R": name = "star"
+        case "LIFTOFF · MISSION CONTROL OPEN": name = "liftoff"
+        case "MISSION CONTROL": name = "missionControl"
+        case "R-O-C-K-E-T": name = "rocketWord"
+        case "MOON": name = "moon"
+        case "SATURN": name = "saturn"
+        case "LEFT ORBIT": name = "leftOrbit"
+        case "RIGHT ORBIT": name = "rightOrbit"
+        case "SAMPLES COLLECTED · ROVER OPEN": name = "samples"
+        case "ROVER", "ROVER HOME · SAMPLES SAFE": name = "rover"
+        case "KICKBACK": name = "kickback"
+        case "ROCKET POST SAVE": name = "rocketPostSave"
+        case "BALL SAVED": name = "ballSaved"
+        default:
+            if text.hasPrefix("T-MINUS") { name = "countdown" }
+            else if text.hasPrefix("ORBT") { name = "orbt" }
+            else { name = nil }
+        }
+        if let name { lab.objective(name, now: gameTime) }
+        if text.hasPrefix("ORBT"), game.multiplier >= 2 { lab.objective("multiplier", now: gameTime) }
+    }
+
+    /// At game over (or after the cap) the game is recorded; the next one starts 2 s later.
+    fileprivate func checkPlayLabGame(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if let due = playLabNextAt {
+            if now >= due {
+                playLabNextAt = nil
+                if lab.isDone { finishPlayLab() } else { lab.beginGame(now: now) }
+            }
+            return
+        }
+        guard lab.current != nil, game.isGameOver || lab.isTimeUp(now: now) else { return }
+        let over = game.isGameOver
+        lab.endGame(score: game.score, ballsPlayed: TourGameState.ballsPerGame - game.ballsLeft + (over ? 0 : 1),
+                    endedBy: over ? "gameOver" : "time", now: now)
+        physicsWorld.speed = lab.physicsSpeed
+        playLabNextAt = now + 2
+    }
+
+    private func finishPlayLab() {
+        guard let lab = playLab else { return }
+        let saved = lab.save()
+        let count = lab.games.count
+        stopPlayLab(saving: false)
+        newGame()
+        game.banner = "PLAY LAB DONE · \(count) GAMES · \(saved)"
+        bannerClearAt = nil
+        PlayLab.quitIfLaunchedForLab()
+    }
+
+    fileprivate func stopPlayLab(saving: Bool) {
+        guard let lab = playLab else { return }
+        playLab = nil
+        lab.stop(saving: saving)
+        playLabNextAt = nil
+        robotLeft = false
+        robotRight = false
+        if leftFlipper != nil { updateFlippers() }
+        physicsWorld.speed = isAttractMode ? 0 : 1
+    }
+}
+#endif

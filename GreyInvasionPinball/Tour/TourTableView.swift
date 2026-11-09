@@ -62,6 +62,16 @@ struct TourTableView: View {
             #if DEBUG
             // `-shotlab grandtour [-shotlab-flippers left,right] [-shotlab-start inlane|drop]`: the Shot Lab sweep
             // unattended (tools/shotlab_run.sh grandtour), as on the other tables.
+            // M4 v1: `-playlab grandtour` (tools/playlab_run.sh grandtour): the Play Lab unattended (quits when done).
+            if PlayLab.launchTable == "grandtour" {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartPlayLab()
+                }
+            }
             if PlayLab.launchTable == nil, ShotLab.launchTable == "grandtour" {
                 Task { @MainActor in
                     while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
@@ -291,6 +301,9 @@ struct TourTableView: View {
             LabOverridesField()
             // The Shot Lab robot (~25 min in the Simulator; results go to ShotLab/ on the Mac).
             debugButton("Shot Lab") { scene.debugStartShotLab(); setPaused(false) }
+            // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator).
+            debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
+            debugButton("Play Lab · quick") { PlayLab.nextRunIsQuick = true; scene.debugStartPlayLab(); setPaused(false) }
             #endif
         }
     }

@@ -11,9 +11,9 @@
 #   BUILD_ONLY=1 tools/playlab_run.sh lamplight     # build (and write the build id), then stop — the sweep uses this
 #   DEVICE="iPhone 17 Pro Max · lab 2" tools/playlab_run.sh …   # another Simulator device (the sweep's --parallel clones)
 #
-# Tables: lamplight (more as they adopt PlayLabHost: greyinvasion, cthulhu, monsoon). Reports go to ShotLab/.
+# Tables: lamplight, greyinvasion, cthulhu, monsoon, grandtour (as they adopt PlayLabHost). Reports go to ShotLab/.
 set -euo pipefail
-TABLE=${1:?table (lamplight, greyinvasion, cthulhu, monsoon)}
+TABLE=${1:?table (lamplight, greyinvasion, cthulhu, monsoon, grandtour)}
 GAMES=${2:-2}
 HZ=${3:-both}
 SKILLS=${4:-}

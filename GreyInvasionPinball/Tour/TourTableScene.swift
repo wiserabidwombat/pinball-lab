@@ -84,6 +84,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
     #endif
     /// M3 v7: the Moon ramp (climbs to the raised Moon's crater, wire back down to the left inlane).
     private var moonRamp: TourRamp?
+    /// M3 v14: the Saturn ramp (the Moon's mirror on the left flipper's ~72° band).
+    private var saturnRamp: TourRamp?
+    private var ramps: [TourRamp] { [moonRamp, saturnRamp].compactMap { $0 } }
     /// M3 v3: the top orbit gate's drawn flap (swings when a ball passes it going left).
     private var orbitGateFlap: SKShapeNode?
     // The ball save: once per player ball, on the plunger and for 10 s after launch.
@@ -230,6 +233,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addOrbits()
         addTopLanes()
         addMoon()
+        addSaturn()
         addKET()
         addPlungeFlap()
         addOrbitGate()
@@ -366,6 +370,46 @@ final class TourTableScene: SKScene, RendererHostedScene {
         label.position = CGPoint(x: -8, y: -20)
         moon.addChild(label)
         let (c, _) = ramp.path.sample(at: TourTableLayout.moonApexDistance + TourTableLayout.rampMadeAfterApex)
+        let crater = SKShapeNode(circleOfRadius: 13)
+        crater.position = CGPoint(x: c.x, y: c.y + lift)
+        crater.fillColor = SKColor(white: 0.18, alpha: 0.9)
+        crater.strokeColor = SKColor(white: 0.75, alpha: 0.9)
+        crater.lineWidth = 1.5
+        crater.zPosition = 19.6
+        addChild(crater)
+    }
+
+    /// M3 v14: the Saturn ramp and the raised Saturn (grey box: a tan planet with a ring) round its crater turn.
+    private func addSaturn() {
+        let ramp = TourRamp(path: TourTableLayout.saturnRampPath, apexDistance: TourTableLayout.saturnApexDistance,
+                            mouthHalfWidth: TourTableLayout.moonMouthHalfWidth, halfWidth: TourTableLayout.moonHalfWidth,
+                            flareLength: TourTableLayout.moonFlareLength, postLength: 0,
+                            lowLength: TourTableLayout.moonLowLength)
+        addChild(ramp)
+        saturnRamp = ramp
+        let lift = TourTableLayout.rampTopHeight * TourTableLayout.oblique
+        let at = CGPoint(x: TourTableLayout.saturnCenter.x, y: TourTableLayout.saturnCenter.y + lift)
+        let ring = SKShapeNode(ellipseOf: CGSize(width: TourTableLayout.saturnRadius * 2.7, height: TourTableLayout.saturnRadius * 0.9))
+        ring.position = at
+        ring.zRotation = -0.35
+        ring.fillColor = .clear
+        ring.strokeColor = SKColor(red: 0.95, green: 0.85, blue: 0.62, alpha: 0.85)
+        ring.lineWidth = 4
+        ring.zPosition = 19.55
+        addChild(ring)
+        let planet = SKShapeNode(circleOfRadius: TourTableLayout.saturnRadius)
+        planet.position = at
+        planet.fillColor = SKColor(red: 0.62, green: 0.50, blue: 0.30, alpha: 0.92)
+        planet.strokeColor = SKColor(red: 0.95, green: 0.85, blue: 0.62, alpha: 0.9)
+        planet.lineWidth = 2
+        planet.zPosition = 19.5
+        addChild(planet)
+        let label = SKLabelNode(text: "SATURN")
+        label.fontName = "Menlo-Bold"; label.fontSize = 10
+        label.fontColor = SKColor(white: 1, alpha: 0.8)
+        label.position = CGPoint(x: 6, y: -24)
+        planet.addChild(label)
+        let (c, _) = ramp.path.sample(at: TourTableLayout.saturnApexDistance + TourTableLayout.rampMadeAfterApex)
         let crater = SKShapeNode(circleOfRadius: 13)
         crater.position = CGPoint(x: c.x, y: c.y + lift)
         crater.fillColor = SKColor(white: 0.18, alpha: 0.9)
@@ -887,22 +931,25 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// and pauses the ball there, the exit puts it back on the floor above the left inlane. A ramp ball found far from the
     /// channel drops to the floor (the safety net).
     private func updateRampLayer(_ ball: TourBall, from p0: CGPoint, to p: CGPoint) {
-        guard let ramp = moonRamp else { return }
-        switch ball.layer {
-        case .floor:
+        if ball.isOnFloor {
             // Review fix: the switch line's slack reaches past the mouth; only a ball inside the mouth goes up.
-            if ramp.entrySwitch.crossing(from: p0, to: p) == .forward,
-               ramp.distanceToCenterline(p) < TourTableLayout.moonMouthHalfWidth {
+            if let ramp = ramps.first(where: { $0.entrySwitch.crossing(from: p0, to: p) == .forward
+                                               && $0.distanceToCenterline(p) < TourTableLayout.moonMouthHalfWidth }) {
                 ball.activeRamp = ramp
                 ball.setLayer(.rampUp)
             }
+            return
+        }
+        guard let ramp = ball.activeRamp else { ball.setLayer(.floor); return }
+        switch ball.layer {
+        case .floor:
             return
         case .rampUp:
             if ramp.entrySwitch.crossing(from: p0, to: p) == .backward {
                 ball.setLayer(.floor)
             } else if ramp.madeSwitch.crossing(from: p0, to: p) == .forward {
                 ball.setLayer(.rampDown)
-                moonMade(ball)
+                rampMade(ball, ramp)
             }
         case .rampDown:
             if ramp.exitSwitch.crossing(from: p0, to: p) == .forward {
@@ -924,13 +971,15 @@ final class TourTableScene: SKScene, RendererHostedScene {
         return gameTime
     }
 
-    /// M3 v7: the Moon is made: score, then the ball pauses in the crater (placeholder for the Moon lock).
-    private func moonMade(_ ball: TourBall) {
-        labEvent("moon")
-        game.add(TourPoints.moon)
+    /// M3 v7 / v14: the Moon or Saturn is made: score, then the ball pauses in its crater (placeholder for the locks).
+    private func rampMade(_ ball: TourBall, _ ramp: TourRamp) {
+        let saturn = ramp === saturnRamp
+        labEvent(saturn ? "saturn" : "moon")
+        game.add(saturn ? TourPoints.saturn : TourPoints.moon)
         hitHaptic.impactOccurred()
         sfx(.ramp)
-        showBanner("MOON")
+        showBanner(saturn ? "SATURN" : "MOON")
+        ball.holdReleaseHeading = saturn ? TourTableLayout.saturnReleaseHeading : TourTableLayout.moonReleaseHeading
         ball.moonReleaseAt = tableNow + TourTableLayout.moonHold
         ball.physicsBody?.affectedByGravity = false
         ball.physicsBody?.velocity = .zero
@@ -938,7 +987,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     /// Holds paused balls still in the crater; on time, rolls each on down the wire (along the path past the crater).
     private func updateMoonHolds(_ now: TimeInterval) {
-        guard moonRamp != nil else { return }
+        guard !ramps.isEmpty else { return }
         for ball in balls {
             guard let due = ball.moonReleaseAt, let body = ball.physicsBody else { continue }
             if now < due {
@@ -948,7 +997,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             ball.moonReleaseAt = nil
             body.affectedByGravity = true
             // The exact tangent at the crater (the path's sample gives the next point's heading, ~7° into the turn).
-            let h = TourTableLayout.moonReleaseHeading
+            let h = ball.holdReleaseHeading
             let v = TourTableLayout.moonReleaseSpeed
             body.velocity = CGVector(dx: cos(h) * v, dy: sin(h) * v)
         }
@@ -1016,7 +1065,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M3 v13")
+        let label = SKLabelNode(text: "T6 M3 v14")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1062,7 +1111,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M3 v13 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T6 M3 v14 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1617,7 +1666,7 @@ extension TourTableScene: ShotLabHost {
     var shotLabTableName: String { "Grand Tour" }
 
     /// The shots a player aims for end a trial; slings and lanes are noted only.
-    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc", "leftOrbit", "rightOrbit", "moon", "ketK", "ketE", "ketT"] }
+    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc", "leftOrbit", "rightOrbit", "moon", "saturn", "ketK", "ketE", "ketT"] }
 
     /// Left and right flippers, cradled as on the other tables: 40 pt out and 14 above the raised flipper.
     var shotLabFlippers: [ShotLab.FlipperSpec] {

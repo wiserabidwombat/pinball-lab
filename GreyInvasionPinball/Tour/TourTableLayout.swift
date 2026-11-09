@@ -541,6 +541,36 @@ enum TourTableLayout {
     /// The path's tangent at the crater: the climb's 125° plus 10 pt round the r 38 turn.
     static let moonReleaseHeading: CGFloat = 125 * .pi / 180 + rampMadeAfterApex / 38
 
+    // MARK: - Milestone 3 v14: the Saturn ramp (tools/tour_layout_m3.py saturn block)
+    /// The left flipper's other free band (Aaron: "Let's do it!" to the right-side plan): the v12 Shot Lab's ~72° shots
+    /// (flips 0.485–0.515 s) cross y 600 at x 383–397 and y 844 at x 469–484, heading ~70°, and scored nothing (they ran on
+    /// into the right orbit's spinner). Saturn is the Moon's mirror on that band: mouth 60 wide at (420.5, 700) heading 72°
+    /// (posts (392, 709) / (449, 691); 28.2 pt from the right orbit's funnel tip — 2.5 pt left of the first try, whose 25.7 was
+    /// a wedge); climb line 120, a 28° left bend (r 140), line 40 to the crater (apex 228.42); round it to the RIGHT
+    /// (r 38, −190°) to heading down over the right orbit lane (x 530.8); an S-bend (2 × r 60, 44.07°) to x 497 and 85 pt
+    /// straight down into the right inlane (ends (497, 440); exit 17 pt from the lane guide and the sling) — the Moon wire's
+    /// mirror. Replaces the plan's separate asteroid wire ramp + Saturn loop; no upper flipper (it would have no shot).
+    static let saturnMouth = CGPoint(x: 420.5, y: 700)
+    static let saturnApexDistance: CGFloat = 228.42
+    static var saturnRampPath: TourRampPath {
+        var p = TourRampPath(start: saturnMouth, heading: 72 * .pi / 180)
+        p.line(120)
+        p.arc(radius: 140, turn: 28 * .pi / 180)
+        p.line(40)
+        p.arc(radius: 38, turn: -190 * .pi / 180)
+        p.line(319.22)
+        let s = 44.072 * CGFloat.pi / 180
+        p.arc(radius: 60, turn: -s)
+        p.arc(radius: 60, turn: s)
+        p.line(85)
+        return p
+    }
+    /// The raised Saturn round the crater turn's centre (a planet with a ring, grey box), at the ramp's top height.
+    static let saturnCenter = CGPoint(x: 492.8, y: 927.7)
+    static let saturnRadius: CGFloat = 46
+    /// The tangent at Saturn's crater: the climb's 100° minus 10 pt round the r 38 right turn.
+    static let saturnReleaseHeading: CGFloat = 100 * .pi / 180 - rampMadeAfterApex / 38
+
     /// The height of a wall polyline at x (nil outside its x range).
     static func lineY(_ pts: [CGPoint], at x: CGFloat) -> CGFloat? {
         for (u, v) in zip(pts, pts.dropFirst()) {

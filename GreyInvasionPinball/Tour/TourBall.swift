@@ -53,6 +53,8 @@ final class TourBall: SKNode {
     private var drawnHeight: CGFloat = 0
     /// M3 v7: paused in the Moon's crater until this time (the scene holds it there, then rolls it on down the wire).
     var moonReleaseAt: TimeInterval?
+    /// M3 v14: the direction the held ball rolls on in (each ramp's crater tangent: the Moon's or Saturn's).
+    var holdReleaseHeading: CGFloat = 0
     var isOnFloor: Bool { layer == .floor }
 
     func setLayer(_ newLayer: TourBallLayer) {

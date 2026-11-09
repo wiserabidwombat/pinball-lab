@@ -2,7 +2,7 @@
 """Grand Tour: where cradled shots cross the rocket hull probe (y 904), per pass and flipper. python3 tools/tour_hull_read.py ShotLab/shotlab-grand-tour-….json"""
 import json,sys,collections
 d=json.load(open(sys.argv[1]))
-HULL=(222,346); DOOR=(267,301)  # hull v20 (v19: 232–336)
+HULL=(236,332); DOOR=(267,301)  # hull M3 v12 (v20: 222–346; v19: 232–336)
 tr=[t for t in d["trials"] if t["outcome"]!="invalid"]
 print(d["table"], d.get("date"), "fps", d.get("fps"), "trials", len(tr))
 for lbl,lo,hi in (("120 Hz",0,12),("60 Hz",12,99)):

@@ -265,13 +265,17 @@ enum TourTableLayout {
     /// the whole rocket — pad, wings, door, toy, scoop, Mission Control's zone — 60 pt down, so the lower pop under the
     /// S-T-A-R lanes has room above the pad's peak (44 pt). The crook shots still land on the wings (~9 pt less drift).
     static let rocketDrop: CGFloat = 60
-    static let rocketPad = [CGPoint(x: 222.0, y: 960.0 - rocketDrop), CGPoint(x: 266, y: 980 - rocketDrop),
+    /// M3 v12 (Aaron 9 Nov: "I can hit center on the rocket now. Can we narrow it a bit so the left flipper can get to the
+    /// K?"): the right wing's tip (346, 900) shadowed K-E-T's K — left-flipper flips at 0.367–0.387 s aimed at K clipped
+    /// it. Wings 52 → 36 pt (both, symmetric), still from the door's ends at 30°: tips (235.8, 892) / (332.2, 892). A
+    /// straight-line check: K ~2× the hits, the rocket ~1 in 8 fewer from each flipper (the door is the target now).
+    static let rocketPad = [CGPoint(x: 235.8, y: 952.0 - rocketDrop), CGPoint(x: 266, y: 980 - rocketDrop),
                             CGPoint(x: 284, y: 998 - rocketDrop),
-                            CGPoint(x: 302, y: 980 - rocketDrop), CGPoint(x: 346.0, y: 960.0 - rocketDrop)]
-    static let rocketWingSize = CGSize(width: 52, height: 8)
+                            CGPoint(x: 302, y: 980 - rocketDrop), CGPoint(x: 332.2, y: 952.0 - rocketDrop)]
+    static let rocketWingSize = CGSize(width: 36, height: 8)
     static let rocketWings: [(center: CGPoint, normal: CGFloat)] = [
-        (CGPoint(x: 244.5, y: 947.0 - rocketDrop), -.pi / 2 - .pi / 6),     // left wing faces down-left
-        (CGPoint(x: 323.5, y: 947.0 - rocketDrop), -.pi / 2 + .pi / 6),     // right wing faces down-right
+        (CGPoint(x: 251.4, y: 943.0 - rocketDrop), -.pi / 2 - .pi / 6),     // left wing faces down-left
+        (CGPoint(x: 316.6, y: 943.0 - rocketDrop), -.pi / 2 + .pi / 6),     // right wing faces down-right
     ]
     /// The blast door: a drop target across the pocket's mouth (1 pt to each wall), facing down the table. It stays up
     /// through the countdown (hits only count) and drops on the last hit.
@@ -466,6 +470,21 @@ enum TourTableLayout {
     /// S-T-A-R, right orbit still loops (weak ones fall back), plunges unchanged, nothing sticks.
     static let orbitGateTop = CGPoint(x: 352, y: 1266.4)          // 1 pt inside the arch (arch y 1267.4 at x 352)
     static let orbitGateBottom = CGPoint(x: 352, y: 1214)         // 13.4 pt from the R post's top (closed)
+
+    // MARK: - Milestone 3 v11: K-E-T (tools/tour_layout_m3.py ket block)
+    /// Aaron (9 Nov 2026): "Do we need to look at where KET goes first?" → the plan's spot ("in front of the bumpers") moved
+    /// with the pops. The Shot Lab (v8, cradle, 120 Hz) shows the left flipper's ~80° shots (flips at 0.40–0.48 s, an 80 ms
+    /// band) passing just right of the rocket's right wing and scoring nothing: K-E-T sits on that band, three standups
+    /// (26 wide, 2 apart) in a straight row facing the left flipper (260°), centred at (380, 965), on a backboard 4 pt behind
+    /// (so a ball from above bounces off its back). Gaps: 62 to the rocket pad, 53 to the lower pop. With R-O-C it spells
+    /// R-O-C-K-E-T (all six lit = the word). Aaron: "Sounds good, let's do it." (The left flipper's other free band, ~72°,
+    /// is kept for a Saturn ramp, a mirror of the Moon.)
+    static let ketNormal: CGFloat = 260 * .pi / 180
+    /// v12b (Aaron: "still not able to hit the K"; the Shot Lab by letter, left flipper: K 0.369–0.378 s, E 0.385–0.449,
+    /// T 0.451–0.479 — the shots curve right, so the band fell mostly on E): the row slides 10 pt right along itself,
+    /// centre (389.8, 963.3), so K takes the band's left part.
+    static let ketCenters = [CGPoint(x: 362.3, y: 968.1), CGPoint(x: 389.8, y: 963.3), CGPoint(x: 417.4, y: 958.4)]
+    static let ketBackboard = [CGPoint(x: 345.9, y: 979.1), CGPoint(x: 436.5, y: 963.2)]
 
     // MARK: - Milestone 3 v7: the Moon ramp (tools/tour_layout_m3.py moon block; checks tools/tour_render_m3.py)
     /// Aaron (8 Nov 2026): "Let's do the moon. And do we need to examine or rethink its position?" The plan's mouth (x

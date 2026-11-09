@@ -230,6 +230,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addOrbits()
         addTopLanes()
         addMoon()
+        addKET()
         addPlungeFlap()
         addOrbitGate()
         addKickbackLamp()
@@ -329,6 +330,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
             let b = TourBumper(at: c)
             addChild(b)
             bumpers.append(b)
+        }
+    }
+
+    /// M3 v11: K-E-T, the second half of R-O-C-K-E-T (rocketStandups 3–5), on its backboard right of the rocket.
+    private func addKET() {
+        addWall(points: TourTableLayout.ketBackboard)
+        for (i, c) in TourTableLayout.ketCenters.enumerated() {
+            let s = TourStandup(at: c, normal: TourTableLayout.ketNormal, label: TourTableLayout.rocketLabels[3 + i])
+            addChild(s)
+            rocketStandups.append(s)
         }
     }
 
@@ -746,7 +757,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func hitStandup(_ s: TourStandup) {
         guard s.hit(at: gameTime) else { return }
-        labEvent("roc")
+        let index = rocketStandups.firstIndex(where: { $0 === s }) ?? 0
+        // M3 v11: K-E-T or R-O-C; v12: K-E-T by letter in the Shot Lab (Aaron: "still not able to hit the K")
+        labEvent(index >= 3 ? "ket" + TourTableLayout.rocketLabels[index] : "roc")
         sfx(.standup)
         hitHaptic.impactOccurred(intensity: 0.5)
         guard rocketClearAt == nil else { return }
@@ -1003,7 +1016,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M3 v10")
+        let label = SKLabelNode(text: "T6 M3 v13")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1049,7 +1062,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M3 v10 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T6 M3 v13 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1604,7 +1617,7 @@ extension TourTableScene: ShotLabHost {
     var shotLabTableName: String { "Grand Tour" }
 
     /// The shots a player aims for end a trial; slings and lanes are noted only.
-    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc", "leftOrbit", "rightOrbit", "moon"] }
+    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc", "leftOrbit", "rightOrbit", "moon", "ketK", "ketE", "ketT"] }
 
     /// Left and right flippers, cradled as on the other tables: 40 pt out and 14 above the raised flipper.
     var shotLabFlippers: [ShotLab.FlipperSpec] {

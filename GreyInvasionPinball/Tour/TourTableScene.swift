@@ -205,6 +205,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
         return isAttractMode ? .topDown : settings.cameraMode
     }
 
+    /// M4 v6: the view reports where its score panel ends (screen points from the top); the camera keeps clear of it.
+    func setHUDReserve(_ points: CGFloat) {
+        guard abs(points - cameraRig.hudReserve) > 0.5 else { return }
+        cameraRig.hudReserve = points
+        refreshCamera()
+    }
+
     func refreshCamera() {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
@@ -1103,7 +1110,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M4 v5")
+        let label = SKLabelNode(text: "T6 M4 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1149,7 +1156,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M4 v5 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M4 v6 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

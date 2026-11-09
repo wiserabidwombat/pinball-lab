@@ -50,6 +50,9 @@ struct TourTableView: View {
                 EmptyView()
             }
         }
+        .onPreferenceChange(TourHUDBottomKey.self) { bottom in
+            if bottom > 0 { scene.setHUDReserve(bottom + 4) }
+        }
         .background(Color.black)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -146,6 +149,10 @@ struct TourTableView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 4)
+            // M4 v6: report the panel's bottom edge (screen points from the top, safe area included) to the camera.
+            .background(GeometryReader { g in
+                Color.clear.preference(key: TourHUDBottomKey.self, value: g.frame(in: .global).maxY)
+            })
 
             Spacer()
 
@@ -386,4 +393,10 @@ struct TourTableView: View {
         }
         .foregroundStyle(.white)
     }
+}
+
+/// M4 v6: the score panel's bottom edge in screen points (global), for the camera's top reserve.
+private struct TourHUDBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

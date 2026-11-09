@@ -8,6 +8,10 @@ import Foundation
 /// Owns the scene's camera and moves it each frame toward the framing for the current mode.
 @MainActor
 final class TourCameraRig {
+    /// M4 v6: screen points at the top kept clear for the score panel — measured from the panel's real bottom edge (it
+    /// sits under the Dynamic Island / status area, ~120 pt down on an iPhone Pro Max), not the shared 56 pt guess, which
+    /// left the arch, the plunge guide and the orbit gate behind the panel in TOP camera.
+    var hudReserve: CGFloat = CameraTuning.hudHeight
     let node = SKCameraNode()
     private var base = CGPoint.zero
     private var shakeLeft: TimeInterval = 0
@@ -86,7 +90,7 @@ final class TourCameraRig {
         let w = TourTableLayout.worldSize.width
         let h = TourTableLayout.worldSize.height
         let m = CameraTuning.margin
-        let hud = CameraTuning.hudHeight
+        let hud = hudReserve
 
         switch mode {
         case .topDown:

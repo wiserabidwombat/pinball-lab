@@ -126,6 +126,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var playLab: PlayLab?
     private var playLabNextAt: TimeInterval?
     private var playLabStarting = false
+    /// M4 v4: the Play Lab's watchdog — where each ball was last seen moving, and when.
+    private var watchSpots: [ObjectIdentifier: (CGPoint, TimeInterval)] = [:]
     #endif
     /// The Play Lab robot's buttons (always false outside it).
     private var robotLeft = false
@@ -261,7 +263,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addWall(points: TourTableLayout.rocketPad)
         addWall(points: TourTableLayout.bunkerRoof)
         addWall(points: TourTableLayout.bunkerFloor)
-        addWall(points: TourTableLayout.rocStructure)
+        // M4 v5: the bank is the solid alone (the outline is drawn, no edge chain). With both, a ball a hard shot put
+        // halfway through the chain was pushed IN by the chain and OUT by the solid, and stuck there (Play Lab 19-56-14Z:
+        // (47, 591), (52, 602)). The solid's faces are the outline's ('/' and roof; B is 0.1 pt off the line A–C).
+        addWall(points: TourTableLayout.rocStructure, physics: false)
         addSolid(points: TourTableLayout.rocSolid)        // M4 v2: no ball can be trapped inside the bank
         blastDoor = TourDropTarget(at: TourTableLayout.blastDoor, normal: -.pi / 2, label: "",
                                    size: TourTableLayout.blastDoorSize,
@@ -509,7 +514,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func addWall(points: [CGPoint],
                          friction: CGFloat = TourTableLayout.wallFriction,
                          restitution: CGFloat = TourTableLayout.wallRestitution,
-                         z: CGFloat = -19.5) {
+                         z: CGFloat = -19.5, physics: Bool = true) {
         let path = CGMutablePath()
         path.addLines(between: points)
 
@@ -520,12 +525,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
         node.lineJoin = .round
         node.zPosition = z
 
-        let body = SKPhysicsBody(edgeChainFrom: path)
-        body.friction = friction
-        body.restitution = restitution
-        body.categoryBitMask = TourPhysicsCategory.wall
-        body.collisionBitMask = TourPhysicsCategory.ball
-        node.physicsBody = body
+        if physics {
+            let body = SKPhysicsBody(edgeChainFrom: path)
+            body.friction = friction
+            body.restitution = restitution
+            body.categoryBitMask = TourPhysicsCategory.wall
+            body.collisionBitMask = TourPhysicsCategory.ball
+            node.physicsBody = body
+        }
 
         addChild(node)
     }
@@ -1096,7 +1103,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M4 v3")
+        let label = SKLabelNode(text: "T6 M4 v5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1142,7 +1149,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M4 v3 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M4 v5 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1666,8 +1673,8 @@ extension TourTableScene {
         isAttractMode = false
         removeAllBalls()
         var cases: [(p: CGPoint, v: CGVector)] = [(CGPoint(x: 30, y: 575), .zero), (CGPoint(x: 40, y: 640), .zero)]
-        for speed in stride(from: 2000.0, through: 3000.0, by: 250.0) {
-            for deg in stride(from: 115.0, through: 135.0, by: 2.5) {
+        for speed in stride(from: 2000.0, through: 3400.0, by: 350.0) {
+            for deg in stride(from: 110.0, through: 140.0, by: 2.0) {
                 let a = CGFloat(deg) * .pi / 180
                 cases.append((CGPoint(x: 200, y: 370), CGVector(dx: cos(a) * CGFloat(speed), dy: sin(a) * CGFloat(speed))))
             }
@@ -1735,9 +1742,12 @@ extension TourTableScene {
         if let b = balls.first, Self.inRocOutline(b.position) { probe.inside = true }
         if probe.t > 2 {
             if let b = balls.first {
-                let n = 46 - probe.cases.count
+                let n = 81 - probe.cases.count
+                let v = b.physicsBody?.velocity ?? .zero
+                let still = hypot(v.dx, v.dy) < 5 && b.position.y > 100
                 print(String(format: "ROC %d %.0f %.0f %@ %@", n, b.position.x, b.position.y,
-                             probe.inside ? "wentIN" : "out", Self.inRocOutline(b.position) ? "TRAPPED" : "free"))
+                             probe.inside ? "wentIN" : "out",
+                             Self.inRocOutline(b.position) ? "TRAPPED" : (still ? "STILL" : "free")))
             }
             removeAllBalls()
             guard !probe.cases.isEmpty else { print("ROC done"); exit(0) }
@@ -1980,6 +1990,7 @@ extension TourTableScene: PlayLabHost {
         }, wanted: robotWanted(), lanes: starResetAt == nil && !starLanes.isEmpty
             ? PlayRobotView.Lanes(xs: starLanes.map { $0.position.x }, y: starLanes[0].position.y, lit: starLanes.map { $0.isLit })
             : nil)
+        runWatchdog(now, lab)
         guard let cmd = lab.frame(view) else { return }
         if let direction = cmd.nudge { applyNudge(direction) }
         if cmd.left != robotLeft || cmd.right != robotRight {
@@ -1991,6 +2002,50 @@ extension TourTableScene: PlayLabHost {
             plungerPull = power * TourTableLayout.plungerMaxPull
             releasePlunger()
         }
+    }
+
+    /// M4 v4 (the R-O-C trap went unreported: Table 06 had no watchdog): a ball off the table, or one that hasn't moved 4 pt
+    /// in 5 s while not held (scoop, crater), on the plunger or cradled, is recorded as an incident and served again
+    /// (no ball lost), as on the Lamplight.
+    private func runWatchdog(_ now: TimeInterval, _ lab: PlayLab) {
+        let w = TourTableLayout.worldSize
+        for ball in balls {
+            let id = ObjectIdentifier(ball)
+            let p = ball.position
+            if !p.x.isFinite || !p.y.isFinite || p.x < -30 || p.x > w.width + 30 || p.y > w.height + 30 {
+                watchdogRescue("offTable", ball, now, lab)
+                continue
+            }
+            if ball.heldIn != nil || ball.moonReleaseAt != nil || isOnPlunger(ball) || isCradled(ball) || p.y < 0 {
+                watchSpots[id] = (p, now)
+                continue
+            }
+            if let spot = watchSpots[id], hypot(p.x - spot.0.x, p.y - spot.0.y) < 4 {
+                if now - spot.1 > 5 { watchdogRescue("stuck", ball, now, lab) }
+            } else {
+                watchSpots[id] = (p, now)
+            }
+        }
+    }
+
+    /// A ball resting on a raised flipper is being held on purpose.
+    private func isCradled(_ ball: TourBall) -> Bool {
+        let specs = shotLabFlippers
+        for (i, pressed) in [leftFlipper.isPressed, rightFlipper.isPressed].enumerated() where pressed {
+            if hypot(ball.position.x - specs[i].cradle.x, ball.position.y - specs[i].cradle.y) < 30 { return true }
+        }
+        return false
+    }
+
+    private func watchdogRescue(_ kind: String, _ ball: TourBall, _ now: TimeInterval, _ lab: PlayLab) {
+        let p = ball.position
+        let x = p.x.isFinite ? Double(p.x) : -1, y = p.y.isFinite ? Double(p.y) : -1
+        lab.incident(PlayIncident(kind: kind, x: x.rounded(), y: y.rounded(), upper: !ball.isOnFloor,
+                                  time: lab.elapsed(now: now).rounded()))
+        watchSpots[ObjectIdentifier(ball)] = nil
+        removeBall(ball)
+        if balls.isEmpty, nextBallAt == nil { nextBallAt = now + 0.5 }      // served again, no ball lost
+        showBanner("WATCHDOG · \(kind == "stuck" ? "STUCK BALL" : "BALL OFF THE TABLE") AT \(Int(x)), \(Int(y))")
     }
 
     /// The shots the table wants, most wanted first (no arrows until the rules): unlit R-O-C-K-E-T letters, the two
@@ -2067,6 +2122,7 @@ extension TourTableScene: PlayLabHost {
         playLab = nil
         lab.stop(saving: saving)
         playLabNextAt = nil
+        watchSpots.removeAll()
         robotLeft = false
         robotRight = false
         if leftFlipper != nil { updateFlippers() }

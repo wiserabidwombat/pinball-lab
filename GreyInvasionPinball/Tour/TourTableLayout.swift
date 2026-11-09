@@ -315,6 +315,13 @@ enum TourTableLayout {
     /// can drop into the left outlane under it again (tools/tour_left_drain_sim.py: 0% in v7 → ~4.5%; v6's bulge 7%).
     static let rocStructure = [CGPoint(x: 20, y: 530), CGPoint(x: 50, y: 594.3), CGPoint(x: 86.3, y: 672.3),
                                CGPoint(x: 20, y: 714.3)]
+    /// M4 v2 (Play Lab run 2026-11-09 15-29-40Z): 3 of 13 robot games ended with a ball trapped INSIDE this outline, at
+    /// (30, 575) in its bottom corner: a hard steep flip from the right flipper (~2,400 pt/s, 20 pt a 1/120 s step, more
+    /// than a ball width) went through the thin edge of the backboard. The outline is now also a solid: a convex
+    /// polygon over its inside whose left side runs out behind the outer wall (x −60), so a ball that gets in is pushed
+    /// out through the nearest face it came in by — the '/' or the roof — never through the wall.
+    static let rocSolid = [CGPoint(x: 20, y: 530), CGPoint(x: 86.3, y: 672.3), CGPoint(x: 20, y: 714.3),
+                           CGPoint(x: -60, y: 714.3), CGPoint(x: -60, y: 530)]
     /// The kickback fires from the left outlane's centre (between the wall and the lane guide), as on Grey Invasion.
     static let kickbackLaneX: CGFloat = 37
 
@@ -570,6 +577,12 @@ enum TourTableLayout {
     static let saturnRadius: CGFloat = 46
     /// The tangent at Saturn's crater: the climb's 100° minus 10 pt round the r 38 right turn.
     static let saturnReleaseHeading: CGFloat = 100 * .pi / 180 - rampMadeAfterApex / 38
+    /// M4 v3 (Aaron: "when I hit the saturn ramp, the ball doesn't go around the rail, it falls back down the ramp after
+    /// it is caught"): Saturn's crater is on the CLIMB of its 190° turn — from the made switch (heading ~85°) the ball still
+    /// rises r(1 − cos 85°) ≈ 35 pt to the turn's top, which needs ≥ 309 pt/s with no friction; the Moon's shared 320 failed.
+    /// (The Moon's made switch is 40° from its top: ~9 pt to climb.) Its own release speed, from the ride probe
+    /// (`-shotlab-scenario rampride`).
+    static let saturnReleaseSpeed: CGFloat = 480
 
     /// The height of a wall polyline at x (nil outside its x range).
     static func lineY(_ pts: [CGPoint], at x: CGFloat) -> CGFloat? {

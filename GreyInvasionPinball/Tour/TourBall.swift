@@ -55,6 +55,8 @@ final class TourBall: SKNode {
     var moonReleaseAt: TimeInterval?
     /// M3 v14: the direction the held ball rolls on in (each ramp's crater tangent: the Moon's or Saturn's).
     var holdReleaseHeading: CGFloat = 0
+    /// M4 v3: and how fast (Saturn's crater needs more than the Moon's: it's on the climb of its turn).
+    var holdReleaseSpeed: CGFloat = TourTableLayout.moonReleaseSpeed
     var isOnFloor: Bool { layer == .floor }
 
     func setLayer(_ newLayer: TourBallLayer) {

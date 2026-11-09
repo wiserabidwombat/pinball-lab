@@ -81,6 +81,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
     #if DEBUG
     /// DEBUG plunge probe (`-shotlab grandtour -shotlab-scenario plungeprobe`): powers left, current power, trial time.
     fileprivate var plungeProbe: (powers: [CGFloat], power: CGFloat, t: CGFloat, logT: CGFloat, fired: Bool)?
+    /// M4 v2: the R-O-C trap probe (`-shotlab-scenario roctrap`): shots at the bank and a ball dropped inside it.
+    fileprivate var rocProbe: (cases: [(p: CGPoint, v: CGVector)], t: CGFloat, inside: Bool)?
+    /// M4 v3: the ramp ride probe (`-shotlab-scenario rampride`): a ball released from each crater at set speeds.
+    fileprivate var rideProbe: (cases: [(saturn: Bool, speed: CGFloat)], saturn: Bool, speed: CGFloat, t: CGFloat, topY: CGFloat)?
     #endif
     /// M3 v7: the Moon ramp (climbs to the raised Moon's crater, wire back down to the left inlane).
     private var moonRamp: TourRamp?
@@ -258,6 +262,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addWall(points: TourTableLayout.bunkerRoof)
         addWall(points: TourTableLayout.bunkerFloor)
         addWall(points: TourTableLayout.rocStructure)
+        addSolid(points: TourTableLayout.rocSolid)        // M4 v2: no ball can be trapped inside the bank
         blastDoor = TourDropTarget(at: TourTableLayout.blastDoor, normal: -.pi / 2, label: "",
                                    size: TourTableLayout.blastDoorSize,
                                    color: SKColor(red: 0.72, green: 0.76, blue: 0.84, alpha: 1))
@@ -482,6 +487,23 @@ final class TourTableScene: SKScene, RendererHostedScene {
         floor.strokeColor = .clear
         floor.zPosition = -20
         addChild(floor)
+    }
+
+    /// M4 v2: an invisible solid (a static convex polygon, counter-clockwise) behind a wall outline: a ball that a hard
+    /// shot puts through the outline's thin edge is pushed back out instead of being trapped inside.
+    private func addSolid(points: [CGPoint]) {
+        let path = CGMutablePath()
+        path.addLines(between: points)
+        path.closeSubpath()
+        let node = SKNode()
+        let body = SKPhysicsBody(polygonFrom: path)
+        body.isDynamic = false
+        body.friction = TourTableLayout.wallFriction
+        body.restitution = TourTableLayout.wallRestitution
+        body.categoryBitMask = TourPhysicsCategory.wall
+        body.collisionBitMask = TourPhysicsCategory.ball
+        node.physicsBody = body
+        addChild(node)
     }
 
     private func addWall(points: [CGPoint],
@@ -974,7 +996,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// Table time (the Shot Lab keeps its own clock).
     private var tableNow: TimeInterval {
         #if DEBUG
-        if shotLab != nil || plungeProbe != nil { return shotLabTime }
+        if shotLab != nil || plungeProbe != nil || rocProbe != nil || rideProbe != nil { return shotLabTime }
         #endif
         return gameTime
     }
@@ -988,6 +1010,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         sfx(.ramp)
         showBanner(saturn ? "SATURN" : "MOON")
         ball.holdReleaseHeading = saturn ? TourTableLayout.saturnReleaseHeading : TourTableLayout.moonReleaseHeading
+        ball.holdReleaseSpeed = saturn ? TourTableLayout.saturnReleaseSpeed : TourTableLayout.moonReleaseSpeed
         ball.moonReleaseAt = tableNow + TourTableLayout.moonHold
         ball.physicsBody?.affectedByGravity = false
         ball.physicsBody?.velocity = .zero
@@ -1006,7 +1029,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             body.affectedByGravity = true
             // The exact tangent at the crater (the path's sample gives the next point's heading, ~7° into the turn).
             let h = ball.holdReleaseHeading
-            let v = TourTableLayout.moonReleaseSpeed
+            let v = ball.holdReleaseSpeed
             body.velocity = CGVector(dx: cos(h) * v, dy: sin(h) * v)
         }
     }
@@ -1073,7 +1096,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M4 v1")
+        let label = SKLabelNode(text: "T6 M4 v3")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1119,7 +1142,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M4 v1 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M4 v3 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1398,6 +1421,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
             updateShotLab(CGFloat(step))
             return
         }
+        if rocProbe != nil {
+            updateRocProbe(CGFloat(step))
+            return
+        }
+        if rideProbe != nil {
+            updateRideProbe(CGFloat(step))
+            return
+        }
         if plungeProbe != nil {                    // plunge probe: fires plunges at set powers and logs the ball
             updatePlungeProbe(CGFloat(step))
             return
@@ -1627,6 +1658,94 @@ extension TourTableScene {
         removeAllBalls()
         placeBallOnPlunger()
         plungeProbe = (powers: stride(from: 0.4, through: 1.0001, by: 0.1).map { CGFloat($0) }, power: 0, t: 0, logT: 0, fired: false)
+    }
+
+    /// DEBUG (M4 v2): fires balls at the R-O-C bank like the Play Lab's trapping flips (from (200, 370), 2,000–3,000
+    /// pt/s at 115–135°) and drops one inside its outline; prints `ROC i x y IN/out trapped?` after 2 s each, then quits.
+    func debugRocProbe() {
+        isAttractMode = false
+        removeAllBalls()
+        var cases: [(p: CGPoint, v: CGVector)] = [(CGPoint(x: 30, y: 575), .zero), (CGPoint(x: 40, y: 640), .zero)]
+        for speed in stride(from: 2000.0, through: 3000.0, by: 250.0) {
+            for deg in stride(from: 115.0, through: 135.0, by: 2.5) {
+                let a = CGFloat(deg) * .pi / 180
+                cases.append((CGPoint(x: 200, y: 370), CGVector(dx: cos(a) * CGFloat(speed), dy: sin(a) * CGFloat(speed))))
+            }
+        }
+        rocProbe = (cases: cases, t: 99, inside: false)
+    }
+
+    /// DEBUG (M4 v3): releases a ball from the Moon's and Saturn's craters (on the way down, as after the hold) at 240…640
+    /// pt/s and prints `RIDE moon|saturn speed EXIT|BACK x y t` — EXIT = left the wire at its end (the inlane), BACK = fell
+    /// back down the climb to the mouth. Then quits.
+    func debugRideProbe() {
+        isAttractMode = false
+        removeAllBalls()
+        var cases: [(saturn: Bool, speed: CGFloat)] = []
+        for saturn in [false, true] { for v in stride(from: 240.0, through: 640.0, by: 40.0) { cases.append((saturn, CGFloat(v))) } }
+        rideProbe = (cases: cases, saturn: false, speed: 0, t: 99, topY: 0)
+    }
+
+    fileprivate func updateRideProbe(_ realDt: CGFloat) {
+        guard var probe = rideProbe else { return }
+        physicsWorld.speed = 0.5
+        let dt = realDt * 0.5
+        shotLabTime += TimeInterval(dt)
+        lastStep = dt
+        leftFlipper.step(dt: dt); rightFlipper.step(dt: dt)
+        updateGates(); updateLanes(shotLabTime)
+        probe.t += dt
+        let ball = balls.first
+        if let b = ball { probe.topY = max(probe.topY, b.position.y) }
+        if let b = ball, b.isOnFloor || probe.t > 5 {
+            let exit = b.position.y < 520
+            print(String(format: "RIDE %@ %.0f %@ %.0f %.0f %.2f top %.0f", probe.saturn ? "saturn" : "moon", probe.speed,
+                         exit ? "EXIT" : (b.isOnFloor ? "BACK" : "STUCK"), b.position.x, b.position.y, probe.t, probe.topY))
+            removeAllBalls()
+        }
+        if balls.isEmpty {
+            guard !probe.cases.isEmpty else { print("RIDE done"); exit(0) }
+            let c = probe.cases.removeFirst()
+            guard let ramp = c.saturn ? saturnRamp : moonRamp else { return }
+            let d = (c.saturn ? TourTableLayout.saturnApexDistance : TourTableLayout.moonApexDistance) + TourTableLayout.rampMadeAfterApex
+            let (p, _) = ramp.path.sample(at: d)
+            let h = c.saturn ? TourTableLayout.saturnReleaseHeading : TourTableLayout.moonReleaseHeading
+            shotLabPlaceBall(at: p, velocity: CGVector(dx: cos(h) * c.speed, dy: sin(h) * c.speed))
+            if let b = balls.last { b.activeRamp = ramp; b.setLayer(.rampDown) }
+            probe.saturn = c.saturn; probe.speed = c.speed; probe.t = 0; probe.topY = p.y
+        }
+        rideProbe = probe
+    }
+
+    private static func inRocOutline(_ p: CGPoint) -> Bool {
+        let a = CGPoint(x: 20, y: 530), c = CGPoint(x: 86.3, y: 672.3), d = CGPoint(x: 20, y: 714.3)
+        func side(_ u: CGPoint, _ v: CGPoint) -> CGFloat { (v.x - u.x) * (p.y - u.y) - (v.y - u.y) * (p.x - u.x) }
+        return p.x > 20 && side(a, c) > 0 && side(c, d) > 0
+    }
+
+    fileprivate func updateRocProbe(_ realDt: CGFloat) {
+        guard var probe = rocProbe else { return }
+        physicsWorld.speed = 0.5
+        let dt = realDt * 0.5
+        shotLabTime += TimeInterval(dt)
+        lastStep = dt
+        leftFlipper.step(dt: dt); rightFlipper.step(dt: dt)
+        updateGates(); updateLanes(shotLabTime); updateTargets(shotLabTime)
+        probe.t += dt
+        if let b = balls.first, Self.inRocOutline(b.position) { probe.inside = true }
+        if probe.t > 2 {
+            if let b = balls.first {
+                let n = 46 - probe.cases.count
+                print(String(format: "ROC %d %.0f %.0f %@ %@", n, b.position.x, b.position.y,
+                             probe.inside ? "wentIN" : "out", Self.inRocOutline(b.position) ? "TRAPPED" : "free"))
+            }
+            removeAllBalls()
+            guard !probe.cases.isEmpty else { print("ROC done"); exit(0) }
+            let c = probe.cases.removeFirst()
+            shotLabPlaceBall(at: c.p, velocity: c.v)
+            probe.t = 0; probe.inside = false
+        }
+        rocProbe = probe
     }
 
     fileprivate func updatePlungeProbe(_ realDt: CGFloat) {

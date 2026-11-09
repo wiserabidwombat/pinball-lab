@@ -30,6 +30,7 @@ enum TourPoints {
     static let starRepeat = 50
     static let starComplete = 5_000
     static let bumper = 100
+    static let moon = 7_500
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

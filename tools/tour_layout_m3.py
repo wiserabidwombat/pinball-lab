@@ -52,9 +52,10 @@ R_SHOT = A.ang(A.TIP_L, (526, 700))         # ~63°
 # clear of where the asteroid lane will go).
 FLARE = 10
 L_BEND = (L_INNER_X, 915)
-ux, uy = unit(L_SHOT + FLARE + 180); L_TIP = (L_BEND[0] + ux * 90, L_BEND[1] + uy * 90)
+L_FUNNEL, R_FUNNEL = 50, 45          # M3 v7 (Aaron: the orange funnel walls don't need to reach out so far): 90/75 → 50/45
+ux, uy = unit(L_SHOT + FLARE + 180); L_TIP = (L_BEND[0] + ux * L_FUNNEL, L_BEND[1] + uy * L_FUNNEL)
 R_BEND = (R_INNER_X, 725)
-ux, uy = unit(R_SHOT - FLARE + 180); R_TIP = (R_BEND[0] + ux * 75, R_BEND[1] + uy * 75)
+ux, uy = unit(R_SHOT - FLARE + 180); R_TIP = (R_BEND[0] + ux * R_FUNNEL, R_BEND[1] + uy * R_FUNNEL)
 leftOrbitInner = [L_TIP, L_BEND] + L_ARC
 rightOrbitInner = [R_TIP, R_BEND] + list(reversed(R_ARC))   # from the tip up and over (right to left)
 
@@ -89,3 +90,11 @@ ROCKET_DROP = 60
 rocketPad = [(x, y - ROCKET_DROP) for x, y in [(222.0, 960.0), (266, 980), (284, 998), (302, 980), (346.0, 960.0)]]
 rocketHull = [(x, y - ROCKET_DROP) for x, y in [(222.0, 960.0), (267, 934), (301, 934), (346.0, 960.0)]]
 bumperCenters = [(232, 1088), (340, 1088), (286, 1030)]   # a pop under each outer lane, one below between (search: every lane >= 7 hits)
+
+# --- M3 v7 (8 Nov 2026): the Moon ramp. Mouth 60 wide at (200, 760) heading 100° (Aaron: the ramp needn't reach so far
+# into the middle; v7a's mouth was at y 640), climb line 120 + arc r120 25° + line 40 to the crater; round it r38 145°;
+# wire down the left side, S-bend 2 x r60 14.433° to x 71, line 85 into the left inlane (ends y 440; Aaron: the wire's
+# drop missed the inlane when it ended at y 505). Floor U: first 80 pt.
+MOON_MOUTH, MOON_HEADING, MOON_MOUTH_HALF, MOON_HALF, MOON_FLARE, MOON_LOW = (200, 760), 100, 30, 16, 70, 80
+# centreline: line 120, arc(120, +25), line 40 [apex 212.36], arc(38, +145), line 382.23, arc(60, +14.433), arc(60, -14.433),
+# line 85 -> ends (71, 440) heading 270. Crater-turn centre (105.2, 937.1). Mirrors TourTableLayout.moonRampPath.

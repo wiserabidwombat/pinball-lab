@@ -82,6 +82,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// DEBUG plunge probe (`-shotlab grandtour -shotlab-scenario plungeprobe`): powers left, current power, trial time.
     fileprivate var plungeProbe: (powers: [CGFloat], power: CGFloat, t: CGFloat, logT: CGFloat, fired: Bool)?
     #endif
+    /// M3 v7: the Moon ramp (climbs to the raised Moon's crater, wire back down to the left inlane).
+    private var moonRamp: TourRamp?
     /// M3 v3: the top orbit gate's drawn flap (swings when a ball passes it going left).
     private var orbitGateFlap: SKShapeNode?
     // The ball save: once per player ball, on the plunger and for 10 s after launch.
@@ -227,6 +229,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addLowerHalf()
         addOrbits()
         addTopLanes()
+        addMoon()
         addPlungeFlap()
         addOrbitGate()
         addKickbackLamp()
@@ -327,6 +330,38 @@ final class TourTableScene: SKScene, RendererHostedScene {
             addChild(b)
             bumpers.append(b)
         }
+    }
+
+    /// M3 v7: the Moon ramp (TourRamp, Monsoon's) and the raised Moon round its crater turn (grey box: a disc at the ramp's
+    /// top height, drawn over the floor so floor balls pass under it, and the crater ring where the ball pauses).
+    private func addMoon() {
+        let ramp = TourRamp(path: TourTableLayout.moonRampPath, apexDistance: TourTableLayout.moonApexDistance,
+                            mouthHalfWidth: TourTableLayout.moonMouthHalfWidth, halfWidth: TourTableLayout.moonHalfWidth,
+                            flareLength: TourTableLayout.moonFlareLength, postLength: 0,
+                            lowLength: TourTableLayout.moonLowLength)
+        addChild(ramp)
+        moonRamp = ramp
+        let lift = TourTableLayout.rampTopHeight * TourTableLayout.oblique
+        let moon = SKShapeNode(circleOfRadius: TourTableLayout.moonRadius)
+        moon.position = CGPoint(x: TourTableLayout.moonCenter.x, y: TourTableLayout.moonCenter.y + lift)
+        moon.fillColor = SKColor(red: 0.42, green: 0.45, blue: 0.52, alpha: 0.92)
+        moon.strokeColor = SKColor(white: 0.9, alpha: 0.9)
+        moon.lineWidth = 2
+        moon.zPosition = 19.5                      // over floor balls (z 10), under the ramp's art (20+)
+        addChild(moon)
+        let label = SKLabelNode(text: "MOON")
+        label.fontName = "Menlo-Bold"; label.fontSize = 11
+        label.fontColor = SKColor(white: 1, alpha: 0.8)
+        label.position = CGPoint(x: -8, y: -20)
+        moon.addChild(label)
+        let (c, _) = ramp.path.sample(at: TourTableLayout.moonApexDistance + TourTableLayout.rampMadeAfterApex)
+        let crater = SKShapeNode(circleOfRadius: 13)
+        crater.position = CGPoint(x: c.x, y: c.y + lift)
+        crater.fillColor = SKColor(white: 0.18, alpha: 0.9)
+        crater.strokeColor = SKColor(white: 0.75, alpha: 0.9)
+        crater.lineWidth = 1.5
+        crater.zPosition = 19.6
+        addChild(crater)
     }
 
     /// M3 v3: the plunge flap, a shallow blade hanging from the arch at the top right. Its edge is in the `diverter`
@@ -756,7 +791,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 }
                 continue
             }
-            guard now >= ball.scoopIgnoreUntil else { continue }
+            guard ball.isOnFloor, now >= ball.scoopIgnoreUntil else { continue }
             let v = body.velocity
             let from = CGPoint(x: ball.position.x - v.dx * lastStep, y: ball.position.y - v.dy * lastStep)
             // Caught by its path past the hole, or anywhere inside the bay / bunker (so no ball can rest in there).
@@ -834,6 +869,78 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    /// M3 v7: the Moon ramp's switches, from the ball's move this frame (Monsoon's updateRampLayer, one ramp): the entry
+    /// puts a floor ball on the ramp (backward = it fell back out), the made switch just past the crater scores the Moon
+    /// and pauses the ball there, the exit puts it back on the floor above the left inlane. A ramp ball found far from the
+    /// channel drops to the floor (the safety net).
+    private func updateRampLayer(_ ball: TourBall, from p0: CGPoint, to p: CGPoint) {
+        guard let ramp = moonRamp else { return }
+        switch ball.layer {
+        case .floor:
+            // Review fix: the switch line's slack reaches past the mouth; only a ball inside the mouth goes up.
+            if ramp.entrySwitch.crossing(from: p0, to: p) == .forward,
+               ramp.distanceToCenterline(p) < TourTableLayout.moonMouthHalfWidth {
+                ball.activeRamp = ramp
+                ball.setLayer(.rampUp)
+            }
+            return
+        case .rampUp:
+            if ramp.entrySwitch.crossing(from: p0, to: p) == .backward {
+                ball.setLayer(.floor)
+            } else if ramp.madeSwitch.crossing(from: p0, to: p) == .forward {
+                ball.setLayer(.rampDown)
+                moonMade(ball)
+            }
+        case .rampDown:
+            if ramp.exitSwitch.crossing(from: p0, to: p) == .forward {
+                ball.setLayer(.floor)
+            } else if ramp.madeSwitch.crossing(from: p0, to: p) == .backward {
+                ball.setLayer(.rampUp)
+            }
+        }
+        if !ball.isOnFloor, ramp.distanceToCenterline(p) > ramp.maxHalfWidth + TourTableLayout.ballRadius + 12 {
+            ball.setLayer(.floor)
+        }
+    }
+
+    /// Table time (the Shot Lab keeps its own clock).
+    private var tableNow: TimeInterval {
+        #if DEBUG
+        if shotLab != nil || plungeProbe != nil { return shotLabTime }
+        #endif
+        return gameTime
+    }
+
+    /// M3 v7: the Moon is made: score, then the ball pauses in the crater (placeholder for the Moon lock).
+    private func moonMade(_ ball: TourBall) {
+        labEvent("moon")
+        game.add(TourPoints.moon)
+        hitHaptic.impactOccurred()
+        sfx(.ramp)
+        showBanner("MOON")
+        ball.moonReleaseAt = tableNow + TourTableLayout.moonHold
+        ball.physicsBody?.affectedByGravity = false
+        ball.physicsBody?.velocity = .zero
+    }
+
+    /// Holds paused balls still in the crater; on time, rolls each on down the wire (along the path past the crater).
+    private func updateMoonHolds(_ now: TimeInterval) {
+        guard moonRamp != nil else { return }
+        for ball in balls {
+            guard let due = ball.moonReleaseAt, let body = ball.physicsBody else { continue }
+            if now < due {
+                body.velocity = .zero
+                continue
+            }
+            ball.moonReleaseAt = nil
+            body.affectedByGravity = true
+            // The exact tangent at the crater (the path's sample gives the next point's heading, ~7° into the turn).
+            let h = TourTableLayout.moonReleaseHeading
+            let v = TourTableLayout.moonReleaseSpeed
+            body.velocity = CGVector(dx: cos(h) * v, dy: sin(h) * v)
+        }
+    }
+
     private func orbitMade(_ event: String, banner: String) {
         labEvent(event)
         game.add(TourPoints.orbit)
@@ -896,7 +1003,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M3 v6")
+        let label = SKLabelNode(text: "T6 M3 v10")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -942,7 +1049,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T6 M3 v6 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T6 M3 v10 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1227,6 +1334,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         updateTargets(now)
         updateScoops(now)
         updateSpinners(dt, now)
+        updateMoonHolds(now)
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil
@@ -1309,11 +1417,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
             let p0 = ball.previousPosition, p = ball.position
             let wasAbove = gx * (p0.y - low.y) - gy * (p0.x - low.x) > 0
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
-            if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
-            orbitSwitches(ball, from: p0, to: p)
+            updateRampLayer(ball, from: p0, to: p)       // M3 v7: the Moon ramp
+            ball.rampHeight = ball.isOnFloor ? 0 : (ball.activeRamp?.height(at: p) ?? 0)
+            if ball.isOnFloor, !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
+            // Floor switches count floor balls only (the Moon's wire runs over the left orbit lane).
+            if ball.isOnFloor { orbitSwitches(ball, from: p0, to: p) }
             // M3 v3: a ball passing the top orbit gate going left (a right-orbit loop, a plunge) swings its flap.
             let gx0 = TourTableLayout.orbitGateTop.x
-            if p0.x >= gx0, p.x < gx0, p.y > TourTableLayout.orbitGateBottom.y, let flap = orbitGateFlap,
+            if ball.isOnFloor, p0.x >= gx0, p.x < gx0, p.y > TourTableLayout.orbitGateBottom.y, let flap = orbitGateFlap,
                flap.action(forKey: "swing") == nil {
                 flap.run(.sequence([.rotate(toAngle: -1.3, duration: 0.07, shortestUnitArc: true),
                                     .rotate(toAngle: 0, duration: 0.5, shortestUnitArc: true)]), withKey: "swing")
@@ -1410,6 +1521,7 @@ extension TourTableScene {
     /// 120 Hz and 60 Hz physics steps (~25 min in the Simulator). Menu or a new game stops it.
     func debugStartShotLab() {
         isAttractMode = false
+        removeAllBalls()                           // M3 v7 review: no ball left mid Moon hold on the game clock
         shotLabTime = 0
         shotLab = ShotLab(host: self)
         refreshCamera()
@@ -1433,7 +1545,7 @@ extension TourTableScene {
         let now = shotLabTime
         lastStep = dt
         leftFlipper.step(dt: dt); rightFlipper.step(dt: dt)
-        updateGates(); updateLanes(now); updateSpinners(dt, now)
+        updateGates(); updateLanes(now); updateSpinners(dt, now); updateMoonHolds(now)
         probe.t += dt
         if !probe.fired, probe.t > 0.5 {
             guard !probe.powers.isEmpty else { print("PROBE done"); exit(0) }
@@ -1474,6 +1586,7 @@ extension TourTableScene {
         updateTargets(now)
         updateScoops(now)
         updateSpinners(dt, now)
+        updateMoonHolds(now)
         if lab.update(now: now) {
             game.banner = lab.progressText
         } else {
@@ -1491,7 +1604,7 @@ extension TourTableScene: ShotLabHost {
     var shotLabTableName: String { "Grand Tour" }
 
     /// The shots a player aims for end a trial; slings and lanes are noted only.
-    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc", "leftOrbit", "rightOrbit"] }
+    var shotLabMajorEvents: Set<String> { ["rocket", "missionControl", "rover", "sample", "roc", "leftOrbit", "rightOrbit", "moon"] }
 
     /// Left and right flippers, cradled as on the other tables: 40 pt out and 14 above the raised flipper.
     var shotLabFlippers: [ShotLab.FlipperSpec] {

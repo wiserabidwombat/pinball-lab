@@ -366,7 +366,9 @@ enum TourTableLayout {
         return points
     }
     /// Left orbit: a 40 pt lane up the left wall (x 20…60); the inner wall stops at x 190.
-    static let leftOrbitTip = CGPoint(x: 105.1, y: 837.1)
+    /// M3 v7 (Aaron: "the orange lines (walls) don't need to extend out quite as far"): funnels 90 → 50 pt (left), 75 → 45
+    /// (right), same flare angle; geometry windows 108.3–112.1° / 62.3–66.3° (were 107.7–112.1 / 62.3–67.0).
+    static let leftOrbitTip = CGPoint(x: 85.05, y: 871.73)
     static let leftOrbitBend = CGPoint(x: 60, y: 915)
     static var leftOrbitInner: [CGPoint] {
         [leftOrbitTip, leftOrbitBend] + archOffset(inset: 40, rightHalf: false, xRange: 0...190)
@@ -374,7 +376,7 @@ enum TourTableLayout {
     /// Right orbit: a 44 pt lane inside the plunger-lane wall (x 504…548); above the launch gate it shares the arch with
     /// the shooter lane (76 pt to the right wall). The inner wall runs up from the funnel and over to x 400 (M3 v2: was
     /// 384, which left a 26 pt wedge beside the last S-T-A-R post).
-    static let rightOrbitTip = CGPoint(x: 459.3, y: 664.8)
+    static let rightOrbitTip = CGPoint(x: 477.20, y: 688.85)
     static let rightOrbitBend = CGPoint(x: 504, y: 725)
     static var rightOrbitInner: [CGPoint] {
         [rightOrbitTip, rightOrbitBend] + archOffset(inset: 76, rightHalf: true, xRange: 400...600).reversed()
@@ -464,6 +466,61 @@ enum TourTableLayout {
     /// S-T-A-R, right orbit still loops (weak ones fall back), plunges unchanged, nothing sticks.
     static let orbitGateTop = CGPoint(x: 352, y: 1266.4)          // 1 pt inside the arch (arch y 1267.4 at x 352)
     static let orbitGateBottom = CGPoint(x: 352, y: 1214)         // 13.4 pt from the R post's top (closed)
+
+    // MARK: - Milestone 3 v7: the Moon ramp (tools/tour_layout_m3.py moon block; checks tools/tour_render_m3.py)
+    /// Aaron (8 Nov 2026): "Let's do the moon. And do we need to examine or rethink its position?" The plan's mouth (x
+    /// 150–190 at the shot line) sat ON the left orbit's shot (107.7–112.1° from the right flipper). The free slot is
+    /// between the rocket and the left orbit. First try (x 172–237) took left-orbit shots: the Shot Lab's real launches
+    /// (108°, from wherever on the flipper) cross y 600 at x 171–181, and the rocket's at x ≥ 260 (left flipper) / 272
+    /// (right). So the mouth is 60 wide (the skill's proven width) centred at x 218: posts ~x 188 / 248, ~18 pt clear of
+    /// both neighbours. Shot Lab (first try): Moon from the right flipper at 0.470–0.482 s, launched ~100.4°. The ramp climbs to a
+    /// crater on the raised Moon top-left (open floor since the pops moved under the lanes in v5); the ball pauses there,
+    /// then a wire takes it round the crater and down the left side to the top of the left inlane (Mission Control's
+    /// drop point). Aaron chose this over a right-side Moon. Monsoon's proven ramp values (TourRamp is its copy).
+    static let rampEntryDistance: CGFloat = 12
+    static let rampMadeAfterApex: CGFloat = 10
+    static let rampExitBeforeEnd: CGFloat = 15
+    static let rampFriction: CGFloat = 0.05
+    static let rampRestitution: CGFloat = 0.1
+    static let rampTopHeight: CGFloat = 40
+    static let rampRiseLength: CGFloat = 110
+    static let rampEndHeight: CGFloat = 12
+    static let moonMouth = CGPoint(x: 200, y: 760)
+    static let moonMouthHalfWidth: CGFloat = 30
+    static let moonHalfWidth: CGFloat = 16
+    static let moonFlareLength: CGFloat = 70
+    /// The low end, solid for floor balls (a U of floor wall, open at the mouth): 80 pt, as on Cthulhu / Monsoon.
+    static let moonLowLength: CGFloat = 80
+    /// v7b (Aaron: the ramp "doesn't need to extend that far into the middle playfield"; "the wire drops the ball but
+    /// misses the lane down to the flipper"): the mouth moves up to (200, 760) — in the gap between the left-orbit shots
+    /// (x ≤ ~130 there) and the rocket's (≥ ~247), posts ~x 170 / 230 — and the wire runs on 85 pt straight down INTO the
+    /// left inlane (ends y 440; the exit switch at y ~455 is 17 pt from the lane guide and the sling), so it no longer
+    /// drops the ball onto the outlane post. Shot Lab v7a (mouth at y 640): Moon 0.444–0.480 s from the right flipper.
+    /// Up the climb (line 120, a 25° left bend, line 40) to the crater; round it (r 38, 145° left) to heading down; down
+    /// the left side, an S-bend (2 × r 60, 14.4°) to x 71, and 85 pt straight down into the left inlane (ends y 440).
+    static let moonApexDistance: CGFloat = 212.36
+    static var moonRampPath: TourRampPath {
+        var p = TourRampPath(start: moonMouth, heading: 100 * .pi / 180)
+        p.line(120)
+        p.arc(radius: 120, turn: 25 * .pi / 180)
+        p.line(40)
+        p.arc(radius: 38, turn: 145 * .pi / 180)
+        p.line(382.23)
+        let s = 14.433 * CGFloat.pi / 180
+        p.arc(radius: 60, turn: s)
+        p.arc(radius: 60, turn: -s)
+        p.line(85)
+        return p
+    }
+    /// The raised Moon: a disc round the crater turn (its centre), drawn at the ramp's top height. The ball pauses in
+    /// the crater (the made switch, just past the apex) for `moonHold`, then rolls on down the wire. A placeholder for
+    /// the Moon lock (rules milestone).
+    static let moonCenter = CGPoint(x: 105.2, y: 937.1)
+    static let moonRadius: CGFloat = 56
+    static let moonHold: TimeInterval = 0.8
+    static let moonReleaseSpeed: CGFloat = 320
+    /// The path's tangent at the crater: the climb's 125° plus 10 pt round the r 38 turn.
+    static let moonReleaseHeading: CGFloat = 125 * .pi / 180 + rampMadeAfterApex / 38
 
     /// The height of a wall polyline at x (nil outside its x range).
     static func lineY(_ pts: [CGPoint], at x: CGFloat) -> CGFloat? {

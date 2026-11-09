@@ -16,7 +16,9 @@ final class TourSpinner: SKNode {
     /// Turns per second.
     private var rate: CGFloat = 0
     private var halfTurnsCounted = 0
-    private let blade: SKShapeNode
+    /// M3 v8 (Aaron: "random lines flashing on the screen", seen from a spinning right spinner): a plain sprite, not an
+    /// outlined rounded SKShapeNode squashed by yScale (down to 0.08), which threw stray triangles across the table.
+    private let blade: SKSpriteNode
     /// Art round 2b: 24 rendered frames of one turn (frame 0 = hanging), used instead of the drawn blade.
     private var frames: [SKTexture] = []
     private var art: SKSpriteNode?
@@ -38,7 +40,7 @@ final class TourSpinner: SKNode {
     init(from a: CGPoint, to b: CGPoint, depth: CGFloat = 12) {
         width = hypot(b.x - a.x, b.y - a.y) - 6
         self.depth = depth
-        blade = SKShapeNode(rectOf: CGSize(width: width, height: depth), cornerRadius: 2)
+        blade = SKSpriteNode(color: SKColor(red: 0.93, green: 0.86, blue: 0.62, alpha: 1), size: CGSize(width: width, height: depth))
         super.init()
         position = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
         zRotation = atan2(b.y - a.y, b.x - a.x)
@@ -51,7 +53,6 @@ final class TourSpinner: SKNode {
         axle.zPosition = 0.2
         addChild(axle)
 
-        blade.lineWidth = 1
         if UIImage(named: "tour_spinner_sheet") != nil {
             let sheet = SKTexture(imageNamed: "tour_spinner_sheet")
             let (cols, rows) = TourTableLayout.spinnerFrames
@@ -113,10 +114,9 @@ final class TourSpinner: SKNode {
             return
         }
         let c = cos(angle * 2 * .pi)
-        blade.yScale = max(abs(c), 0.08)
+        blade.size.height = depth * max(abs(c), 0.08)
         let front = c >= 0
-        blade.fillColor = front ? SKColor(red: 0.93, green: 0.86, blue: 0.62, alpha: 1)   // bone-gold face
-                                : SKColor(red: 0.20, green: 0.30, blue: 0.30, alpha: 1)    // dark back
-        blade.strokeColor = SKColor(red: 0.85, green: 0.66, blue: 0.28, alpha: 1)
+        blade.color = front ? SKColor(red: 0.93, green: 0.86, blue: 0.62, alpha: 1)   // bone-gold face
+                            : SKColor(red: 0.20, green: 0.30, blue: 0.30, alpha: 1)    // dark back
     }
 }

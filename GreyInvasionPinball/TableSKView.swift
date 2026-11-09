@@ -101,6 +101,11 @@ final class SceneHostView: MTKView, MTKViewDelegate {
 
     /// When the last update ran (nil before the first frame).
     private var lastUpdate: CFTimeInterval?
+    /// 2026-11-08 (Aaron on Table 06: stray lines across the screen, red stripes, a grey square round the ball; gone with
+    /// SKView, back with SKRenderer): frames were committed without waiting, so the next update could rewrite SpriteKit's
+    /// geometry (Table 06's grey box is all SKShapeNodes, many changing every frame) while the GPU was still drawing the
+    /// last frame from it. One frame in flight: each draw waits until the previous command buffer has completed.
+    private let frameInFlight = DispatchSemaphore(value: 1)
     /// 2026-11-06 (Aaron: "Let's fix Cthulhu at 60hz"): SpriteKit steps physics once per update, so a 60 Hz screen took
     /// 16.7 ms physics steps where the tables were designed and tuned on 8.3 ms ones. That changed shots: on Cthulhu the
     /// upper flipper's Lagoon window shrank from ~11 pt to ~4 pt, its sigil and eye shots mostly missed, and the Ritual
@@ -112,8 +117,10 @@ final class SceneHostView: MTKView, MTKViewDelegate {
     private static let maxUpdatesPerFrame = 4
 
     func draw(in view: MTKView) {
+        frameInFlight.wait()
         guard bounds.width > 0, let pass = currentRenderPassDescriptor, let drawable = currentDrawable,
-              let cb = queue.makeCommandBuffer() else { return }
+              let cb = queue.makeCommandBuffer() else { frameInFlight.signal(); return }
+        cb.addCompletedHandler { @Sendable [frameInFlight] _ in frameInFlight.signal() }   // runs off the main thread
         fitScene()
         let now = CACurrentMediaTime()
         if let last = lastUpdate, now > last {

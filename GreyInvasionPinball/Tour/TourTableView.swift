@@ -15,6 +15,7 @@ struct TourTableView: View {
     @State private var isPaused = false
     #if DEBUG
     @State private var parallaxLabel = "Parallax: ×1"     // M5 v4
+    @State private var lightingLabel = TourTableScene.lightingLabel     // M5 v6
     #endif
     @Environment(\.scenePhase) private var scenePhase
 
@@ -316,6 +317,8 @@ struct TourTableView: View {
             debugButton("Play Lab · quick") { PlayLab.nextRunIsQuick = true; scene.debugStartPlayLab(); setPaused(false) }
             // M5 v4: parallax by height off / ×1 / ×2 (look and frame-rate test).
             debugButton(parallaxLabel) { parallaxLabel = scene.debugCycleParallax() }
+            // M5 v6: normal-map lighting flash / steady / off.
+            debugButton(lightingLabel) { lightingLabel = scene.debugCycleLighting() }
             #endif
         }
     }

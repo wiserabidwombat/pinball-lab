@@ -367,6 +367,15 @@ final class TourTableScene: SKScene, RendererHostedScene {
             bumpers.append(b)
             parallax.add(b.art, anchor: c, height: 20)    // M5 v4: the cap slides; the body stays
         }
+        #if DEBUG
+        // M5 v6: launch with `-tourLights steady` (or off) to start in a lighting test mode (Simulator screenshots).
+        switch UserDefaults.standard.string(forKey: "tourLights") {
+        case "steady": TourLighting.mode = 1
+        case "off": TourLighting.mode = 2
+        default: break
+        }
+        applyLightingMode()
+        #endif
     }
 
     /// M3 v11: K-E-T, the second half of R-O-C-K-E-T (rocketStandups 3–5), on its backboard right of the rocket.
@@ -1131,7 +1140,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M5 v5")
+        let label = SKLabelNode(text: "T6 M5 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1177,7 +1186,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M5 v5 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M5 v6 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1605,6 +1614,22 @@ final class TourTableScene: SKScene, RendererHostedScene {
                                          y: ball.parallaxShift.y + (goal.y - ball.parallaxShift.y) * 0.35)
         }
         placeBuildTag()
+    }
+
+    #if DEBUG
+    /// M5 v6: the pause card's lighting button cycles flash → steady → off (look and frame-rate test).
+    func debugCycleLighting() -> String {
+        TourLighting.mode = (TourLighting.mode + 1) % 3
+        applyLightingMode()
+        return Self.lightingLabel
+    }
+    static var lightingLabel: String { ["Lights: flash", "Lights: steady", "Lights: off"][TourLighting.mode] }
+    #endif
+
+    /// M5 v6: applies TourLighting.mode to every bumper and ball.
+    private func applyLightingMode() {
+        for b in bumpers { b.applyLightingMode() }
+        for ball in balls { ball.visual.lightingBitMask = TourLighting.spriteMask }
     }
 
     #if DEBUG

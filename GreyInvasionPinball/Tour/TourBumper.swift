@@ -5,7 +5,9 @@ import CoreGraphics
 import Foundation
 
 final class TourBumper: SKNode {
-    private let disc: SKShapeNode
+    private let disc: SKSpriteNode
+    /// M5 v6: the bumper's own light (TourLighting): dark at rest, a warm flash on every hit.
+    let light = SKLightNode()
     private let flashDisc: SKShapeNode
     private var lastHit: TimeInterval = -1
     /// M5 v4: the drawn cap in its own holder, so parallax can slide it (the physics body stays on this node).
@@ -13,10 +15,11 @@ final class TourBumper: SKNode {
 
     init(at center: CGPoint) {
         let r = TourTableLayout.bumperRadius
-        disc = SKShapeNode(circleOfRadius: r)
-        disc.fillColor = SKColor(red: 0.88, green: 0.48, blue: 0.38, alpha: 1)
-        disc.strokeColor = SKColor(red: 1.0, green: 0.82, blue: 0.72, alpha: 1)
-        disc.lineWidth = 2
+        // M5 v6: a lit sprite cap with a normal map (tools/tour_lit_parts.py), 50 pt across.
+        disc = SKSpriteNode(imageNamed: "tour_bumper")
+        disc.size = CGSize(width: 50, height: 50)
+        disc.normalTexture = SKTexture(imageNamed: "tour_bumper_n")
+        disc.lightingBitMask = TourLighting.spriteMask
         flashDisc = SKShapeNode(circleOfRadius: r + 3)
         super.init()
         position = center
@@ -28,6 +31,11 @@ final class TourBumper: SKNode {
         flashDisc.blendMode = .add
         flashDisc.alpha = 0
         art.addChild(flashDisc)
+        light.categoryBitMask = TourLighting.category
+        light.falloff = TourLighting.falloff
+        light.ambientColor = TourLighting.ambientShare
+        light.lightColor = .black
+        art.addChild(light)
 
         let body = SKPhysicsBody(circleOfRadius: r)
         body.isDynamic = false
@@ -37,6 +45,14 @@ final class TourBumper: SKNode {
         body.collisionBitMask = TourPhysicsCategory.ball
         body.contactTestBitMask = TourPhysicsCategory.ball
         physicsBody = body
+    }
+
+    /// M5 v6 (DEBUG test modes): steady = the light held on; off = no lighting at all.
+    func applyLightingMode() {
+        light.removeAction(forKey: "flash")
+        light.isEnabled = TourLighting.mode != 2
+        light.lightColor = TourLighting.mode == 1 ? TourLighting.flash(0.8) : .black
+        disc.lightingBitMask = TourLighting.spriteMask
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -54,6 +70,14 @@ final class TourBumper: SKNode {
         flashDisc.removeAllActions()
         flashDisc.alpha = 0.6
         flashDisc.run(.fadeOut(withDuration: 0.18))
+        if TourLighting.mode == 0 {                       // M5 v6: the light flashes and fades
+            light.removeAction(forKey: "flash")
+            light.lightColor = TourLighting.flash(1)
+            let d = CGFloat(TourLighting.flashDuration)
+            light.run(.customAction(withDuration: TourLighting.flashDuration) { node, t in
+                (node as? SKLightNode)?.lightColor = TourLighting.flash(max(0, 1 - t / d))
+            }, withKey: "flash")
+        }
         disc.removeAction(forKey: "pop")
         disc.setScale(1.1)
         disc.run(.scale(to: 1, duration: 0.12), withKey: "pop")

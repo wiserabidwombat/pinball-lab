@@ -19,6 +19,11 @@ cr = cairo.Context(surf)
 cr.translate(-X0 * S, (Y0 + H) * S)          # world points, y up
 cr.scale(S, -S)
 rnd = random.Random(6)
+# M5 v4 sky placement: (centre x, centre y, pt per degree, rotation rad)
+SKY_UMA = (150, 540, 4.6, 0.10)
+SKY_CAS = (392, 560, 4.4, -0.25)
+SKY_ORI = (338, 322, 1.9, 0.0)
+SKY_SOMBRERO = (92, 455)
 
 
 def poly(pts):
@@ -109,6 +114,112 @@ for k in range(36):
     ln = rnd.uniform(5, 10)
     cr.move_to(x - ln, y); cr.line_to(x + ln, y); cr.move_to(x, y - ln); cr.line_to(x, y + ln); cr.stroke()
 
+# ------------------------------------------------------------------ M5 v4: galaxies and real constellations
+# Aaron: "in the background a few small galaxy swirls. Like Andromeda... maybe even a few real constellations. I think the
+# size and brightness of the current stars is perfect." Real sky positions: Cassiopeia's W with the Andromeda galaxy
+# (M31) below it where it really is; the Big Dipper with the Whirlpool (M51) just off the end of its handle; Orion.
+# Stars drawn in the same style and range as the bright glint stars above; the chart lines faint and thin.
+import numpy as _np
+import numpy as np
+
+
+def galaxy(x, y, r, incl, rot, arms=2, wind=4.0, core_col=(1.0, 0.88, 0.70), disc_col=(0.70, 0.80, 1.0), a=1.0,
+           seed=0, dust=0.6):
+    """A small spiral galaxy, painted additively: bulge, log-spiral arms with knots, dust lanes on the near side."""
+    R = int(math.ceil(r * S * 1.25)); n = 2 * R + 1
+    jj, ii = _np.meshgrid(_np.arange(n) - R, _np.arange(n) - R)
+    px, py = jj / (r * S), -ii / (r * S)                          # image y down → up
+    c, s_ = math.cos(rot), math.sin(rot)
+    u, v = px * c + py * s_, -px * s_ + py * c                    # galaxy axes (u along the major axis)
+    v = v / max(math.cos(incl), 0.08)
+    rr = _np.sqrt(u * u + v * v) + 1e-6; th = _np.arctan2(v, u)
+    g = _np.random.default_rng(seed)
+    knots = _np.zeros_like(rr)
+    for _ in range(14):
+        k = g.normal(size=2) * g.uniform(6, 18)
+        knots += _np.sin(u * k[0] + v * k[1] + g.uniform(0, 6.3))
+    knots = knots / (knots.std() + 1e-9)
+    arm = (0.5 + 0.5 * _np.cos(arms * th - wind * _np.log(rr) + 0.25 * knots)) ** 2.5
+    disc = _np.exp(-rr / 0.32) * (0.25 + 0.75 * arm) * (0.85 + 0.15 * knots)
+    bulge = _np.exp(-(rr / 0.10) ** 1.2)
+    lane = 1 - dust * (1 - arm) * _np.exp(-rr / 0.45) * (v < 0) * min(1.0, 2 * math.sin(incl))
+    lum = (disc * 0.9 * lane)[..., None] * _np.array(disc_col) + (bulge * 1.1)[..., None] * _np.array(core_col)
+    lum = _np.clip(lum * a * 1.7 * _np.clip(1.2 - rr, 0, 1)[..., None], 0, 1)
+    buf = _np.zeros((n, n, 4), _np.uint8)
+    al = _np.clip(lum.max(-1), 0, 1)
+    buf[..., 0] = (lum[..., 2] * 255).astype(_np.uint8); buf[..., 1] = (lum[..., 1] * 255).astype(_np.uint8)
+    buf[..., 2] = (lum[..., 0] * 255).astype(_np.uint8); buf[..., 3] = (al * 255).astype(_np.uint8)
+    img = cairo.ImageSurface.create_for_data(memoryview(buf), cairo.FORMAT_ARGB32, n, n, n * 4)
+    dx_, dy_ = cr.user_to_device(x, y)
+    cr.save(); cr.identity_matrix(); cr.set_operator(cairo.OPERATOR_ADD)
+    cr.set_source_surface(img, dx_ - R, dy_ - R); cr.paint(); cr.restore()
+
+
+def star(x, y, mag):
+    """A named star, in the same look as the field's bright glint stars (brighter for a lower magnitude)."""
+    t = max(0.0, min(1.0, (3.6 - mag) / 3.5))                     # 0 = faint (mag 3.6) .. 1 = brightest
+    glow(x, y, 3.5 + 5.5 * t, (0.75, 0.85, 1.0), 0.30 + 0.25 * t)
+    rgb((1, 1, 1), 0.65 + 0.3 * t); circle(x, y, 0.55 + 0.4 * t); cr.fill()
+    if t > 0.55:
+        rgb((0.85, 0.92, 1.0), 0.45); cr.set_line_width(0.35)
+        ln = 4 + 6 * (t - 0.55) / 0.45
+        cr.move_to(x - ln, y); cr.line_to(x + ln, y); cr.move_to(x, y - ln); cr.line_to(x, y + ln); cr.stroke()
+
+
+def constellation(stars, lines, cx, cy, scale, rot, extra=None):
+    """stars: name → (RA hours, Dec degrees, magnitude). Projected round their mean (east to the left, as on the sky),
+    scaled (pt per degree), rotated and placed at (cx, cy). Returns the projector for extras (galaxies)."""
+    ra0 = sum(v[0] for v in stars.values()) / len(stars); de0 = sum(v[1] for v in stars.values()) / len(stars)
+    cr0, sr0 = math.cos(rot), math.sin(rot)
+
+    def proj(ra, de):
+        X = -(ra - ra0) * 15 * math.cos(math.radians(de0)); Y = de - de0
+        return (cx + scale * (X * cr0 - Y * sr0), cy + scale * (X * sr0 + Y * cr0))
+    pts = {k: proj(v[0], v[1]) for k, v in stars.items()}
+    rgb((0.62, 0.74, 1.0), 0.17); cr.set_line_width(0.45)
+    for a_, b_ in lines:
+        (x1, y1), (x2, y2) = pts[a_], pts[b_]
+        L_ = math.hypot(x2 - x1, y2 - y1); ux, uy = (x2 - x1) / L_, (y2 - y1) / L_
+        cr.move_to(x1 + ux * 4, y1 + uy * 4); cr.line_to(x2 - ux * 4, y2 - uy * 4)   # stop short of the stars
+    cr.stroke()
+    for k, v in stars.items():
+        star(*pts[k], v[2])
+    return proj
+
+
+CAS = {'Caph': (0.153, 59.15, 2.3), 'Schedar': (0.675, 56.54, 2.2), 'Gamma': (0.945, 60.72, 2.4),
+       'Ruchbah': (1.430, 60.24, 2.7), 'Segin': (1.907, 63.67, 3.4)}
+UMA = {'Dubhe': (11.062, 61.75, 1.8), 'Merak': (11.031, 56.38, 2.4), 'Phecda': (11.897, 53.69, 2.4),
+       'Megrez': (12.257, 57.03, 3.3), 'Alioth': (12.900, 55.96, 1.8), 'Mizar': (13.399, 54.93, 2.2),
+       'Alkaid': (13.792, 49.31, 1.9)}
+ORI = {'Betelgeuse': (5.919, 7.41, 0.5), 'Rigel': (5.242, -8.20, 0.1), 'Bellatrix': (5.418, 6.35, 1.6),
+       'Saiph': (5.796, -9.67, 2.1), 'Alnitak': (5.679, -1.94, 1.8), 'Alnilam': (5.603, -1.20, 1.7),
+       'Mintaka': (5.533, -0.30, 2.2), 'Meissa': (5.585, 9.93, 3.4)}
+p = constellation(UMA, [('Dubhe', 'Merak'), ('Merak', 'Phecda'), ('Phecda', 'Megrez'), ('Megrez', 'Dubhe'),
+                        ('Megrez', 'Alioth'), ('Alioth', 'Mizar'), ('Mizar', 'Alkaid')], *SKY_UMA)
+galaxy(*p(13.498, 47.2), 12, math.radians(20), math.radians(30), wind=3.2, a=0.9, seed=3)          # M51 Whirlpool
+p = constellation(CAS, [('Caph', 'Schedar'), ('Schedar', 'Gamma'), ('Gamma', 'Ruchbah'), ('Ruchbah', 'Segin')], *SKY_CAS)
+# M5 v5 (Aaron, with a photo of M31: "same for andromeda"): tools/tour_sky_fx.andromeda — long tilted disc, warm bulge,
+# dust lanes along the near side, a faint blue outer ring with star-forming knots, M32 and M110 — added onto the sky.
+import tour_sky_fx as FX
+def paint_add(img, x, y, width_pt, rot_deg):
+    from PIL import Image as _I
+    px = int(width_pt * S); h = int(px * img.shape[0] / img.shape[1])
+    im = _I.fromarray((np.clip(img[..., :3], 0, 1) * 255).astype(np.uint8)).resize((px, h), _I.LANCZOS)
+    im = im.rotate(rot_deg, resample=_I.BICUBIC, expand=True)
+    a = np.asarray(im).astype(np.uint8); hh, ww = a.shape[:2]
+    buf = np.zeros((hh, ww, 4), np.uint8); buf[..., 0] = a[..., 2]; buf[..., 1] = a[..., 1]; buf[..., 2] = a[..., 0]
+    buf[..., 3] = a.max(-1)
+    sf = cairo.ImageSurface.create_for_data(memoryview(buf), cairo.FORMAT_ARGB32, ww, hh, ww * 4)
+    dx_, dy_ = cr.user_to_device(x, y)
+    cr.save(); cr.identity_matrix(); cr.set_operator(cairo.OPERATOR_ADD)
+    cr.set_source_surface(sf, dx_ - ww / 2, dy_ - hh / 2); cr.paint(); cr.restore()
+paint_add(FX.andromeda(1400), *p(0.712, 41.27), 84, 38)                                             # M31
+constellation(ORI, [('Meissa', 'Betelgeuse'), ('Meissa', 'Bellatrix'), ('Betelgeuse', 'Alnitak'),
+                    ('Bellatrix', 'Mintaka'), ('Mintaka', 'Alnilam'), ('Alnilam', 'Alnitak'), ('Alnitak', 'Saiph'),
+                    ('Mintaka', 'Rigel')], *SKY_ORI)
+galaxy(*SKY_SOMBRERO, 12, math.radians(80), math.radians(-12), wind=3.0, a=1.2, seed=5, dust=1.0)   # a far edge-on one
+
 # ------------------------------------------------------------------ Earth rising behind the flippers
 # A lit sphere computed per pixel (numpy): continents and clouds from sums of random 3D sine waves on the sphere
 # (organic, seamless), ocean depth shading, a soft terminator to the lower right with city lights on the night side,
@@ -138,22 +249,60 @@ P3 = np.stack([dx, dy, dz], -1)
 # tilt the globe a little so the continents don't line up with the screen
 c, s_ = math.cos(0.5), math.sin(0.5)
 Pt = P3 @ np.array([[1, 0, 0], [0, c, -s_], [0, s_, c]])
-land_f = field(Pt * 1.0, 26, 2.5, 8.0) + 0.45 * field(Pt, 40, 10, 32)
-land = np.clip((land_f - 0.45) * 4, 0, 1)
-warp = Pt + 0.18 * np.stack([field(Pt, 8, 3, 6), field(Pt, 8, 3, 6), field(Pt, 8, 3, 6)], -1)
-cloud_f = field(warp * np.array([1.0, 2.6, 1.0]), 30, 3, 14) + 0.3 * field(warp, 30, 16, 36)
-cloud = np.clip((cloud_f - 0.75) * 1.4, 0, 1) ** 1.2 * 0.8
-ocean = np.stack([0.03 + 0.02 * land_f, 0.13 + 0.04 * land_f, 0.38 + 0.06 * land_f], -1)
-veg = field(Pt, 12, 4, 10)
-land_col = np.where(veg[..., None] > 0.0, np.array([0.20, 0.32, 0.14]), np.array([0.52, 0.44, 0.28]))
-land_col = land_col * (0.9 + 0.12 * field(Pt, 10, 15, 30))[..., None]
-col = ocean * (1 - land[..., None]) + land_col * land[..., None]
-col = col * (1 - cloud[..., None]) + np.array([0.95, 0.96, 1.0]) * cloud[..., None]
+# M5 v2 (Aaron: "I would like to see the earth look more real"): the real Earth — NASA's Blue Marble Next Generation
+# (public domain, earthsrc/bmng.jpg, 5400 x 2700 equirectangular, from the basemap-data package) projected
+# orthographically, centred on the North Atlantic so the visible cap shows the Americas, Europe and Africa.
+from PIL import Image as _Img
+BM = np.asarray(_Img.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'earthsrc', 'bmng.jpg')).convert('RGB'),
+                np.float32) / 255.0
+BM = BM ** 1.15                                                  # slightly deeper oceans / richer land
+LAT0, LON0, ROLL = math.radians(-8), math.radians(-38), math.radians(-14)
+cr_, sr_ = math.cos(ROLL), math.sin(ROLL)
+ox, oy = dx * cr_ - dy * sr_, dx * sr_ + dy * cr_               # roll the globe so the coastlines don't sit square
+rho = np.sqrt(np.clip(ox * ox + oy * oy, 1e-12, 1)); cc = np.arcsin(np.clip(rho, 0, 1))
+lat = np.arcsin(np.clip(np.cos(cc) * math.sin(LAT0) + oy * np.sin(cc) * math.cos(LAT0) / rho, -1, 1))
+lon = LON0 + np.arctan2(ox * np.sin(cc), rho * np.cos(cc) * math.cos(LAT0) - oy * np.sin(cc) * math.sin(LAT0))
+u = ((lon / (2 * math.pi) + 0.5) % 1.0) * (BM.shape[1] - 1)
+v = (0.5 - lat / math.pi) * (BM.shape[0] - 1)
+u0 = np.floor(u).astype(int); v0 = np.clip(np.floor(v).astype(int), 0, BM.shape[0] - 2); fu = (u - u0)[..., None]; fv = (v - v0)[..., None]
+u1 = (u0 + 1) % BM.shape[1]
+col = (BM[v0, u0] * (1 - fu) + BM[v0, u1] * fu) * (1 - fv) + (BM[v0 + 1, u0] * (1 - fu) + BM[v0 + 1, u1] * fu) * fv
+# land / water from the image itself (water is blue-dominant and dark), for the sun glint and city lights
+land = np.clip((col[..., 1] + col[..., 0] * 0.8 - col[..., 2] * 1.1 + 0.05) * 6, 0, 1)
+# clouds: thin, swirling weather — domain-warped noise in lat/lon so bands run east-west, sparse at the subtropics
+E3 = np.stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)], -1)
+# M5 v3 (Aaron: "the clouds should be a bit more whispy"): a wispy cloud map made by tools/tour_cloud_map.py
+# (earthsrc/clouds.png, equirectangular 4096 x 2048, 8-bit), sampled at the same lat / lon as the Blue Marble.
+CM = np.asarray(_Img.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'earthsrc', 'clouds.png')), np.float32) / 255.0
+cu = ((lon / (2 * math.pi) + 0.5) % 1.0) * (CM.shape[1] - 1) + 64   # busiest weather over the view
+cv = (0.5 - lat / math.pi) * (CM.shape[0] - 1)
+from scipy import ndimage as _nd
+cloud = _nd.map_coordinates(CM, [cv, cu], order=1, mode='wrap') * 0.8
+ctex = np.ones_like(cloud)
+# M5 v5 (Aaron, with a satellite photo: "make the hurricane look more realistic"): tools/tour_sky_fx.hurricane — a big
+# bright central overcast with streaks along the wind, a small clear eye, popcorn-cumulus rain bands — sampled in the
+# storm's tangent plane (off Nova Scotia, left of the left flipper), its relief shading kept.
+import tour_sky_fx as FX
+SLAT, SLON, SR = math.radians(45), math.radians(-56), math.radians(16.0)
+C = np.array([math.cos(SLAT) * math.cos(SLON), math.cos(SLAT) * math.sin(SLON), math.sin(SLAT)])
+east = np.array([-math.sin(SLON), math.cos(SLON), 0.0]); north = np.cross(C, east)
+HC, HS = FX.hurricane(1024)
+tx = (E3 @ east) / math.sin(SR); ty = (E3 @ north) / math.sin(SR)
+front = (E3 @ C) > 0
+hx = (tx + 1) / 2 * 1023; hy = (1 - ty) / 2 * 1023
+inside_h = front & (np.abs(tx) < 1) & (np.abs(ty) < 1)
+d = np.hypot(tx, ty)
+fade = np.clip((1.0 - d) / 0.3, 0, 1)                                            # round, soft edge
+storm = _nd.map_coordinates(HC, [np.clip(hy, 0, 1023), np.clip(hx, 0, 1023)], order=1) * inside_h * fade
+hshade = _nd.map_coordinates(HS, [np.clip(hy, 0, 1023), np.clip(hx, 0, 1023)], order=1)
+cloud = np.maximum(cloud * np.clip(d / 1.1, 0.25, 1), storm * 0.97)              # it clears its own neighbourhood
+ctex = np.where(storm > 0.02, hshade, ctex)
+col = col * (1 - cloud[..., None]) + (np.array([0.97, 0.97, 1.0]) * ctex[..., None]) * cloud[..., None]
 lam = np.clip(P3 @ LIGHT, 0, 1)
 day = np.clip((P3 @ LIGHT + 0.08) * 3.0, 0, 1)
 shade = 0.12 + 0.95 * lam ** 0.8
 col = col * shade[..., None]
-cities = (land > 0.7) & (field(Pt, 20, 30, 60) > 1.6) & (cloud < 0.3)
+cities = (land > 0.7) & (field(E3, 20, 30, 60) > 1.6) & (cloud < 0.3)
 night = (1 - day)
 col = col + cities[..., None] * night[..., None] * np.array([1.0, 0.75, 0.35]) * 0.55
 spec = np.clip((P3 @ (LIGHT + np.array([0, 0, 1])) / np.linalg.norm(LIGHT + np.array([0, 0, 1]))), 0, 1) ** 40

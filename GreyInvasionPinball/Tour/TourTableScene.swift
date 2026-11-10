@@ -224,6 +224,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func buildTable() {
         addFloor()
+        addPlanetWindow()
         addWall(points: TourTableLayout.outerWall,
                 friction: TourTableLayout.railFriction, restitution: TourTableLayout.railRestitution)
         addWall(points: TourTableLayout.leftLaneGuide)
@@ -502,6 +503,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     /// The playfield floor inside the outer wall.
+    /// M5 v5: the planet window (TourPlanetWindow): stars and a planet deep under the glass, each its own parallax layer.
+    private func addPlanetWindow() {
+        let w = TourPlanetWindow(center: TourTableLayout.planetWindowCenter, radius: TourTableLayout.planetWindowRadius)
+        addChild(w)
+        parallax.add(w.deepLayer, anchor: w.center, height: TourTableLayout.planetWindowStarDepth)
+        parallax.add(w.planetLayer, anchor: w.center, height: TourTableLayout.planetWindowPlanetDepth)
+    }
+
     private func addFloor() {
         let path = CGMutablePath()
         path.addLines(between: TourTableLayout.outerWall)
@@ -1122,7 +1131,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M5 v4")
+        let label = SKLabelNode(text: "T6 M5 v5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1168,7 +1177,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M5 v4 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M5 v5 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

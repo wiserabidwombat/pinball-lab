@@ -512,6 +512,12 @@ enum TourTableLayout {
     /// M5 v4: parallax by height — a part h points up and d points from the camera's centre draws h × d / this further
     /// out (40 pt up, 400 pt away: 10 pt). TourParallax.
     static let parallaxDepth: CGFloat = 1600
+    /// M5 v5: the planet window in the floor, in the middle of the insert field (clear between the rocket post at y 162
+    /// and the countdown lamps from y 500). Its two layers sit below the glass: negative heights for TourParallax.
+    static let planetWindowCenter = CGPoint(x: 284, y: 350)
+    static let planetWindowRadius: CGFloat = 46
+    static let planetWindowPlanetDepth: CGFloat = -90
+    static let planetWindowStarDepth: CGFloat = -240
     static let rampRiseLength: CGFloat = 110
     static let rampEndHeight: CGFloat = 12
     static let moonMouth = CGPoint(x: 200, y: 760)

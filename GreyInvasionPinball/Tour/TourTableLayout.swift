@@ -509,6 +509,9 @@ enum TourTableLayout {
     static let rampFriction: CGFloat = 0.05
     static let rampRestitution: CGFloat = 0.1
     static let rampTopHeight: CGFloat = 40
+    /// M5 v4: parallax by height — a part h points up and d points from the camera's centre draws h × d / this further
+    /// out (40 pt up, 400 pt away: 10 pt). TourParallax.
+    static let parallaxDepth: CGFloat = 1600
     static let rampRiseLength: CGFloat = 110
     static let rampEndHeight: CGFloat = 12
     static let moonMouth = CGPoint(x: 200, y: 760)

@@ -57,6 +57,8 @@ final class TourBall: SKNode {
     var holdReleaseHeading: CGFloat = 0
     /// M4 v3: and how fast (Saturn's crater needs more than the Moon's: it's on the climb of its turn).
     var holdReleaseSpeed: CGFloat = TourTableLayout.moonReleaseSpeed
+    /// M5 v4: where parallax draws the ball (world axes), eased by the scene each frame.
+    var parallaxShift = CGPoint.zero
     var isOnFloor: Bool { layer == .floor }
 
     func setLayer(_ newLayer: TourBallLayer) {
@@ -120,7 +122,8 @@ final class TourBall: SKNode {
         drawnHeight += (rampHeight - drawnHeight) * 0.35
         if abs(rampHeight - drawnHeight) < 0.05 { drawnHeight = rampHeight }
         let lift = Self.lift + drawnHeight * TourTableLayout.oblique
-        visual.position = CGPoint(x: -lift * sin(a), y: lift * cos(a))
+        let sx = parallaxShift.x, sy = parallaxShift.y + lift          // M5 v4: + the parallax shift
+        visual.position = CGPoint(x: sx * cos(a) - sy * sin(a), y: sx * sin(a) + sy * cos(a))
         visual.setScale(1 + 0.15 * drawnHeight / TourTableLayout.rampTopHeight)
         shadow.zRotation = a
         let so = CGVector(dx: shadowOffset.dx, dy: shadowOffset.dy + drawnHeight * TourTableLayout.oblique)

@@ -13,6 +13,9 @@ struct TourTableView: View {
     @State private var scene: TourTableScene
     @State private var screen: Screen = .menu
     @State private var isPaused = false
+    #if DEBUG
+    @State private var parallaxLabel = "Parallax: ×1"     // M5 v4
+    #endif
     @Environment(\.scenePhase) private var scenePhase
 
     /// Rocket-exhaust amber, the table's accent.
@@ -311,6 +314,8 @@ struct TourTableView: View {
             // Play Lab (shared): robot players at four skills, 120 Hz and 60 Hz passes (~1 h in the Simulator).
             debugButton("Play Lab") { scene.debugStartPlayLab(); setPaused(false) }
             debugButton("Play Lab · quick") { PlayLab.nextRunIsQuick = true; scene.debugStartPlayLab(); setPaused(false) }
+            // M5 v4: parallax by height off / ×1 / ×2 (look and frame-rate test).
+            debugButton(parallaxLabel) { parallaxLabel = scene.debugCycleParallax() }
             #endif
         }
     }

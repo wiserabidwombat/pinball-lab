@@ -16,6 +16,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private let game: TourGameState
     private let settings: GameSettings
     private let cameraRig = TourCameraRig()
+    /// M5 v4: parallax by height (TourParallax): raised parts slide against the floor as the camera moves.
+    private let parallax = TourParallax()
     private let sound = MonSoundPlayer()
     /// The touch surface when the SKRenderer host draws the scene (devices); `view` is nil then.
     weak var hostView: UIView?
@@ -309,7 +311,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         rocket.lineWidth = 1.5
         rocket.position = TourTableLayout.rocketToy
         rocket.zPosition = 25
-        addChild(rocket)
+        let rocketArt = SKNode()                   // M5 v4: parallax holder (the liftoff still moves the rocket itself)
+        addChild(rocketArt)
+        parallax.add(rocketArt, anchor: TourTableLayout.rocketToy, height: 30)
+        rocketArt.addChild(rocket)
         rocketToy = rocket
         showCountdown()
         for (i, c) in TourTableLayout.sampleCenters.enumerated() {
@@ -359,6 +364,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             let b = TourBumper(at: c)
             addChild(b)
             bumpers.append(b)
+            parallax.add(b.art, anchor: c, height: 20)    // M5 v4: the cap slides; the body stays
         }
     }
 
@@ -388,7 +394,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         moon.strokeColor = SKColor(white: 0.9, alpha: 0.9)
         moon.lineWidth = 2
         moon.zPosition = 19.5                      // over floor balls (z 10), under the ramp's art (20+)
-        addChild(moon)
+        let moonArt = SKNode()                     // M5 v4: the Moon and its crater slide together (parallax)
+        addChild(moonArt)
+        parallax.add(moonArt, anchor: TourTableLayout.moonCenter, height: TourTableLayout.rampTopHeight)
+        moonArt.addChild(moon)
         let label = SKLabelNode(text: "MOON")
         label.fontName = "Menlo-Bold"; label.fontSize = 11
         label.fontColor = SKColor(white: 1, alpha: 0.8)
@@ -401,7 +410,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         crater.strokeColor = SKColor(white: 0.75, alpha: 0.9)
         crater.lineWidth = 1.5
         crater.zPosition = 19.6
-        addChild(crater)
+        moonArt.addChild(crater)
     }
 
     /// M3 v14: the Saturn ramp and the raised Saturn (grey box: a tan planet with a ring) round its crater turn.
@@ -421,14 +430,17 @@ final class TourTableScene: SKScene, RendererHostedScene {
         ring.strokeColor = SKColor(red: 0.95, green: 0.85, blue: 0.62, alpha: 0.85)
         ring.lineWidth = 4
         ring.zPosition = 19.55
-        addChild(ring)
+        let saturnArt = SKNode()                   // M5 v4: Saturn, its ring and crater slide together (parallax)
+        addChild(saturnArt)
+        parallax.add(saturnArt, anchor: TourTableLayout.saturnCenter, height: TourTableLayout.rampTopHeight)
+        saturnArt.addChild(ring)
         let planet = SKShapeNode(circleOfRadius: TourTableLayout.saturnRadius)
         planet.position = at
         planet.fillColor = SKColor(red: 0.62, green: 0.50, blue: 0.30, alpha: 0.92)
         planet.strokeColor = SKColor(red: 0.95, green: 0.85, blue: 0.62, alpha: 0.9)
         planet.lineWidth = 2
         planet.zPosition = 19.5
-        addChild(planet)
+        saturnArt.addChild(planet)
         let label = SKLabelNode(text: "SATURN")
         label.fontName = "Menlo-Bold"; label.fontSize = 10
         label.fontColor = SKColor(white: 1, alpha: 0.8)
@@ -441,7 +453,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         crater.strokeColor = SKColor(white: 0.75, alpha: 0.9)
         crater.lineWidth = 1.5
         crater.zPosition = 19.6
-        addChild(crater)
+        saturnArt.addChild(crater)
     }
 
     /// M3 v3: the plunge flap, a shallow blade hanging from the arch at the top right. Its edge is in the `diverter`
@@ -1110,7 +1122,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M5 v3")
+        let label = SKLabelNode(text: "T6 M5 v4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1156,7 +1168,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M5 v3 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M5 v4 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1572,8 +1584,27 @@ final class TourTableScene: SKScene, RendererHostedScene {
     override func didFinishUpdate() {
         guard isBuilt, !isPaused else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: lastStep)
+        // M5 v4: parallax. Raised parts slide with the camera; a floor ball by its own height, a ball held in a crater by
+        // the Moon's, a ball riding a ramp not at all (the ramps' outlines don't slide yet). Balls ease so nothing jumps.
+        let cam = cameraRig.node.position
+        parallax.update(camera: cam)
+        for ball in balls {
+            let h: CGFloat = ball.isOnFloor ? TourTableLayout.ballRadius
+                : (ball.moonReleaseAt != nil ? TourTableLayout.ballRadius + TourTableLayout.rampTopHeight : 0)
+            let goal = parallax.shift(at: ball.position, height: h, camera: cam)
+            ball.parallaxShift = CGPoint(x: ball.parallaxShift.x + (goal.x - ball.parallaxShift.x) * 0.35,
+                                         y: ball.parallaxShift.y + (goal.y - ball.parallaxShift.y) * 0.35)
+        }
         placeBuildTag()
     }
+
+    #if DEBUG
+    /// M5 v4: the pause card's parallax button cycles off → ×1 → ×2, to judge the look and the frame rate.
+    func debugCycleParallax() -> String {
+        parallax.strength = parallax.strength >= 2 ? 0 : parallax.strength + 1
+        return parallax.strength == 0 ? "Parallax: off" : "Parallax: ×\(Int(parallax.strength))"
+    }
+    #endif
 
     // MARK: - Contacts
 

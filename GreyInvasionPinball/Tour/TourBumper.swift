@@ -8,6 +8,8 @@ final class TourBumper: SKNode {
     private let disc: SKShapeNode
     private let flashDisc: SKShapeNode
     private var lastHit: TimeInterval = -1
+    /// M5 v4: the drawn cap in its own holder, so parallax can slide it (the physics body stays on this node).
+    let art = SKNode()
 
     init(at center: CGPoint) {
         let r = TourTableLayout.bumperRadius
@@ -19,12 +21,13 @@ final class TourBumper: SKNode {
         super.init()
         position = center
         zPosition = 3
-        addChild(disc)
+        addChild(art)
+        art.addChild(disc)
         flashDisc.fillColor = .white
         flashDisc.strokeColor = .clear
         flashDisc.blendMode = .add
         flashDisc.alpha = 0
-        addChild(flashDisc)
+        art.addChild(flashDisc)
 
         let body = SKPhysicsBody(circleOfRadius: r)
         body.isDynamic = false

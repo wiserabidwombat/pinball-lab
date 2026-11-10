@@ -400,9 +400,44 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let lift = TourTableLayout.rampTopHeight * TourTableLayout.oblique
         let moon = SKShapeNode(circleOfRadius: TourTableLayout.moonRadius)
         moon.position = CGPoint(x: TourTableLayout.moonCenter.x, y: TourTableLayout.moonCenter.y + lift)
-        moon.fillColor = SKColor(red: 0.42, green: 0.45, blue: 0.52, alpha: 0.92)
-        moon.strokeColor = SKColor(white: 0.9, alpha: 0.9)
-        moon.lineWidth = 2
+        // M5 v7 (the plan's fourth 3D trick, a tall see-through piece): the Moon is a raised CLEAR plastic playfield —
+        // a faint printed lunar tint, a frosted edge, a gleam — so a floor ball rolling beneath it stays in view;
+        // its shadow lies on the floor below and three chrome posts hold it up.
+        moon.fillColor = SKColor(red: 0.66, green: 0.72, blue: 0.84, alpha: 0.26)
+        moon.strokeColor = SKColor(red: 0.90, green: 0.95, blue: 1.0, alpha: 0.85)
+        moon.lineWidth = 2.6
+        let gleam = SKShapeNode(circleOfRadius: TourTableLayout.moonRadius * 0.62)
+        gleam.position = CGPoint(x: -TourTableLayout.moonRadius * 0.22, y: TourTableLayout.moonRadius * 0.22)
+        gleam.fillColor = SKColor(white: 1, alpha: 0.07)
+        gleam.strokeColor = .clear
+        moon.addChild(gleam)
+        let frost = SKShapeNode(circleOfRadius: TourTableLayout.moonRadius - 4)
+        frost.fillColor = .clear
+        frost.strokeColor = SKColor(white: 1, alpha: 0.16)
+        frost.lineWidth = 6
+        moon.addChild(frost)
+        let moonShadow = SKShapeNode(circleOfRadius: TourTableLayout.moonRadius)   // on the floor: no parallax
+        let sh = TourTableLayout.rampTopHeight
+        moonShadow.position = CGPoint(x: TourTableLayout.moonCenter.x + sh * 0.30, y: TourTableLayout.moonCenter.y - sh * 0.22)
+        moonShadow.fillColor = SKColor(white: 0, alpha: 0.24)
+        moonShadow.strokeColor = .clear
+        moonShadow.zPosition = -17.95
+        addChild(moonShadow)
+        let posts = CGMutablePath()                 // chrome posts, floor to platform, seen at the table's lean
+        for a in [CGFloat(1.15), 2.95, 4.75] {
+            let f = CGPoint(x: TourTableLayout.moonCenter.x + cos(a) * TourTableLayout.moonRadius * 0.78,
+                            y: TourTableLayout.moonCenter.y + sin(a) * TourTableLayout.moonRadius * 0.78)
+            posts.move(to: f); posts.addLine(to: CGPoint(x: f.x, y: f.y + lift))
+        }
+        let postArt = SKNode()                      // half the platform's height: the posts span floor to top
+        addChild(postArt)
+        parallax.add(postArt, anchor: TourTableLayout.moonCenter, height: TourTableLayout.rampTopHeight / 2)
+        for (w, c, z) in [(CGFloat(4.4), SKColor(red: 0.05, green: 0.04, blue: 0.09, alpha: 0.6), CGFloat(19.3)),
+                          (2.4, SKColor(red: 0.80, green: 0.82, blue: 0.87, alpha: 1), 19.31)] {
+            let p = SKShapeNode(path: posts)
+            p.strokeColor = c; p.lineWidth = w; p.lineCap = .round; p.zPosition = z
+            postArt.addChild(p)
+        }
         moon.zPosition = 19.5                      // over floor balls (z 10), under the ramp's art (20+)
         let moonArt = SKNode()                     // M5 v4: the Moon and its crater slide together (parallax)
         addChild(moonArt)
@@ -1140,7 +1175,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M5 v6")
+        let label = SKLabelNode(text: "T6 M5 v7")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1186,7 +1221,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M5 v6 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M5 v7 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

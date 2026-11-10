@@ -1110,7 +1110,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M4 v6")
+        let label = SKLabelNode(text: "T6 M4 v7")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1156,7 +1156,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M4 v6 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M4 v7 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1936,7 +1936,10 @@ extension TourTableScene: PlayLabHost {
 
     /// Flip delays = the middle of each Shot Lab window (cradle): 120 Hz from shotlab-grand-tour-2026-11-09T14-12-00Z
     /// (left, v14) and 13-15-52Z (right, v12; nothing on the right moved since), 60 Hz from the same runs. At 60 Hz the
-    /// left flipper's K-E-T band lands on T and Saturn has no window. Inlane feeds aren't measured yet.
+    /// left flipper's K-E-T band lands on T and Saturn has no window.
+    /// M4 v7: inlane feeds from shotlab-grand-tour-inlane-2026-11-10T00-46-43Z (604 trials): the shot a flip makes with the
+    /// ball this far (pt) from the pivot, bands of 3+ trials in 4 pt bins. From the inlane the right flipper's Moon band is
+    /// wide (24–51 pt at 120 Hz — why the Moon is made ~2.4× as often as Saturn); Saturn has only a 2-trial band at 120 Hz.
     var playLabFlippers: [PlayRobotFlipper] {
         let specs = shotLabFlippers
         let rest = TourTableLayout.flipperRestAngle
@@ -1944,11 +1947,15 @@ extension TourTableScene: PlayLabHost {
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
                                  shots: [("rocket", 0.330), ("ketK", 0.385), ("ketE", 0.444), ("saturn", 0.500),
                                          ("rightOrbit", 0.530)],
-                                 shots60: [("rocket", 0.366), ("ketT", 0.450), ("rightOrbit", 0.525)]),
+                                 shots60: [("rocket", 0.366), ("ketT", 0.450), ("rightOrbit", 0.525)],
+                                 inlane: [("ketT", 36, 51), ("rocket", 80, 91)],
+                                 inlane60: [("rocket", 24, 35), ("saturn", 44, 47)]),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: TourTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
                                  shots: [("rocket", 0.330), ("moon", 0.458), ("leftOrbit", 0.508), ("roc", 0.534)],
-                                 shots60: [("rocket", 0.350), ("moon", 0.450), ("leftOrbit", 0.492), ("roc", 0.525)])]
+                                 shots60: [("rocket", 0.350), ("moon", 0.450), ("leftOrbit", 0.492), ("roc", 0.525)],
+                                 inlane: [("moon", 24, 51), ("leftOrbit", 56, 63), ("roc", 64, 79)],
+                                 inlane60: [("rocket", 24, 35), ("leftOrbit", 44, 55), ("roc", 60, 63), ("ketE", 72, 75)])]
     }
 
     func playLabStartGame(variant: Int) -> String {

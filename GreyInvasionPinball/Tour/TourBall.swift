@@ -74,7 +74,10 @@ final class TourBall: SKNode {
 
     init(at point: CGPoint) {
         let r = TourTableLayout.ballRadius
-        visual = SKSpriteNode(imageNamed: "ball")
+        // M5 v2 (Aaron: "aim for a more realistic metallic ball... maybe like Crystal Caliburn 2"): a Blender-rendered
+        // polished steel ball (tools/tour_bake_ball.py). v2b, from Aaron's CC2 screenshot ("the ring around a bright centre"
+        // made it look small): dark steel, one big crisp window highlight up-left, a soft grey sheen low, a dark rim.
+        visual = SKSpriteNode(imageNamed: "tour_ball")
         visual.size = CGSize(width: r * 2 * TourBall.lookScale, height: r * 2 * TourBall.lookScale)
         shadow = SKSpriteNode(imageNamed: "ballshadow")
         shadow.size = CGSize(width: r * 2.7 * TourBall.lookScale, height: r * 2.7 * TourBall.lookScale)

@@ -152,6 +152,10 @@ final class TourFlipper: SKNode {
             sprite.size = CGSize(width: 132 * len / TourTableLayout.flipperLength,
                                  height: 36 * r0 / TourTableLayout.flipperPivotRadius)
             sprite.anchorPoint = CGPoint(x: side == .left ? 18.0 / 132 : 114.0 / 132, y: 0.5)
+            if UIImage(named: imageName + "_n") != nil {        // M6 v5: lit by the table's lights (TourLighting)
+                sprite.normalTexture = SKTexture(imageNamed: imageName + "_n")
+                sprite.lightingBitMask = TourLighting.spriteMask
+            }
             addChild(sprite)
         } else {
             let shape = SKShapeNode(path: path)

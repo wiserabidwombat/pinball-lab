@@ -237,7 +237,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addWall(points: TourTableLayout.rightLaneGuide)
 
         for s in [TourTableLayout.leftSling, TourTableLayout.rightSling] {
-            let sling = TourSlingshot(top: s.top, corner: s.corner, tip: s.tip, artBaked: false,
+            let sling = TourSlingshot(top: s.top, corner: s.corner, tip: s.tip, artBaked: hasLowerArt,
                                       kickFrom: TourTableLayout.slingKickFrom, kickTo: TourTableLayout.slingKickTo)
             addChild(sling)
             slingshots.append(sling)
@@ -552,8 +552,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// 640…1340, the upper fading into the lower over their overlap), trimmed to the outer wall, over the grey floor and
     /// under everything else (the planet window, lamps and parts draw above). The hardware stays grey box until its bake.
     private func addFloorArt() {
-        for (name, rect, z) in [("tour_floor_lower", CGRect(x: -40, y: -75, width: 680, height: 775), CGFloat(-19.6)),
+        // M6 v3: the lower table's Blender bake (tools/tour_bake_lower.py … game → tour_bake_art.py) — floor painting under
+        // its clear coat, the cabinet, chrome walls, rails and posts, sling plastics, the R-O-C hull, the Mars bunker,
+        // aprons — at z −19.4, over the grey wall lines (−19.5) it replaces; its top 30 pt fade onto the upper painting.
+        // With it, the plain lower floor painting isn't drawn (it would only be overdraw underneath).
+        hasLowerArt = UIImage(named: "tour_lower") != nil
+        let lowerRect = CGRect(x: -40, y: -75, width: 680, height: 775)
+        for (name, rect, z) in [("tour_lower", lowerRect, CGFloat(-19.4)),
+                                ("tour_floor_lower", lowerRect, CGFloat(-19.6)),
                                 ("tour_floor_upper", CGRect(x: -40, y: 640, width: 680, height: 700), CGFloat(-19.55))] {
+            if name == "tour_floor_lower" && hasLowerArt { continue }
             guard UIImage(named: name) != nil else { continue }
             // M6 v2 (Aaron: iPhone low 104 with v1): the texture goes to the GPU now, not on first sight mid-play.
             let texture = SKTexture(imageNamed: name)
@@ -569,6 +577,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
         if hasFloorArt { greyFloor?.removeFromParent(); greyFloor = nil }
     }
     private var hasFloorArt = false
+    /// M6 v3: the lower hardware is baked into the art (the slings then draw only their kick flash).
+    private var hasLowerArt = false
     private var greyFloor: SKShapeNode?
 
     /// M5 v5: the planet window (TourPlanetWindow): stars and a planet deep under the glass, each its own parallax layer.
@@ -1200,7 +1210,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v2")
+        let label = SKLabelNode(text: "T6 M6 v3")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1246,7 +1256,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v2 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v3 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

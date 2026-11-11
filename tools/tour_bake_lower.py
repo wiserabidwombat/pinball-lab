@@ -16,6 +16,8 @@ argv = sys.argv[sys.argv.index('--') + 1:]
 FLOOR, OUT = (os.path.abspath(a) for a in argv[:2])
 SCALE = float(argv[2]) if len(argv) > 2 else 1.0
 SAMPLES = int(argv[3]) if len(argv) > 3 else 64
+# M6 v3: `game` as the 5th argument bakes the game art: no stand-in standups / drops (the game draws and drops them).
+PREVIEW_PARTS = not (len(argv) > 4 and argv[4] == 'game')
 X0, Y0, RW, RH = L.LOWER_RECT
 K = L.OBLIQUE
 
@@ -271,16 +273,18 @@ for k in range(9):                          # rivets along the '/'
     t = (k + 0.5) / 9; x = 20 + (86.3 - 20) * t; y = 530 + (672.3 - 530) * t
     nx, ny = -0.906, 0.423
     cylinder(f'rivet{k}', x + nx * 5, y + ny * 5, 0.9, 15.8, 16.6, M_CHROME_SOFT, verts=12)
-for i, c in enumerate(L.ROCKET_CENTERS):    # the R-O-C standups (stand-ins: blue plates, white faces)
-    prism(f'roc{i}', ccw(L.plate(c, L.ROCKET_NORMAL, L.STANDUP)), 0, 14, M_STANDUP)
+if PREVIEW_PARTS:                            # the R-O-C standups (stand-ins for the look preview; the game draws its own)
+    for i, c in enumerate(L.ROCKET_CENTERS):
+        prism(f'roc{i}', ccw(L.plate(c, L.ROCKET_NORMAL, L.STANDUP)), 0, 14, M_STANDUP)
 
 # the Mars bunker: rust-red rock walls (the roof and the floor V) with chrome caps, the sample drops, the rover hole
 for name, pts in (('bunkerRoof', L.BUNKER_ROOF), ('bunkerFloor', L.BUNKER_FLOOR)):
     wall_strip(name, pts, 6, 14, M_MARS)
     tube(name + 'Cap', pts, 14.5, 1.5, M_CHROME_SOFT)
 prism('roofBack', ccw([(489.9, 585.7), (516, 606), (548, 623.3), (548, 640), (500, 640)]), 0, 14, M_MARS)
-for i, c in enumerate(L.SAMPLE_CENTERS):
-    prism(f'sample{i}', ccw(L.plate(c, L.SAMPLE_NORMAL, L.DROP)), 0, 12, M_DROP)
+if PREVIEW_PARTS:                            # the sample drops (stand-ins; in the game they drop, so never baked)
+    for i, c in enumerate(L.SAMPLE_CENTERS):
+        prism(f'sample{i}', ccw(L.plate(c, L.SAMPLE_NORMAL, L.DROP)), 0, 12, M_DROP)
 cylinder('roverRim', *L.ROVER_SCOOP, L.SCOOP_R + 2.5, -0.5, 0.8, M_CHROME_SOFT)
 cylinder('roverHole', *L.ROVER_SCOOP, L.SCOOP_R, -0.4, 0.9, M_BLACK)
 

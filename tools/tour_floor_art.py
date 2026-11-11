@@ -46,5 +46,7 @@ os.makedirs(OUT, exist_ok=True)
 subprocess.run([sys.executable, os.path.join(HERE, 'tour_floor_lower.py'), '/tmp/tfl.png', '1'], check=True)
 subprocess.run([sys.executable, os.path.join(HERE, 'tour_floor_upper.py'), '/tmp/tfu.png', '1'], check=True)
 trimmed('/tmp/tfl.png', (-40, -75, 680, 775)).save(os.path.join(OUT, 'tour_floor_lower.png'), optimize=True)
-trimmed('/tmp/tfu.png', (-40, 640, 680, 700), feather_bottom=60).save(os.path.join(OUT, 'tour_floor_upper.png'), optimize=True)
+# M6 v3: the lower hardware bake (tour_lower.png) now fades out over y 670-700 onto the upper painting, so the upper one
+# stays opaque at its bottom (a feathered edge under a fading edge left a dark seam).
+trimmed('/tmp/tfu.png', (-40, 640, 680, 700), feather_bottom=0).save(os.path.join(OUT, 'tour_floor_upper.png'), optimize=True)
 print('ok')

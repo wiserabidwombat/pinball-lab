@@ -224,6 +224,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func buildTable() {
         addFloor()
+        addFloorArt()
         addPlanetWindow()
         addWall(points: TourTableLayout.outerWall,
                 friction: TourTableLayout.railFriction, restitution: TourTableLayout.railRestitution)
@@ -547,6 +548,29 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     /// The playfield floor inside the outer wall.
+    /// M6 v1: the printed playfield — the two approved floor paintings (tools/tour_floor_art.py: lower y −75…700, upper
+    /// 640…1340, the upper fading into the lower over their overlap), trimmed to the outer wall, over the grey floor and
+    /// under everything else (the planet window, lamps and parts draw above). The hardware stays grey box until its bake.
+    private func addFloorArt() {
+        for (name, rect, z) in [("tour_floor_lower", CGRect(x: -40, y: -75, width: 680, height: 775), CGFloat(-19.6)),
+                                ("tour_floor_upper", CGRect(x: -40, y: 640, width: 680, height: 700), CGFloat(-19.55))] {
+            guard UIImage(named: name) != nil else { continue }
+            // M6 v2 (Aaron: iPhone low 104 with v1): the texture goes to the GPU now, not on first sight mid-play.
+            let texture = SKTexture(imageNamed: name)
+            texture.preload { }
+            let art = SKSpriteNode(texture: texture)
+            art.size = rect.size
+            art.position = CGPoint(x: rect.midX, y: rect.midY)
+            art.zPosition = z
+            addChild(art)
+            hasFloorArt = true
+        }
+        // M6 v2: the grey floor under the paintings only cost fill (every pixel drawn twice): gone once art is in.
+        if hasFloorArt { greyFloor?.removeFromParent(); greyFloor = nil }
+    }
+    private var hasFloorArt = false
+    private var greyFloor: SKShapeNode?
+
     /// M5 v5: the planet window (TourPlanetWindow): stars and a planet deep under the glass, each its own parallax layer.
     private func addPlanetWindow() {
         let w = TourPlanetWindow(center: TourTableLayout.planetWindowCenter, radius: TourTableLayout.planetWindowRadius)
@@ -564,6 +588,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         floor.strokeColor = .clear
         floor.zPosition = -20
         addChild(floor)
+        greyFloor = floor
     }
 
     /// M4 v2: an invisible solid (a static convex polygon, counter-clockwise) behind a wall outline: a ball that a hard
@@ -1175,7 +1200,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M5 v7")
+        let label = SKLabelNode(text: "T6 M6 v2")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1221,7 +1246,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M5 v7 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v2 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

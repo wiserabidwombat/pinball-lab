@@ -22,7 +22,7 @@ rnd = random.Random(6)
 # M5 v4 sky placement: (centre x, centre y, pt per degree, rotation rad)
 SKY_UMA = (150, 540, 4.6, 0.10)
 SKY_CAS = (392, 560, 4.4, -0.25)
-SKY_ORI = (338, 322, 1.9, 0.0)
+SKY_ORI = (390, 268, 1.9, 0.0)        # M6 v1: off the planet window (284, 350, r 46)
 SKY_SOMBRERO = (92, 455)
 
 

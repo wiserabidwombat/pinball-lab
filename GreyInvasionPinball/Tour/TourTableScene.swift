@@ -505,6 +505,11 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M3 v3: the plunge flap, a shallow blade hanging from the arch at the top right. Its edge is in the `diverter`
     /// category, which only the served ball (`isPlunge`) has in its collision mask; drawn bright while a plunge is up.
     private func addPlungeFlap() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-tourDumpWalls") {
+            print("TOURHOOK " + TourTableLayout.plungeHook.map { "\($0.x),\($0.y)" }.joined(separator: ";"))
+        }
+        #endif
         let path = CGMutablePath()
         path.addLines(between: TourTableLayout.plungeHook)
         let body = SKPhysicsBody(edgeChainFrom: path)
@@ -558,10 +563,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
         // With it, the plain lower floor painting isn't drawn (it would only be overdraw underneath).
         hasLowerArt = UIImage(named: "tour_lower") != nil
         let lowerRect = CGRect(x: -40, y: -75, width: 680, height: 775)
+        // M6 v4: the upper table's bake (tools/tour_bake_upper.py, from the game's own walls via -tourDumpWalls) at z −19.45,
+        // under the lower bake's fading top edge and over the grey walls; the plain upper painting then isn't drawn.
+        let hasUpperArt = UIImage(named: "tour_upper") != nil
+        let upperRect = CGRect(x: -40, y: 640, width: 680, height: 700)
         for (name, rect, z) in [("tour_lower", lowerRect, CGFloat(-19.4)),
+                                ("tour_upper", upperRect, CGFloat(-19.45)),
                                 ("tour_floor_lower", lowerRect, CGFloat(-19.6)),
-                                ("tour_floor_upper", CGRect(x: -40, y: 640, width: 680, height: 700), CGFloat(-19.55))] {
+                                ("tour_floor_upper", upperRect, CGFloat(-19.55))] {
             if name == "tour_floor_lower" && hasLowerArt { continue }
+            if name == "tour_floor_upper" && hasUpperArt { continue }
             guard UIImage(named: name) != nil else { continue }
             // M6 v2 (Aaron: iPhone low 104 with v1): the texture goes to the GPU now, not on first sight mid-play.
             let texture = SKTexture(imageNamed: name)
@@ -624,6 +635,12 @@ final class TourTableScene: SKScene, RendererHostedScene {
                          z: CGFloat = -19.5, physics: Bool = true) {
         let path = CGMutablePath()
         path.addLines(between: points)
+        #if DEBUG
+        // M6 v4: `-tourDumpWalls` prints every wall for the Blender bake (tools/tour_bake_upper.py reads the console).
+        if ProcessInfo.processInfo.arguments.contains("-tourDumpWalls") {
+            print("TOURWALL \(physics ? 1 : 0) " + points.map { "\($0.x),\($0.y)" }.joined(separator: ";"))
+        }
+        #endif
 
         let node = SKShapeNode(path: path)
         node.strokeColor = Self.wallColor
@@ -1210,7 +1227,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v3")
+        let label = SKLabelNode(text: "T6 M6 v4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1256,7 +1273,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v3 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v4 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

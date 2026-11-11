@@ -281,11 +281,12 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addSolid(points: TourTableLayout.rocSolid)        // M4 v2: no ball can be trapped inside the bank
         blastDoor = TourDropTarget(at: TourTableLayout.blastDoor, normal: -.pi / 2, label: "",
                                    size: TourTableLayout.blastDoorSize,
-                                   color: SKColor(red: 0.72, green: 0.76, blue: 0.84, alpha: 1))
+                                   color: SKColor(red: 0.72, green: 0.76, blue: 0.84, alpha: 1), art: "tour_blastdoor")
         addChild(blastDoor)
-        for w in TourTableLayout.rocketWings {
+        for (i, w) in TourTableLayout.rocketWings.enumerated() {
             let wing = TourDropTarget(at: w.center, normal: w.normal, label: "", size: TourTableLayout.rocketWingSize,
-                                      color: SKColor(red: 0.60, green: 0.64, blue: 0.72, alpha: 1))
+                                      color: SKColor(red: 0.60, green: 0.64, blue: 0.72, alpha: 1),
+                                      art: i == 0 ? "tour_wing_l" : "tour_wing_r")
             addChild(wing)
             blastWings.append(wing)
         }
@@ -321,12 +322,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
         showCountdown()
         for (i, c) in TourTableLayout.sampleCenters.enumerated() {
             let t = TourDropTarget(at: c, normal: TourTableLayout.sampleNormal, label: "\(i + 1)",
-                                   color: SKColor(red: 0.90, green: 0.42, blue: 0.29, alpha: 1))
+                                   color: SKColor(red: 0.90, green: 0.42, blue: 0.29, alpha: 1), art: "tour_drop_sample")
             addChild(t)
             sampleBank.append(t)
         }
         for (i, c) in TourTableLayout.rocketCenters.enumerated() {
-            let s = TourStandup(at: c, normal: TourTableLayout.rocketNormal, label: TourTableLayout.rocketLabels[i])
+            let s = TourStandup(at: c, normal: TourTableLayout.rocketNormal, label: TourTableLayout.rocketLabels[i],
+                                art: "tour_standup_roc")
             addChild(s)
             rocketStandups.append(s)
         }
@@ -383,7 +385,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func addKET() {
         addWall(points: TourTableLayout.ketBackboard)
         for (i, c) in TourTableLayout.ketCenters.enumerated() {
-            let s = TourStandup(at: c, normal: TourTableLayout.ketNormal, label: TourTableLayout.rocketLabels[3 + i])
+            let s = TourStandup(at: c, normal: TourTableLayout.ketNormal, label: TourTableLayout.rocketLabels[3 + i],
+                                art: "tour_standup_ket")
             addChild(s)
             rocketStandups.append(s)
         }
@@ -1227,7 +1230,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v5")
+        let label = SKLabelNode(text: "T6 M6 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1273,7 +1276,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v5 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v6 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

@@ -1,6 +1,6 @@
 // Pinball Lab Table 06 (Orbit: Grand Tour), milestone 2: the grey-box targets. TourDropTarget is Table 05's drop
 // target (LmpDropTarget) and TourStandup Table 04's standup (MonStandup), both turned to face a flipper and labelled,
-// with the art left for the art milestone.
+// with the art left for the art milestone. M6 v6: rendered sprites (makeArt) over the same physics plates.
 import SpriteKit
 import UIKit
 import CoreGraphics
@@ -14,6 +14,19 @@ private func makePlate(size: CGSize, normal: CGFloat, color: SKColor) -> SKShape
     plate.lineWidth = 1
     plate.zRotation = normal - .pi / 2          // the rectangle's +y side becomes the face
     return plate
+}
+
+/// M6 v6: a rendered target (tools/tour_render_targets.py), already in its facing and the table's oblique, so it is
+/// NOT turned with the plate. 6 px/pt, centred on the target; lit by the table's lights when it has a normal map.
+private func makeArt(_ name: String) -> SKSpriteNode? {
+    guard let image = UIImage(named: name) else { return nil }
+    let sprite = SKSpriteNode(texture: SKTexture(image: image))
+    sprite.size = CGSize(width: image.size.width * image.scale / 6, height: image.size.height * image.scale / 6)
+    if let n = UIImage(named: name + "_n") {
+        sprite.normalTexture = SKTexture(image: n)
+        sprite.lightingBitMask = TourLighting.spriteMask
+    }
+    return sprite
 }
 
 private func makeLabel(_ text: String, normal: CGFloat) -> SKLabelNode {
@@ -34,15 +47,23 @@ final class TourDropTarget: SKNode {
     private(set) var isHit = false
     private let plate: SKShapeNode
     private let label: SKLabelNode
+    /// M6 v6: the rendered target (nil: the grey-box plate). Down, it hides and the plate shows as the empty slot.
+    private let art: SKSpriteNode?
 
     init(at center: CGPoint, normal: CGFloat, label text: String, size: CGSize = TourTableLayout.dropSize,
-         color: SKColor = SKColor(red: 1.0, green: 0.70, blue: 0.28, alpha: 1)) {
+         color: SKColor = SKColor(red: 1.0, green: 0.70, blue: 0.28, alpha: 1), art artName: String? = nil) {
         plate = makePlate(size: size, normal: normal, color: color)
         label = makeLabel(text, normal: normal)
+        art = artName.flatMap(makeArt)
         super.init()
         position = center
         zPosition = 1
         addChild(plate)
+        if let art {
+            plate.fillColor = SKColor(red: 0.02, green: 0.02, blue: 0.03, alpha: 1)
+            plate.strokeColor = SKColor(white: 0.75, alpha: 0.8)
+            addChild(art)
+        }
         addChild(label)
 
         let body = SKPhysicsBody(rectangleOf: size)
@@ -83,7 +104,12 @@ final class TourDropTarget: SKNode {
 
     private func setUp(_ up: Bool) {
         plate.physicsBody?.categoryBitMask = up ? TourPhysicsCategory.target : TourPhysicsCategory.none
-        plate.alpha = up ? 1 : 0.18
+        if let art {
+            art.isHidden = !up
+            plate.alpha = up ? 0 : 1             // physics doesn't care about alpha
+        } else {
+            plate.alpha = up ? 1 : 0.18
+        }
         label.alpha = up ? 0.9 : 0.35
     }
 }
@@ -91,8 +117,15 @@ final class TourDropTarget: SKNode {
 /// A standup: never goes down. A hit lights it; the scene clears the bank once every one is lit.
 final class TourStandup: SKNode {
     var isLit = false {
-        didSet { fill.fillColor = isLit ? Self.litColor : Self.offColor }
+        didSet {
+            fill.fillColor = isLit ? Self.litColor : Self.offColor
+            if let art, let litTexture, let offTexture { art.texture = isLit ? litTexture : offTexture }
+        }
     }
+    /// M6 v6: the rendered standup, its off and lit looks (nil: the grey-box fill).
+    private let art: SKSpriteNode?
+    private let offTexture: SKTexture?
+    private let litTexture: SKTexture?
     /// `plate` carries the physics body and never scales; `fill` is the look that pulses on a hit.
     private let plate: SKShapeNode
     private let fill: SKShapeNode
@@ -102,7 +135,7 @@ final class TourStandup: SKNode {
     /// One hit per 0.15 s, so a rattling ball doesn't count twice.
     private static let cooldown: TimeInterval = 0.15
 
-    init(at center: CGPoint, normal: CGFloat, label text: String) {
+    init(at center: CGPoint, normal: CGFloat, label text: String, art artName: String? = nil) {
         let size = TourTableLayout.standupSize
         plate = makePlate(size: size, normal: normal, color: .clear)
         plate.strokeColor = .clear
@@ -111,10 +144,15 @@ final class TourStandup: SKNode {
         fill.strokeColor = SKColor(white: 1, alpha: 0.5)
         fill.lineWidth = 1
         plate.addChild(fill)
+        art = artName.flatMap(makeArt)
+        offTexture = art?.texture
+        litTexture = artName.flatMap { UIImage(named: $0 + "_lit") }.map { SKTexture(image: $0) }
+        if art != nil { fill.isHidden = true }
         super.init()
         position = center
         zPosition = 1
         addChild(plate)
+        if let art { addChild(art) }
         addChild(makeLabel(text, normal: normal))
 
         let body = SKPhysicsBody(rectangleOf: size)
@@ -135,8 +173,9 @@ final class TourStandup: SKNode {
     func hit(at time: TimeInterval) -> Bool {
         guard time - lastHit > Self.cooldown else { return false }
         lastHit = time
-        fill.removeAllActions()
-        fill.run(.sequence([.scale(to: 0.85, duration: 0.04), .scale(to: 1, duration: 0.1)]))
+        let look: SKNode = art ?? fill
+        look.removeAllActions()
+        look.run(.sequence([.scale(to: art == nil ? 0.85 : 0.92, duration: 0.04), .scale(to: 1, duration: 0.1)]))
         return true
     }
 }

@@ -61,6 +61,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var countdownLeft = TourTableLayout.countdownHits
     private var countdownLampNodes: [SKShapeNode] = []
     private var rocketToy: SKNode!
+    /// M6 v7: the rocket sprite's engine flame (shown during liftoff).
+    private var rocketFlame: SKShapeNode?
     private var lastRocketHit: TimeInterval = -1
     private var sampleBank: [TourDropTarget] = []
     private var rocketStandups: [TourStandup] = []
@@ -304,14 +306,41 @@ final class TourTableScene: SKScene, RendererHostedScene {
             addChild(lamp)
             countdownLampNodes.append(lamp)
         }
-        // The rocket toy: a tall triangle on the pad (grey box). It lifts off on the last countdown hit.
-        let rocketPath = CGMutablePath()
-        rocketPath.move(to: CGPoint(x: 0, y: 36)); rocketPath.addLine(to: CGPoint(x: 11, y: -8))
-        rocketPath.addLine(to: CGPoint(x: -11, y: -8)); rocketPath.closeSubpath()
-        let rocket = SKShapeNode(path: rocketPath)
-        rocket.fillColor = SKColor(red: 0.90, green: 0.92, blue: 0.96, alpha: 1)
-        rocket.strokeColor = SKColor(red: 1.0, green: 0.55, blue: 0.2, alpha: 1)
-        rocket.lineWidth = 1.5
+        // The rocket toy on the pad. It lifts off on the last countdown hit. M6 v7: a rendered sprite (tools/
+        // tour_render_toys.py: in the table's oblique, its foot at the image centre, 6 px/pt, lit), with an engine
+        // flame that burns during liftoff; the grey-box triangle if the art is missing.
+        let rocket: SKNode
+        if let image = UIImage(named: "tour_rocket") {
+            let sprite = SKSpriteNode(texture: SKTexture(image: image))
+            sprite.size = CGSize(width: image.size.width * image.scale / 6, height: image.size.height * image.scale / 6)
+            if let n = UIImage(named: "tour_rocket_n") {
+                sprite.normalTexture = SKTexture(image: n)
+                sprite.lightingBitMask = TourLighting.spriteMask
+            }
+            let flame = SKShapeNode(ellipseIn: CGRect(x: -6.5, y: -32, width: 13, height: 35))
+            flame.fillColor = SKColor(red: 1.0, green: 0.62, blue: 0.18, alpha: 1)
+            flame.strokeColor = .clear
+            flame.blendMode = .add
+            flame.alpha = 0
+            flame.zPosition = -0.1
+            let core = SKShapeNode(ellipseIn: CGRect(x: -3.2, y: -18, width: 6.4, height: 19))
+            core.fillColor = SKColor(red: 1.0, green: 0.95, blue: 0.75, alpha: 1)
+            core.strokeColor = .clear
+            core.blendMode = .add
+            flame.addChild(core)
+            sprite.addChild(flame)
+            rocketFlame = flame
+            rocket = sprite
+        } else {
+            let rocketPath = CGMutablePath()
+            rocketPath.move(to: CGPoint(x: 0, y: 36)); rocketPath.addLine(to: CGPoint(x: 11, y: -8))
+            rocketPath.addLine(to: CGPoint(x: -11, y: -8)); rocketPath.closeSubpath()
+            let shape = SKShapeNode(path: rocketPath)
+            shape.fillColor = SKColor(red: 0.90, green: 0.92, blue: 0.96, alpha: 1)
+            shape.strokeColor = SKColor(red: 1.0, green: 0.55, blue: 0.2, alpha: 1)
+            shape.lineWidth = 1.5
+            rocket = shape
+        }
         rocket.position = TourTableLayout.rocketToy
         rocket.zPosition = 25
         let rocketArt = SKNode()                   // M5 v4: parallax holder (the liftoff still moves the rocket itself)
@@ -378,6 +407,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         default: break
         }
         applyLightingMode()
+        if ProcessInfo.processInfo.arguments.contains("-tourLiftoff") {     // M6 v7c: watch the liftoff show
+            run(.sequence([.wait(forDuration: 3), .repeatForever(.sequence([
+                .run { [weak self] in self?.playLiftoff() }, .wait(forDuration: 9)]))]))
+        }
         #endif
     }
 
@@ -945,16 +978,111 @@ final class TourTableScene: SKScene, RendererHostedScene {
         bigHaptic.impactOccurred()
         showBanner("LIFTOFF · MISSION CONTROL OPEN")
         blastDoor.drop()
+        playLiftoff()
+    }
+
+    /// The liftoff show: sparks, flame, smoke and the climb (M6 v7–v7c). DEBUG: `-tourLiftoff` plays it 3 s after
+    /// the table builds, and every 9 s after that.
+    private func playLiftoff() {
         Effects.burst(in: self, at: TourTableLayout.rocketToy, color: SKColor(red: 1, green: 0.6, blue: 0.2, alpha: 1),
                       count: 30, speed: 260, lifetime: 0.7)
         rocketToy.removeAllActions()
         rocketToy.position = TourTableLayout.rocketToy
+        if let flame = rocketFlame {
+            flame.removeAllActions()
+            flame.alpha = 0.95
+            flame.run(.sequence([
+                .repeat(.sequence([.scaleY(to: 1.25, duration: 0.05), .scaleY(to: 0.85, duration: 0.05)]), count: 30),
+                .fadeOut(withDuration: 0.1), .scaleY(to: 1, duration: 0)]))
+        }
+        launchSmoke()
+        // M6 v7b (Aaron: "the launch slower"): a slow, accelerating climb over 3 s, fading in its last second.
+        let climb = SKAction.moveBy(x: 0, y: 300, duration: 3.0)
+        climb.timingMode = .easeIn
         rocketToy.run(.sequence([
-            .group([.moveBy(x: 0, y: 160, duration: 0.9), .fadeOut(withDuration: 0.9)]),
+            .group([climb, .sequence([.wait(forDuration: 2.0), .fadeOut(withDuration: 1.0)])]),
             .wait(forDuration: 1.2),
             .run { [weak self] in self?.rocketToy.position = TourTableLayout.rocketToy },
             .fadeIn(withDuration: 0.4)]))
     }
+
+    /// M6 v7c (Aaron: "smoke like a real launch … spilled out onto the table"): an exhaust trail left behind the
+    /// climbing rocket, and a ground cloud that billows out of the pad and rolls down over the playfield (under the
+    /// ball, z 8), growing and thinning over ~4 s.
+    private func launchSmoke() {
+        let texture = Self.smokeTexture
+        let grey = SKColor(red: 0.80, green: 0.81, blue: 0.84, alpha: 1)
+        // the trail: from the nozzle, particles stay in the scene where they were born
+        if let rocket = rocketToy {
+            let trail = SKEmitterNode()
+            trail.particleTexture = texture
+            trail.particleBirthRate = 50
+            trail.particleLifetime = 1.8
+            trail.particleLifetimeRange = 0.6
+            trail.emissionAngle = -.pi / 2
+            trail.emissionAngleRange = 0.7
+            trail.particleSpeed = 35
+            trail.particleSpeedRange = 20
+            trail.particlePositionRange = CGVector(dx: 6, dy: 2)
+            trail.particleSize = CGSize(width: 16, height: 16)
+            trail.particleScale = 0.7
+            trail.particleScaleSpeed = 1.1
+            trail.particleRotationRange = .pi * 2
+            trail.particleRotationSpeed = 0.4
+            trail.particleColorBlendFactor = 1
+            trail.particleColorSequence = SKKeyframeSequence(
+                keyframeValues: [SKColor(red: 1.0, green: 0.78, blue: 0.48, alpha: 1), grey, grey],
+                times: [0, 0.25, 1])
+            trail.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0, 0.6, 0.3, 0] as [NSNumber],
+                                                             times: [0, 0.1, 0.5, 1])
+            trail.position = CGPoint(x: 0, y: -6)
+            trail.targetNode = self
+            trail.particleZPosition = 24
+            rocket.addChild(trail)
+            trail.run(.sequence([.wait(forDuration: 3.0), .run { trail.particleBirthRate = 0 },
+                                 .wait(forDuration: 2.6), .removeFromParent()]))
+        }
+        // the ground cloud: out of the pad in every direction, most of it rolling down the table toward the flippers
+        let cloud = SKEmitterNode()
+        cloud.particleTexture = texture
+        cloud.particleBirthRate = 80
+        cloud.numParticlesToEmit = 130
+        cloud.particleLifetime = 4.0
+        cloud.particleLifetimeRange = 1.2
+        cloud.emissionAngle = -.pi / 2
+        cloud.emissionAngleRange = .pi * 1.1
+        cloud.particleSpeed = 55
+        cloud.particleSpeedRange = 35
+        cloud.yAcceleration = -6                        // a little downhill drift
+        cloud.particlePositionRange = CGVector(dx: 30, dy: 12)
+        cloud.particleSize = CGSize(width: 26, height: 26)
+        cloud.particleScale = 0.8
+        cloud.particleScaleRange = 0.3
+        cloud.particleScaleSpeed = 0.7
+        cloud.particleRotationRange = .pi * 2
+        cloud.particleRotationSpeed = 0.25
+        cloud.particleColorBlendFactor = 1
+        cloud.particleColor = grey
+        cloud.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0, 0.42, 0.28, 0] as [NSNumber],
+                                                         times: [0, 0.12, 0.55, 1])
+        cloud.position = CGPoint(x: TourTableLayout.rocketToy.x, y: TourTableLayout.rocketToy.y - 6)
+        cloud.zPosition = 8
+        addChild(cloud)
+        cloud.run(.sequence([.wait(forDuration: 7.5), .removeFromParent()]))
+    }
+
+    /// A soft round puff for the launch smoke (drawn once).
+    private static let smokeTexture: SKTexture = {
+        let size = CGSize(width: 64, height: 64)
+        let image = UIGraphicsImageRenderer(size: size).image { ctx in
+            let colors = [UIColor(white: 1, alpha: 1).cgColor, UIColor(white: 1, alpha: 0.55).cgColor,
+                          UIColor(white: 1, alpha: 0).cgColor] as CFArray
+            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.45, 1])!
+            ctx.cgContext.drawRadialGradient(gradient, startCenter: CGPoint(x: 32, y: 32), startRadius: 0,
+                                             endCenter: CGPoint(x: 32, y: 32), endRadius: 32, options: [])
+        }
+        return SKTexture(image: image)
+    }()
 
     private func showCountdown() {
         for (i, lamp) in countdownLampNodes.enumerated() {
@@ -1230,7 +1358,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v6")
+        let label = SKLabelNode(text: "T6 M6 v7c")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1276,7 +1404,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v6 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v7c \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

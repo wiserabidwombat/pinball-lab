@@ -1,6 +1,7 @@
 // Pinball Lab Table 06 (Orbit: Grand Tour), M3 v2: a pop bumper (grey box), Table 03/04's proven bumper trimmed of
 // their art and shields: on every hit it kicks the ball straight away from its centre at TourTableLayout.bumperKickSpeed.
 import SpriteKit
+import UIKit
 import CoreGraphics
 import Foundation
 
@@ -15,12 +16,16 @@ final class TourBumper: SKNode {
 
     init(at center: CGPoint) {
         let r = TourTableLayout.bumperRadius
-        // M5 v6: a lit sprite cap with a normal map (tools/tour_lit_parts.py), 50 pt across.
+        // M6 v7: the whole bumper rendered in Blender (tools/tour_render_toys.py: base, chrome skirt, body, red dome cap)
+        // in the table's oblique, centred on the floor centre, 6 px/pt, with a normal map (was M5 v6's flat cap).
+        let image = UIImage(named: "tour_bumper")
         disc = SKSpriteNode(imageNamed: "tour_bumper")
-        disc.size = CGSize(width: 50, height: 50)
+        disc.size = image.map { CGSize(width: $0.size.width * $0.scale / 6, height: $0.size.height * $0.scale / 6) }
+            ?? CGSize(width: 50, height: 50)
         disc.normalTexture = SKTexture(imageNamed: "tour_bumper_n")
         disc.lightingBitMask = TourLighting.spriteMask
-        flashDisc = SKShapeNode(circleOfRadius: r + 3)
+        flashDisc = SKShapeNode(circleOfRadius: r - 1)
+        flashDisc.position = CGPoint(x: 0, y: 7.5)          // over the cap, which draws ~20 pt up × K above the floor
         super.init()
         position = center
         zPosition = 3

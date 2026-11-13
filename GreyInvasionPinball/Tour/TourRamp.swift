@@ -180,6 +180,19 @@ final class TourRamp: SKNode {
         let rightDrawn = rightRail.indices.map { i -> CGPoint in
             CGPoint(x: rightRail[i].x, y: rightRail[i].y + heightAlong(path.distances[i]) * lean)
         }
+        #if DEBUG
+        // M6 v9: `-tourDumpWalls` also prints every ramp's centreline and rails for the Blender render
+        // (tools/tour_render_ramps.py reads TOURRAMP / TOURRP lines from the console).
+        if ProcessInfo.processInfo.arguments.contains("-tourDumpWalls") {
+            let p0 = path.points[0]
+            print("TOURRAMP \(p0.x),\(p0.y) apex \(apexDistance) length \(path.length) wireOnly \(wireOnly)")
+            for i in path.points.indices {
+                let c = path.points[i]
+                print("TOURRP \(i) \(path.distances[i]) \(heightAlong(path.distances[i])) \(c.x) \(c.y) \(path.headings[i]) "
+                      + "\(leftRail[i].x) \(leftRail[i].y) \(rightRail[i].x) \(rightRail[i].y)")
+            }
+        }
+        #endif
         if ridden {
             drawRidden(left: leftDrawn, right: rightDrawn, leftFloor: leftRail, rightFloor: rightRail)
             return

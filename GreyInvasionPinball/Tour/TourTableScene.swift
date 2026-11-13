@@ -431,9 +431,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let ramp = TourRamp(path: TourTableLayout.moonRampPath, apexDistance: TourTableLayout.moonApexDistance,
                             mouthHalfWidth: TourTableLayout.moonMouthHalfWidth, halfWidth: TourTableLayout.moonHalfWidth,
                             flareLength: TourTableLayout.moonFlareLength, postLength: 0,
-                            lowLength: TourTableLayout.moonLowLength)
+                            lowLength: TourTableLayout.moonLowLength, artBaked: hasRampArt("moon"))
         addChild(ramp)
         moonRamp = ramp
+        addRampArt("moon")
         let lift = TourTableLayout.rampTopHeight * TourTableLayout.oblique
         let moon = SKShapeNode(circleOfRadius: TourTableLayout.moonRadius)
         moon.position = CGPoint(x: TourTableLayout.moonCenter.x, y: TourTableLayout.moonCenter.y + lift)
@@ -506,6 +507,31 @@ final class TourTableScene: SKScene, RendererHostedScene {
         moonArt.addChild(crater)
     }
 
+    /// M6 v9: the ramps rendered in Blender (tools/tour_render_ramps.py, from the game's own ramp geometry via
+    /// -tourDumpWalls): the ramp itself at z 20 (over floor balls, under a ball riding it at 30) and what lies on the
+    /// floor (its shadow, the entrance flap, the posts' feet) at z −17.95. Both images cover the same world rect
+    /// (the script's RECT lines), 3 px/pt. With them in, TourRamp builds only the physics (`artBaked`).
+    private static let rampArtRects: [String: CGRect] = [
+        "moon": CGRect(x: 43, y: 420, width: 211, height: 601),
+        "saturn": CGRect(x: 383, y: 420, width: 188, height: 592),
+    ]
+
+    private func hasRampArt(_ name: String) -> Bool {
+        UIImage(named: "tour_ramp_" + name) != nil && UIImage(named: "tour_ramp_" + name + "_lo") != nil
+    }
+
+    private func addRampArt(_ name: String) {
+        guard hasRampArt(name), let rect = Self.rampArtRects[name] else { return }
+        for (suffix, z) in [("", CGFloat(20)), ("_lo", CGFloat(-17.95))] {
+            let texture = SKTexture(imageNamed: "tour_ramp_" + name + suffix)
+            texture.preload { }
+            let sprite = SKSpriteNode(texture: texture, size: rect.size)
+            sprite.position = CGPoint(x: rect.midX, y: rect.midY)
+            sprite.zPosition = z
+            addChild(sprite)
+        }
+    }
+
     /// M6 v8: a painted platform (tools/tour_paint_planets.py: 6 px/pt, centred on the platform), lit by the table's
     /// lights, with its normal map if it has one (Saturn's sphere; the Moon is a flat print).
     private func planetSprite(_ name: String) -> SKSpriteNode? {
@@ -522,9 +548,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let ramp = TourRamp(path: TourTableLayout.saturnRampPath, apexDistance: TourTableLayout.saturnApexDistance,
                             mouthHalfWidth: TourTableLayout.moonMouthHalfWidth, halfWidth: TourTableLayout.moonHalfWidth,
                             flareLength: TourTableLayout.moonFlareLength, postLength: 0,
-                            lowLength: TourTableLayout.moonLowLength)
+                            lowLength: TourTableLayout.moonLowLength, artBaked: hasRampArt("saturn"))
         addChild(ramp)
         saturnRamp = ramp
+        addRampArt("saturn")
         let lift = TourTableLayout.rampTopHeight * TourTableLayout.oblique
         let at = CGPoint(x: TourTableLayout.saturnCenter.x, y: TourTableLayout.saturnCenter.y + lift)
         let ring = SKShapeNode(ellipseOf: CGSize(width: TourTableLayout.saturnRadius * 2.7, height: TourTableLayout.saturnRadius * 0.9))
@@ -1390,7 +1417,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v8")
+        let label = SKLabelNode(text: "T6 M6 v9")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1436,7 +1463,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v8 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v9 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

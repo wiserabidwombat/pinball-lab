@@ -10,6 +10,7 @@ final class TourRollover: SKNode {
     var isLit = false {
         didSet {
             guard isLit != oldValue else { return }
+            lamp?.isOn = isLit
             insert.fillColor = isLit ? Self.onColor : Self.offColor
             glow.alpha = isLit ? 0.5 : 0
             label.fontColor = isLit ? Self.onText : Self.offText
@@ -21,6 +22,18 @@ final class TourRollover: SKNode {
     private static let onText = SKColor(red: 0.20, green: 0.10, blue: 0.0, alpha: 1)
     private static let offText = SKColor(red: 0.75, green: 0.65, blue: 0.45, alpha: 0.8)
 
+    /// M7 v1: a real lamp (TourLamp) in place of the grey-box insert; it follows isLit.
+    private(set) var lamp: TourLamp?
+    /// Where the lamp insert sits, in the scene.
+    var lampPoint: CGPoint { CGPoint(x: position.x, y: position.y + lampDy) }
+    private let lampDy: CGFloat
+
+    func attach(lamp l: TourLamp) {
+        lamp = l
+        l.isOn = isLit
+        insert.isHidden = true; glow.isHidden = true; label.isHidden = true
+    }
+
     private let insert = SKShapeNode(circleOfRadius: 8)
     private let glow = SKShapeNode(circleOfRadius: 14)
     private let label = SKLabelNode(fontNamed: "Menlo-Bold")
@@ -30,6 +43,7 @@ final class TourRollover: SKNode {
     init(letter: String, x: CGFloat, y: CGFloat = TourTableLayout.laneRolloverY,
          lampDy: CGFloat = TourTableLayout.laneLampY - TourTableLayout.laneRolloverY) {
         self.letter = letter
+        self.lampDy = lampDy
         super.init()
         position = CGPoint(x: x, y: y)
         let lamp = CGPoint(x: 0, y: lampDy)

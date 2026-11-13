@@ -49,7 +49,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var rollovers: [TourRollover] = []
     private var lanesResetAt: TimeInterval?
     private var kickbackLit = true
-    private var kickbackLamp: SKShapeNode?
+    private var kickbackLamp: TourLamp?
     private var rocketPost: SKShapeNode?
     private var rocketPostUp = false
     private var rocketPostDropAt: TimeInterval?
@@ -59,7 +59,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var blastDoor: TourDropTarget!
     private var blastWings: [TourDropTarget] = []
     private var countdownLeft = TourTableLayout.countdownHits
-    private var countdownLampNodes: [SKShapeNode] = []
+    private var countdownLampNodes: [TourLamp] = []
     private var rocketToy: SKNode!
     /// M6 v7: the rocket sprite's engine flame (shown during liftoff).
     private var rocketFlame: SKShapeNode?
@@ -273,6 +273,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addRocketPost()
         addPlunger()
         addLaunchGate()
+        addInsertLamps()
     }
 
     /// Milestone 2 (Concept C, v10): the rocket pad (blast door + Mission Control) at the back of the open centre, the ROCKET standups up the
@@ -297,17 +298,11 @@ final class TourTableScene: SKScene, RendererHostedScene {
             addChild(wing)
             blastWings.append(wing)
         }
+        // M7 v1: the countdown inserts as lamps, numbered like the painting (1 at the bottom, 5 at the top); a hit
+        // puts out the highest still lit.
         for (i, c) in TourTableLayout.countdownLamps.enumerated() {
-            let lamp = SKShapeNode(circleOfRadius: 6)
-            lamp.position = c
-            lamp.fillColor = SKColor(red: 1.0, green: 0.70, blue: 0.28, alpha: 1)
-            lamp.strokeColor = SKColor(white: 1, alpha: 0.5)
-            lamp.lineWidth = 1
-            lamp.zPosition = -17
-            let n = SKLabelNode(text: "\(TourTableLayout.countdownHits - i)")
-            n.fontName = "AvenirNext-Bold"; n.fontSize = 8; n.verticalAlignmentMode = .center
-            n.fontColor = SKColor(white: 0.1, alpha: 1)
-            lamp.addChild(n)
+            let lamp = TourLamp(at: c, shape: .round(radius: 7.2), color: SKColor(red: 1.0, green: 0.48, blue: 0.14,
+                                alpha: 1), insert: "countdown", label: "\(i + 1)")
             addChild(lamp)
             countdownLampNodes.append(lamp)
         }
@@ -712,6 +707,95 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func nextTourStop() {
         guard let w = planetWindow else { return }
         w.show(w.stop + 1)
+        updatePlanetArc()
+    }
+
+    // MARK: - M7 v1: the lamp inserts
+
+    /// The planet arc round the window (tools/tour_floor_lower.py: nine inserts Mercury … Sun, centre (284, 300) r 135,
+    /// from 158° down in steps of 17°) and the five shot arrows with their three-lamp stacks.
+    private static let arcPlanets: [(name: String, color: SKColor)] = [
+        ("mercury", SKColor(red: 0.80, green: 0.76, blue: 0.70, alpha: 1)), ("venus", SKColor(red: 1.0, green: 0.86, blue: 0.55, alpha: 1)),
+        ("mars", SKColor(red: 1.0, green: 0.45, blue: 0.25, alpha: 1)), ("moon", SKColor(red: 0.85, green: 0.88, blue: 0.95, alpha: 1)),
+        ("jupiter", SKColor(red: 1.0, green: 0.80, blue: 0.55, alpha: 1)), ("saturn", SKColor(red: 1.0, green: 0.88, blue: 0.55, alpha: 1)),
+        ("uranus", SKColor(red: 0.55, green: 0.95, blue: 1.0, alpha: 1)), ("neptune", SKColor(red: 0.40, green: 0.60, blue: 1.0, alpha: 1)),
+        ("sun", SKColor(red: 1.0, green: 0.72, blue: 0.25, alpha: 1)),
+    ]
+    private static let shotArrows: [(name: String, at: CGPoint, heading: CGFloat, color: SKColor)] = [
+        ("leftOrbit", CGPoint(x: 150, y: 655), 108, SKColor(red: 0.35, green: 0.80, blue: 1.0, alpha: 1)),
+        ("moon", CGPoint(x: 208, y: 655), 100, SKColor(red: 0.90, green: 0.90, blue: 1.0, alpha: 1)),
+        ("rocket", CGPoint(x: 284, y: 650), 90, SKColor(red: 1.0, green: 0.50, blue: 0.18, alpha: 1)),
+        ("saturn", CGPoint(x: 392, y: 640), 72, SKColor(red: 1.0, green: 0.84, blue: 0.48, alpha: 1)),
+        ("rightOrbit", CGPoint(x: 452, y: 666), 66, SKColor(red: 0.35, green: 0.80, blue: 1.0, alpha: 1)),
+    ]
+    private var planetLamps: [String: TourLamp] = [:]
+    private var arrowLamps: [String: TourLamp] = [:]
+    /// Each arrow's stack, nearest the arrow first: goal (gold), jackpot (red), combo (blue).
+    private var stackLamps: [String: [TourLamp]] = [:]
+
+    private func addInsertLamps() {
+        let amber = SKColor(red: 1.0, green: 0.66, blue: 0.18, alpha: 1)
+        for lane in rollovers {
+            let l = TourLamp(at: lane.lampPoint, shape: .round(radius: 8.5), color: amber, insert: "orbt",
+                             label: lane.letter, labelColor: SKColor(red: 0.12, green: 0.05, blue: 0, alpha: 0.92))
+            addChild(l)
+            lane.attach(lamp: l)
+        }
+        for lane in starLanes {                       // no painted inserts up there: the lamp brings its own
+            let l = TourLamp(at: lane.lampPoint, shape: .round(radius: 8), color: amber, insert: "star",
+                             label: lane.letter, labelColor: SKColor(red: 0.12, green: 0.05, blue: 0, alpha: 0.92))
+            addChild(l)
+            lane.attach(lamp: l)
+        }
+        guard hasFloorArt else { return }
+        for (i, p) in Self.arcPlanets.enumerated() {
+            let a = (158 - CGFloat(i) * 17) * .pi / 180
+            let at = CGPoint(x: 284 + 135 * cos(a), y: 300 + 135 * sin(a))
+            let l = TourLamp(at: at, shape: .planet(radius: p.name == "sun" ? 10.5 : 8), color: p.color,
+                             insert: "planet_" + p.name)
+            addChild(l)
+            planetLamps[p.name] = l
+        }
+        let stackColors = [("stack_gold", SKColor(red: 1.0, green: 0.85, blue: 0.3, alpha: 1)),
+                           ("stack_red", SKColor(red: 1.0, green: 0.28, blue: 0.25, alpha: 1)),
+                           ("stack_blue", SKColor(red: 0.3, green: 0.72, blue: 1.0, alpha: 1))]
+        for arrow in Self.shotArrows {
+            let l = TourLamp(at: arrow.at, shape: .arrow(heading: arrow.heading), color: arrow.color,
+                             insert: "arrow_" + arrow.name)
+            addChild(l)
+            arrowLamps[arrow.name] = l
+            let a = arrow.heading * .pi / 180
+            stackLamps[arrow.name] = stackColors.enumerated().map { k, c in
+                let f = -17 - CGFloat(k) * 11
+                let s = TourLamp(at: CGPoint(x: arrow.at.x + cos(a) * f, y: arrow.at.y + sin(a) * f),
+                                 shape: .round(radius: 4), color: c.1, insert: c.0)
+                addChild(s)
+                return s
+            }
+        }
+        updatePlanetArc()
+        updateShotArrows()
+    }
+
+    /// The tour so far on the arc: every planet visited this game lit, the one the window shows blinking. (Earth, the
+    /// start, has no insert — it's the big Earth on the floor.)
+    private func updatePlanetArc() {
+        guard !planetLamps.isEmpty else { return }
+        let stops = TourPlanetWindow.stops
+        let at = planetWindow?.stop ?? 0
+        for (name, lamp) in planetLamps {
+            guard let i = stops.firstIndex(of: name), i > 0, i <= at else { lamp.set(.off); continue }
+            lamp.set(i == at ? .blink : .on)
+        }
+    }
+
+    /// Stand-in until the rules milestone: the rocket arrow blinks (the countdown is always on), the two ramps are lit.
+    private func updateShotArrows() {
+        arrowLamps["rocket"]?.set(.blink)
+        arrowLamps["moon"]?.set(.on)
+        arrowLamps["saturn"]?.set(.on)
+        arrowLamps["leftOrbit"]?.set(.off)
+        arrowLamps["rightOrbit"]?.set(.off)
     }
 
     /// M5 v5: the planet window (TourPlanetWindow): stars and a planet deep under the glass, each its own parallax layer.
@@ -786,19 +870,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     /// The kickback lamp over the left outlane: lit = the next ball down that outlane is fired back up.
     private func addKickbackLamp() {
-        let lamp = SKShapeNode(circleOfRadius: 7)
-        lamp.position = TourTableLayout.kickbackLamp
-        lamp.fillColor = Self.lampOnColor
-        lamp.strokeColor = SKColor(white: 1, alpha: 0.3)
-        lamp.lineWidth = 1
-        lamp.zPosition = -18
+        let lamp = TourLamp(at: TourTableLayout.kickbackLamp, shape: .round(radius: 8),
+                            color: SKColor(red: 1.0, green: 0.22, blue: 0.16, alpha: 1), insert: "kickback")
         addChild(lamp)
+        lamp.isOn = kickbackLit
         kickbackLamp = lamp
     }
 
     private func setKickbackLit(_ lit: Bool) {
         kickbackLit = lit
-        kickbackLamp?.fillColor = lit ? Self.lampOnColor : Self.lampOffColor
+        kickbackLamp?.isOn = lit
     }
 
     /// The pop-up rocket post between the flipper tips. Down: a dim cap flush with the floor and no body. Up: a red
@@ -1176,8 +1257,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func showCountdown() {
         for (i, lamp) in countdownLampNodes.enumerated() {
-            // Lamp i reads (5 − i); it's lit while that count is still to come.
-            lamp.alpha = (TourTableLayout.countdownHits - i) <= countdownLeft ? 1 : 0.2
+            lamp.isOn = i + 1 <= countdownLeft             // M7 v1: lamp i reads i + 1
         }
     }
 
@@ -1450,7 +1530,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v12b")
+        let label = SKLabelNode(text: "T6 M7 v2")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1496,7 +1576,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v12b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M7 v2 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1551,6 +1631,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     func newGame() {
         planetWindow?.show(0, animated: false)             // M6 v11: every game's tour starts at Earth
+        updatePlanetArc()
         fpsLow = 0
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }

@@ -227,6 +227,11 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func buildTable() {
         addFloor()
         addFloorArt()
+        if hasFloorArt {
+            let s = TourSun()
+            addChild(s)
+            sun = s
+        }
         addPlanetWindow()
         addWall(points: TourTableLayout.outerWall,
                 friction: TourTableLayout.railFriction, restitution: TourTableLayout.railRestitution)
@@ -408,6 +413,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
         default: break
         }
         applyLightingMode()
+        if ProcessInfo.processInfo.arguments.contains("-tourSun") {         // M6 v12: S-T-A-R levels 0…4, a flare
+            var lit = 0
+            run(.sequence([.wait(forDuration: 2), .repeatForever(.sequence([.run { [weak self] in
+                lit = (lit + 1) % 5
+                self?.sun?.setLevel(lit)
+                if lit == 4 { self?.sun?.flare() }
+            }, .wait(forDuration: 1.5)]))]))
+        }
         if ProcessInfo.processInfo.arguments.contains("-tourPlanets") {     // M6 v11: flip through the window's stops
             run(.sequence([.wait(forDuration: 2), .repeatForever(.sequence([
                 .run { [weak self] in self?.nextTourStop() }, .wait(forDuration: 2.5)]))]))
@@ -693,6 +706,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var greyFloor: SKShapeNode?
     /// M6 v11: the window's planet is the tour's current stop; a finished R-O-C-K-E-T or a made ramp flies to the next.
     private var planetWindow: TourPlanetWindow?
+    /// M6 v12: the Sun's light over the upper painting (brighter per lit S-T-A-R letter, a flare on S-T-A-R).
+    private var sun: TourSun?
 
     private func nextTourStop() {
         guard let w = planetWindow else { return }
@@ -951,6 +966,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             if now >= due {
                 starResetAt = nil
                 starLanes.forEach { $0.isLit = false }
+                sun?.setLevel(0)
             }
         }
     }
@@ -965,7 +981,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         lane.isLit = true
         game.add(TourPoints.starLit)
         sfx(.lane)
+        sun?.setLevel(starLanes.filter { $0.isLit }.count)
         guard starLanes.allSatisfy({ $0.isLit }) else { return }
+        sun?.flare()
         game.add(TourPoints.starComplete)
         bigHaptic.impactOccurred()
         sfx(.lanesComplete)
@@ -1432,7 +1450,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v11b")
+        let label = SKLabelNode(text: "T6 M6 v12b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1478,7 +1496,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v11b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v12b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1549,6 +1567,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         rollovers.forEach { $0.isLit = false }
         starResetAt = nil
         starLanes.forEach { $0.isLit = false }
+        sun?.setLevel(0)
         setKickbackLit(true)
         pendingDrops.removeAll()
         blastDoor.raise()
@@ -2230,6 +2249,7 @@ extension TourTableScene: ShotLabHost {
         rollovers.forEach { $0.isLit = false }
         starResetAt = nil
         starLanes.forEach { $0.isLit = false }
+        sun?.setLevel(0)
         pendingDrops.removeAll()
         blastDoor.raise()
         countdownLeft = TourTableLayout.countdownHits

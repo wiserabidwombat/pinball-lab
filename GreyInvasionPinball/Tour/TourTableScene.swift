@@ -479,6 +479,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let moonArt = SKNode()                     // M5 v4: the Moon and its crater slide together (parallax)
         addChild(moonArt)
         parallax.add(moonArt, anchor: TourTableLayout.moonCenter, height: TourTableLayout.rampTopHeight)
+        // M6 v8: the painted Moon (clear plastic print, its crater cup painted in) replaces the grey-box disc,
+        // label and crater ring.
+        if let art = planetSprite("tour_moon") {
+            art.position = moon.position
+            art.zPosition = moon.zPosition
+            moonArt.addChild(art)
+            return
+        }
         moonArt.addChild(moon)
         let label = SKLabelNode(text: "MOON")
         label.fontName = "Menlo-Bold"; label.fontSize = 11
@@ -486,6 +494,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         label.position = CGPoint(x: -8, y: -20)
         moon.addChild(label)
         let (c, _) = ramp.path.sample(at: TourTableLayout.moonApexDistance + TourTableLayout.rampMadeAfterApex)
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-tourDumpWalls") { print("TOURCRATER moon \(c.x),\(c.y)") }
+        #endif
         let crater = SKShapeNode(circleOfRadius: 13)
         crater.position = CGPoint(x: c.x, y: c.y + lift)
         crater.fillColor = SKColor(white: 0.18, alpha: 0.9)
@@ -493,6 +504,17 @@ final class TourTableScene: SKScene, RendererHostedScene {
         crater.lineWidth = 1.5
         crater.zPosition = 19.6
         moonArt.addChild(crater)
+    }
+
+    /// M6 v8: a painted platform (tools/tour_paint_planets.py: 6 px/pt, centred on the platform), lit by the table's
+    /// lights, with its normal map if it has one (Saturn's sphere; the Moon is a flat print).
+    private func planetSprite(_ name: String) -> SKSpriteNode? {
+        guard let image = UIImage(named: name) else { return nil }
+        let sprite = SKSpriteNode(texture: SKTexture(image: image))
+        sprite.size = CGSize(width: image.size.width * image.scale / 6, height: image.size.height * image.scale / 6)
+        if let n = UIImage(named: name + "_n") { sprite.normalTexture = SKTexture(image: n) }
+        sprite.lightingBitMask = TourLighting.spriteMask
+        return sprite
     }
 
     /// M3 v14: the Saturn ramp and the raised Saturn (grey box: a tan planet with a ring) round its crater turn.
@@ -515,6 +537,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let saturnArt = SKNode()                   // M5 v4: Saturn, its ring and crater slide together (parallax)
         addChild(saturnArt)
         parallax.add(saturnArt, anchor: TourTableLayout.saturnCenter, height: TourTableLayout.rampTopHeight)
+        // M6 v8: the painted Saturn (banded planet, ring in front below / behind above, crater cup painted in).
+        if let art = planetSprite("tour_saturn") {
+            art.position = at
+            art.zPosition = 19.5
+            saturnArt.addChild(art)
+            return
+        }
         saturnArt.addChild(ring)
         let planet = SKShapeNode(circleOfRadius: TourTableLayout.saturnRadius)
         planet.position = at
@@ -529,6 +558,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         label.position = CGPoint(x: 6, y: -24)
         planet.addChild(label)
         let (c, _) = ramp.path.sample(at: TourTableLayout.saturnApexDistance + TourTableLayout.rampMadeAfterApex)
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-tourDumpWalls") { print("TOURCRATER saturn \(c.x),\(c.y)") }
+        #endif
         let crater = SKShapeNode(circleOfRadius: 13)
         crater.position = CGPoint(x: c.x, y: c.y + lift)
         crater.fillColor = SKColor(white: 0.18, alpha: 0.9)
@@ -1358,7 +1390,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v7c")
+        let label = SKLabelNode(text: "T6 M6 v8")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1404,7 +1436,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v7c \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v8 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

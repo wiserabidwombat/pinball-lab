@@ -4,6 +4,9 @@
 // raised parts and lag the floor — it reads as depth. An SKCropNode (proven under the SKRenderer host: Monsoon's live
 // storm) keeps them inside the round hole; a chrome rim, an inner shadow and a glare on the glass sit over it.
 // Grey-box test: Jupiter, drawn here in Core Graphics; the planet changes with every mode in the rules milestone.
+// M6 v11: the Grand Tour's eight painted planets (tools/tour_paint_window.py: tour_window_<name>, the window's full
+// circle at 6 px/pt), shown one at a time; `show(_:)` flies to the next stop (the old planet falls away, the new one
+// comes up out of the deep), with its name on a little plate at the bottom of the glass.
 import SpriteKit
 import UIKit
 
@@ -14,6 +17,12 @@ final class TourPlanetWindow: SKNode {
     let planetLayer = SKNode()
     let center: CGPoint
     let radius: CGFloat
+    /// M6 v11: the tour's stops, in order: out from Earth to Neptune, then round the inner planets home.
+    static let stops = ["earth", "mars", "jupiter", "saturn", "uranus", "neptune", "mercury", "venus"]
+    private var textures: [SKTexture] = []
+    private var planet: SKSpriteNode?
+    private let namePlate = SKLabelNode()
+    private(set) var stop = 0
 
     init(center: CGPoint, radius: CGFloat) {
         self.center = center
@@ -45,11 +54,21 @@ final class TourPlanetWindow: SKNode {
 
         planetLayer.zPosition = 0.02
         crop.addChild(planetLayer)
-        let pr = (radius * 0.52).rounded()
-        let planet = SKSpriteNode(texture: SKTexture(image: Self.jupiterImage(radius: pr)))
-        planet.size = CGSize(width: pr * 2, height: pr * 2)
-        planet.position = center
-        planetLayer.addChild(planet)
+        textures = Self.stops.compactMap { UIImage(named: "tour_window_" + $0).map { SKTexture(image: $0) } }
+        if textures.count == Self.stops.count {
+            SKTexture.preload(textures) { }
+            let p = SKSpriteNode(texture: textures[0], size: CGSize(width: radius * 2, height: radius * 2))
+            p.position = center
+            planetLayer.addChild(p)
+            planet = p
+        } else {
+            textures = []
+            let pr = (radius * 0.52).rounded()
+            let p = SKSpriteNode(texture: SKTexture(image: Self.jupiterImage(radius: pr)))
+            p.size = CGSize(width: pr * 2, height: pr * 2)
+            p.position = center
+            planetLayer.addChild(p)
+        }
 
         // The glass: a soft inner shadow round the edge, the chrome rim, a glare up-left.
         let shade = SKShapeNode(circleOfRadius: radius - 3)
@@ -82,6 +101,48 @@ final class TourPlanetWindow: SKNode {
         glare.lineCap = .round
         glare.zPosition = 0.3
         addChild(glare)
+
+        if !textures.isEmpty {
+            namePlate.fontName = "AvenirNext-DemiBold"
+            namePlate.fontSize = 6.5
+            namePlate.fontColor = SKColor(red: 0.80, green: 0.90, blue: 1.0, alpha: 0.85)
+            namePlate.verticalAlignmentMode = .center
+            namePlate.position = CGPoint(x: center.x, y: center.y - radius + 8)
+            namePlate.zPosition = 0.35
+            namePlate.text = Self.plateName(0)
+            addChild(namePlate)
+        }
+    }
+
+    private static func plateName(_ i: Int) -> String {
+        stops[i].uppercased().map(String.init).joined(separator: "\u{2009}")          // thin-spaced capitals
+    }
+
+    /// Flies to stop `i` (wrapping): the planet in view shrinks away into the deep as the next one rises to the glass.
+    func show(_ i: Int, animated: Bool = true) {
+        guard !textures.isEmpty else { return }
+        stop = ((i % textures.count) + textures.count) % textures.count
+        namePlate.text = Self.plateName(stop)
+        guard animated, let old = planet else {
+            planet?.texture = textures[stop]
+            return
+        }
+        old.removeAllActions()
+        let leave = SKAction.group([.scale(to: 0.25, duration: 0.35), .fadeOut(withDuration: 0.35)])
+        leave.timingMode = .easeIn
+        old.run(.sequence([leave, .removeFromParent()]))
+        let next = SKSpriteNode(texture: textures[stop], size: CGSize(width: radius * 2, height: radius * 2))
+        next.position = center
+        next.setScale(1.8)
+        next.alpha = 0
+        planetLayer.addChild(next)
+        let arrive = SKAction.group([.scale(to: 1, duration: 0.55), .fadeIn(withDuration: 0.3)])
+        arrive.timingMode = .easeOut
+        next.run(.sequence([.wait(forDuration: 0.15), arrive]))
+        planet = next
+        namePlate.removeAllActions()
+        namePlate.alpha = 0
+        namePlate.run(.sequence([.wait(forDuration: 0.4), .fadeIn(withDuration: 0.3)]))
     }
 
     required init?(coder aDecoder: NSCoder) {

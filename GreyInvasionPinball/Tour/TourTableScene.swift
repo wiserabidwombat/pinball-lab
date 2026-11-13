@@ -408,6 +408,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         default: break
         }
         applyLightingMode()
+        if ProcessInfo.processInfo.arguments.contains("-tourPlanets") {     // M6 v11: flip through the window's stops
+            run(.sequence([.wait(forDuration: 2), .repeatForever(.sequence([
+                .run { [weak self] in self?.nextTourStop() }, .wait(forDuration: 2.5)]))]))
+        }
         if ProcessInfo.processInfo.arguments.contains("-tourLiftoff") {     // M6 v7c: watch the liftoff show
             run(.sequence([.wait(forDuration: 3), .repeatForever(.sequence([
                 .run { [weak self] in self?.playLiftoff() }, .wait(forDuration: 9)]))]))
@@ -687,11 +691,19 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M6 v3: the lower hardware is baked into the art (the slings then draw only their kick flash).
     private var hasLowerArt = false
     private var greyFloor: SKShapeNode?
+    /// M6 v11: the window's planet is the tour's current stop; a finished R-O-C-K-E-T or a made ramp flies to the next.
+    private var planetWindow: TourPlanetWindow?
+
+    private func nextTourStop() {
+        guard let w = planetWindow else { return }
+        w.show(w.stop + 1)
+    }
 
     /// M5 v5: the planet window (TourPlanetWindow): stars and a planet deep under the glass, each its own parallax layer.
     private func addPlanetWindow() {
         let w = TourPlanetWindow(center: TourTableLayout.planetWindowCenter, radius: TourTableLayout.planetWindowRadius)
         addChild(w)
+        planetWindow = w
         parallax.add(w.deepLayer, anchor: w.center, height: TourTableLayout.planetWindowStarDepth)
         parallax.add(w.planetLayer, anchor: w.center, height: TourTableLayout.planetWindowPlanetDepth)
     }
@@ -1167,6 +1179,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         game.add(TourPoints.rocketLetter)
         guard rocketStandups.allSatisfy({ $0.isLit }) else { return }
         game.add(TourPoints.rocketComplete)
+        nextTourStop()
         bigHaptic.impactOccurred()
         showBanner(TourTableLayout.rocketLabels.prefix(rocketStandups.count).joined(separator: "-"))
         rocketClearAt = gameTime + 1.0
@@ -1331,6 +1344,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         hitHaptic.impactOccurred()
         sfx(.ramp)
         showBanner(saturn ? "SATURN" : "MOON")
+        nextTourStop()
         ball.holdReleaseHeading = saturn ? TourTableLayout.saturnReleaseHeading : TourTableLayout.moonReleaseHeading
         ball.holdReleaseSpeed = saturn ? TourTableLayout.saturnReleaseSpeed : TourTableLayout.moonReleaseSpeed
         ball.moonReleaseAt = tableNow + TourTableLayout.moonHold
@@ -1418,7 +1432,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v10b")
+        let label = SKLabelNode(text: "T6 M6 v11b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1464,7 +1478,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v10b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v11b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1518,6 +1532,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var isBallOnPlunger: Bool { plungerBall != nil }
 
     func newGame() {
+        planetWindow?.show(0, animated: false)             // M6 v11: every game's tour starts at Earth
         fpsLow = 0
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }

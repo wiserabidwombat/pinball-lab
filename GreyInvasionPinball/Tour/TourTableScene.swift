@@ -351,7 +351,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
         showCountdown()
         for (i, c) in TourTableLayout.sampleCenters.enumerated() {
             let t = TourDropTarget(at: c, normal: TourTableLayout.sampleNormal, label: "\(i + 1)",
-                                   color: SKColor(red: 0.90, green: 0.42, blue: 0.29, alpha: 1), art: "tour_drop_sample")
+                                   color: SKColor(red: 0.90, green: 0.42, blue: 0.29, alpha: 1), art: "tour_drop_sample",
+                                   glow: SKColor(red: 1.0, green: 0.55, blue: 0.25, alpha: 1))
             addChild(t)
             sampleBank.append(t)
         }
@@ -1417,7 +1418,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M6 v9")
+        let label = SKLabelNode(text: "T6 M6 v10b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1463,7 +1464,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M6 v9 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M6 v10b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

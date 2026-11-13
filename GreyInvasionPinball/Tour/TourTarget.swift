@@ -30,7 +30,7 @@ private func makeArt(_ name: String) -> SKSpriteNode? {
 }
 
 /// M6 v10 (Aaron: make the targets "look lit up when you need to hit them so they pop more"): a soft additive glow
-/// spilling onto the floor round a target's face, turned with the plate. Pulses while the target is wanted.
+/// spilling onto the floor round a target's face, turned with the plate. Shown, steady, while the target is wanted.
 private func makeHalo(width: CGFloat, normal: CGFloat, color: SKColor) -> SKSpriteNode {
     let halo = SKSpriteNode(texture: haloTexture, size: CGSize(width: width + 26, height: 30))
     halo.color = color
@@ -58,14 +58,6 @@ private let haloTexture: SKTexture = {
     }
     return SKTexture(image: image)
 }()
-
-/// The wanted target's pulse: the glow breathes and the label brightens with it.
-private func wantedPulse() -> SKAction {
-    let up = SKAction.fadeAlpha(to: 1.0, duration: 0.32)
-    let down = SKAction.fadeAlpha(to: 0.35, duration: 0.32)
-    up.timingMode = .easeInEaseOut; down.timingMode = .easeInEaseOut
-    return .repeatForever(.sequence([up, down]))
-}
 
 private func makeLabel(_ text: String, normal: CGFloat) -> SKLabelNode {
     let label = SKLabelNode(text: text)
@@ -158,10 +150,8 @@ final class TourDropTarget: SKNode {
             halo.removeAllActions()
             label.removeAllActions()
             if up {
-                halo.alpha = 1
-                halo.run(wantedPulse())
+                halo.alpha = 0.85                     // v10c (Aaron): a steady glow, no pulse
                 label.fontColor = SKColor(red: 1.0, green: 0.86, blue: 0.62, alpha: 1)
-                label.run(wantedPulse())
             } else {
                 halo.alpha = 0
                 label.fontColor = SKColor(white: 1, alpha: 0.9)
@@ -179,8 +169,8 @@ final class TourStandup: SKNode {
     private let art: SKSpriteNode?
     private let offTexture: SKTexture?
     private let litTexture: SKTexture?
-    /// M6 v10: a letter still to collect is WANTED: its face blinks lit/off, a cyan glow pulses on the floor and its
-    /// letter brightens with it. Collected (isLit): v10b — dark (the off face dimmed, no glow, a faint letter), so only the
+    /// M6 v10: a letter still to collect is WANTED: its face lit, a steady cyan glow on the floor and a bright letter
+    /// (v10c: no blink or pulse). Collected (isLit): v10b — dark (the off face dimmed, no glow, a faint letter), so only the
     /// letters still to hit look hittable.
     private let halo: SKSpriteNode
     private let label: SKLabelNode
@@ -243,16 +233,11 @@ final class TourStandup: SKNode {
             label.fontColor = SKColor(white: 1, alpha: 0.9)
         } else {
             art?.alpha = 1
-            halo.alpha = 1
-            halo.run(wantedPulse())
+            // v10c (Aaron: the flashing was "too much"): wanted = lit face and a steady glow, no blink or pulse
+            halo.alpha = 0.85
+            label.alpha = 1
             label.fontColor = SKColor(red: 0.62, green: 0.92, blue: 1.0, alpha: 1)
-            label.run(wantedPulse())
-            if let art, let litTexture, let offTexture {
-                art.texture = litTexture
-                art.run(.repeatForever(.sequence([.setTexture(litTexture), .wait(forDuration: 0.32),
-                                                  .setTexture(offTexture), .wait(forDuration: 0.32)])),
-                        withKey: "blink")
-            }
+            if let art, let litTexture { art.texture = litTexture }
         }
     }
 

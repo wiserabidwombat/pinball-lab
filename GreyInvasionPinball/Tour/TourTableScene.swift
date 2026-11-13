@@ -148,6 +148,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             if isAttractMode { stopPlayLab(saving: true) }      // and the Play Lab (saving the games so far)
             #endif
             refreshCamera()
+            if isAttractMode { startAttractShow() } else { stopAttractShow() }   // M7 v5
         }
     }
 
@@ -195,6 +196,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addBuildTag()
         placeBallOnPlunger()
         refreshCamera()
+        if isAttractMode { startAttractShow() }           // M7 v5: the menu was up before the table was built
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -718,6 +720,78 @@ final class TourTableScene: SKScene, RendererHostedScene {
         guard let w = planetWindow else { return }
         w.show(w.stop + 1)
         updatePlanetArc()
+    }
+
+    // MARK: - M7 v5: attract mode — the lamp show while the menu is up
+
+    private let attractDriver = SKNode()
+    private static let attractCycle: TimeInterval = 15
+
+    /// Every lamp on the table, for the show.
+    private var allLamps: [TourLamp] {
+        var l: [TourLamp] = countdownLampNodes + rollovers.compactMap(\.lamp) + starLanes.compactMap(\.lamp)
+        if let k = kickbackLamp { l.append(k) }
+        l += Array(planetLamps.values) + Array(arrowLamps.values) + stackLamps.values.flatMap { $0 }
+        return l
+    }
+
+    /// Five patterns, three seconds each, then round again: a sweep up the table, a sweep across, rings rippling out
+    /// from the planet window, everything flashing, and a twinkle. The flashers pop as each pattern starts.
+    private func startAttractShow() {
+        let lamps = allLamps
+        guard !lamps.isEmpty else { return }
+        if attractDriver.parent == nil { addChild(attractDriver) }
+        attractDriver.removeAllActions()
+        let window = TourTableLayout.planetWindowCenter
+        let ys = lamps.map(\.position.y), xs = lamps.map(\.position.x)
+        let (y0, y1) = (ys.min() ?? 0, ys.max() ?? 1), (x0, x1) = (xs.min() ?? 0, xs.max() ?? 1)
+        let rMax = lamps.map { hypot($0.position.x - window.x, $0.position.y - window.y) }.max() ?? 1
+        let seeds = lamps.map { _ in Double.random(in: 0..<1) }
+        var lastPattern = -1
+        let cycle = Self.attractCycle
+        attractDriver.run(.repeatForever(.customAction(withDuration: cycle) { [weak self] _, elapsed in
+            guard let self else { return }
+            let t = Double(elapsed)
+            let pattern = min(Int(t / 3), 4)
+            let f = (t - Double(pattern) * 3) / 3                   // 0…1 through the pattern
+            if pattern != lastPattern {
+                lastPattern = pattern
+                self.flashers.flash(["rocket", "moon", "saturn", "left", "right"][pattern], times: 2)
+            }
+            for (i, lamp) in lamps.enumerated() {
+                let p = lamp.position
+                let on: Bool
+                switch pattern {
+                case 0:   // a band sweeping up the table, twice
+                    let band = (f * 2).truncatingRemainder(dividingBy: 1)
+                    on = abs((p.y - y0) / (y1 - y0) - band) < 0.12
+                case 1:   // across, left to right and back
+                    let band = f < 0.5 ? f * 2 : 2 - f * 2
+                    on = abs((p.x - x0) / (x1 - x0) - band) < 0.14
+                case 2:   // rings out of the planet window
+                    let d = hypot(p.x - window.x, p.y - window.y) / rMax
+                    on = abs((d - f * 3).truncatingRemainder(dividingBy: 1)) < 0.18
+                case 3:   // everything, flashing
+                    on = Int(f * 12) % 2 == 0
+                default:  // twinkle
+                    on = (f * 7 + seeds[i]).truncatingRemainder(dividingBy: 1) < 0.3
+                }
+                lamp.set(on ? .on : .off)
+            }
+        }))
+    }
+
+    /// Back to the game: every lamp shows its real state again.
+    private func stopAttractShow() {
+        attractDriver.removeAllActions()
+        guard !allLamps.isEmpty else { return }
+        showCountdown()
+        for lane in rollovers + starLanes { lane.lamp?.isOn = lane.isLit }
+        kickbackLamp?.isOn = kickbackLit
+        planetLamps.values.forEach { $0.set(.off) }
+        updatePlanetArc()
+        arrowLamps.values.forEach { $0.set(.off) }
+        updateShotArrows()
     }
 
     // MARK: - M7 v1: the lamp inserts
@@ -1579,7 +1653,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M7 v4")
+        let label = SKLabelNode(text: "T6 M7 v5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1625,7 +1699,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M7 v4 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M7 v5 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

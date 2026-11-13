@@ -70,7 +70,8 @@ struct TourTableView: View {
             // `-shotlab grandtour [-shotlab-flippers left,right] [-shotlab-start inlane|drop]`: the Shot Lab sweep
             // unattended (tools/shotlab_run.sh grandtour), as on the other tables.
             // M4 v1: `-playlab grandtour` (tools/playlab_run.sh grandtour): the Play Lab unattended (quits when done).
-            if PlayLab.launchTable == "grandtour" {
+            // M7 v5: `-playlab grandtour -tourAttract` opens the table and stays on its menu (the attract show).
+            if PlayLab.launchTable == "grandtour", !ProcessInfo.processInfo.arguments.contains("-tourAttract") {
                 Task { @MainActor in
                     while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
                     try? await Task.sleep(for: .milliseconds(500))

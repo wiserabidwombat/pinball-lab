@@ -232,6 +232,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             addChild(s)
             sun = s
         }
+        addChild(flashers)
         addPlanetWindow()
         addWall(points: TourTableLayout.outerWall,
                 friction: TourTableLayout.railFriction, restitution: TourTableLayout.railRestitution)
@@ -408,6 +409,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
         default: break
         }
         applyLightingMode()
+        if ProcessInfo.processInfo.arguments.contains("-tourShots") {       // M7 v3: fill the arrow ladders
+            var k = 0
+            let order = ["moon", "saturn", "leftOrbit", "rightOrbit", "rocket"]
+            run(.sequence([.wait(forDuration: 2), .repeatForever(.sequence([.run { [weak self] in
+                self?.shotMade(order[k % order.count]); k += 1
+            }, .wait(forDuration: 0.4)]))]))
+        }
         if ProcessInfo.processInfo.arguments.contains("-tourSun") {         // M6 v12: S-T-A-R levels 0…4, a flare
             var lit = 0
             run(.sequence([.wait(forDuration: 2), .repeatForever(.sequence([.run { [weak self] in
@@ -703,6 +711,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var planetWindow: TourPlanetWindow?
     /// M6 v12: the Sun's light over the upper painting (brighter per lit S-T-A-R letter, a flare on S-T-A-R).
     private var sun: TourSun?
+    /// M7 v4: GI (a veil that drops the table dark) and flashers (bursts of coloured light) for the big moments.
+    private let flashers = TourFlashers()
 
     private func nextTourStop() {
         guard let w = planetWindow else { return }
@@ -789,13 +799,33 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
     }
 
-    /// Stand-in until the rules milestone: the rocket arrow blinks (the countdown is always on), the two ramps are lit.
+    /// M7 v3: how often each shot has been made this game (moon, saturn, leftOrbit, rightOrbit; rocket = Mission
+    /// Control entries). Drives the shot arrows and their three-lamp ladders.
+    private var shotCounts: [String: Int] = [:]
+    /// Ladder steps: the gold, red and blue lamps behind an arrow light at this many makes.
+    private static let ladder = [1, 3, 5]
+
+    private func shotMade(_ name: String) {
+        shotCounts[name, default: 0] += 1
+        updateShotArrows()
+    }
+
+    /// M7 v3 (stand-in until the rules milestone, but every lamp tells the truth):
+    /// - each arrow's ladder fills as its shot is made this game: gold at 1, red at 3, blue at 5;
+    /// - an arrow stays lit while its ladder still has a lamp to collect, and goes dark once it's full;
+    /// - the rocket arrow blinks while the blast door is up (bash it: the countdown) and blinks FAST once it's down
+    ///   (Mission Control is open — shoot the scoop).
     private func updateShotArrows() {
-        arrowLamps["rocket"]?.set(.blink)
-        arrowLamps["moon"]?.set(.on)
-        arrowLamps["saturn"]?.set(.on)
-        arrowLamps["leftOrbit"]?.set(.off)
-        arrowLamps["rightOrbit"]?.set(.off)
+        guard !arrowLamps.isEmpty else { return }
+        for (name, lamp) in arrowLamps {
+            let made = shotCounts[name] ?? 0
+            for (k, l) in (stackLamps[name] ?? []).enumerated() { l.isOn = made >= Self.ladder[k] }
+            if name == "rocket" {
+                lamp.set(blastDoor.isDown ? .blinkFast : .blink)
+            } else {
+                lamp.set(made >= Self.ladder[Self.ladder.count - 1] ? .off : .on)
+            }
+        }
     }
 
     /// M5 v5: the planet window (TourPlanetWindow): stars and a planet deep under the glass, each its own parallax layer.
@@ -1070,6 +1100,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         sfx(.lanesComplete)
         starResetAt = now + 0.6
         showBanner("S-T-A-R")
+        flashers.giOut(for: 0.5, depth: 0.4)
     }
 
     /// Lane change: each new flipper press shifts the lit lanes that way.
@@ -1111,11 +1142,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 game.add(TourPoints.samplesComplete)
                 bigHaptic.impactOccurred()
                 showBanner("SAMPLES COLLECTED · ROVER OPEN")
+                flashers.flash("right", times: 3)
             }
         }
         if let due = countdownResetAt, now >= due {
             countdownResetAt = nil
             blastDoor.raise()
+            updateShotArrows()
             countdownLeft = TourTableLayout.countdownHits
             showCountdown()
         }
@@ -1148,13 +1181,21 @@ final class TourTableScene: SKScene, RendererHostedScene {
         game.add(TourPoints.countdownComplete)
         bigHaptic.impactOccurred()
         showBanner("LIFTOFF · MISSION CONTROL OPEN")
+        flashers.giOut(for: 2.6)                           // the table goes dark for the launch
+        flashers.flash("rocket", times: 10, gap: 0.22)
         blastDoor.drop()
+        updateShotArrows()
         playLiftoff()
     }
 
     /// The liftoff show: sparks, flame, smoke and the climb (M6 v7–v7c). DEBUG: `-tourLiftoff` plays it 3 s after
     /// the table builds, and every 9 s after that.
     private func playLiftoff() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-tourLiftoff") {
+            flashers.giOut(for: 2.6); flashers.flash("rocket", times: 10, gap: 0.22)
+        }
+        #endif
         Effects.burst(in: self, at: TourTableLayout.rocketToy, color: SKColor(red: 1, green: 0.6, blue: 0.2, alpha: 1),
                       count: 30, speed: 260, lifetime: 0.7)
         rocketToy.removeAllActions()
@@ -1280,6 +1321,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
         nextTourStop()
         bigHaptic.impactOccurred()
         showBanner(TourTableLayout.rocketLabels.prefix(rocketStandups.count).joined(separator: "-"))
+        flashers.giOut(for: 1.0)
+        flashers.flashAll(times: 3)
         rocketClearAt = gameTime + 1.0
     }
 
@@ -1331,8 +1374,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
             labEvent(scoop === missionScoop ? "missionControl" : "rover")
             if scoop === missionScoop {
+                shotMade("rocket")
                 game.add(TourPoints.missionControl)
                 showBanner("MISSION CONTROL")
+                flashers.flash("rocket", times: 3)
             } else if roverLit {
                 roverLit = false
                 game.add(TourPoints.roverHome)
@@ -1442,7 +1487,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         hitHaptic.impactOccurred()
         sfx(.ramp)
         showBanner(saturn ? "SATURN" : "MOON")
+        flashers.flash(saturn ? "saturn" : "moon", times: 2)
         nextTourStop()
+        shotMade(saturn ? "saturn" : "moon")
         ball.holdReleaseHeading = saturn ? TourTableLayout.saturnReleaseHeading : TourTableLayout.moonReleaseHeading
         ball.holdReleaseSpeed = saturn ? TourTableLayout.saturnReleaseSpeed : TourTableLayout.moonReleaseSpeed
         ball.moonReleaseAt = tableNow + TourTableLayout.moonHold
@@ -1470,6 +1517,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func orbitMade(_ event: String, banner: String) {
         labEvent(event)
+        shotMade(event)
         game.add(TourPoints.orbit)
         hitHaptic.impactOccurred(intensity: 0.7)
         sfx(.orbit)
@@ -1515,6 +1563,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 cameraRig.shake(strength: 3, duration: 0.25)
                 sfx(.kickback)
                 showBanner("KICKBACK")
+                flashers.flash("left", times: 2)
                 return
             }
         }
@@ -1530,7 +1579,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M7 v2")
+        let label = SKLabelNode(text: "T6 M7 v4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1576,7 +1625,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M7 v2 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M7 v4 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1632,6 +1681,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
     func newGame() {
         planetWindow?.show(0, animated: false)             // M6 v11: every game's tour starts at Earth
         updatePlanetArc()
+        shotCounts.removeAll()                             // M7 v3: the ladders start empty
+        updateShotArrows()
         fpsLow = 0
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
@@ -1652,6 +1703,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         setKickbackLit(true)
         pendingDrops.removeAll()
         blastDoor.raise()
+        updateShotArrows()
         countdownLeft = TourTableLayout.countdownHits
         showCountdown()
         lastRocketHit = -1

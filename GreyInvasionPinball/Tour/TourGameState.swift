@@ -32,6 +32,9 @@ enum TourPoints {
     static let bumper = 100
     static let moon = 7_500
     static let saturn = 7_500
+    // M8 v1: the tour (first guesses; tuned in the balance round)
+    static let modeShot = 10_000
+    static let modeComplete = 100_000     // × the tour number
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

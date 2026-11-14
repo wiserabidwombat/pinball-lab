@@ -17,8 +17,8 @@ final class TourPlanetWindow: SKNode {
     let planetLayer = SKNode()
     let center: CGPoint
     let radius: CGFloat
-    /// M6 v11: the tour's stops, in order: out from Earth to Neptune, then round the inner planets home.
-    static let stops = ["earth", "mars", "jupiter", "saturn", "uranus", "neptune", "mercury", "venus"]
+    /// M6 v11: the tour's stops. M8 v1: Earth (home), then the ring's order: Mercury out to Neptune, then the Sun.
+    static let stops = ["earth", "mercury", "venus", "mars", "moon", "jupiter", "saturn", "uranus", "neptune", "sun"]
     private var textures: [SKTexture] = []
     private var planet: SKSpriteNode?
     private let namePlate = SKLabelNode()
@@ -116,6 +116,11 @@ final class TourPlanetWindow: SKNode {
 
     private static func plateName(_ i: Int) -> String {
         stops[i].uppercased().map(String.init).joined(separator: "\u{2009}")          // thin-spaced capitals
+    }
+
+    /// M8 v1: flies to the named stop.
+    func show(planet: String, animated: Bool = true) {
+        if let i = Self.stops.firstIndex(of: planet) { show(i, animated: animated) }
     }
 
     /// Flies to stop `i` (wrapping): the planet in view shrinks away into the deep as the next one rises to the glass.

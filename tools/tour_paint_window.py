@@ -253,8 +253,47 @@ def neptune():
     compose('neptune', R, alb, n, inside, soft, shade, air=((0.5, 0.7, 1.0), 0.06, 0.6))
 
 
+def moon():
+    """M8 v1: Earth's Moon: grey highlands, dark maria, bright young craters."""
+    R = 19
+    n, p, lat, lon, inside, soft = sphere(R, tilt=0.15, spin=math.radians(20))
+    h = craters(p, 220, 7, 0.03, 0.26)
+    gy, gx = np.gradient(h)
+    nn = n + np.dstack([-gx, gy, np.zeros_like(gx)]) * 0.7
+    nn /= np.linalg.norm(nn, axis=2, keepdims=True)
+    mare = np.clip((noise3(p, 0.7, 2) * 0.7 + noise3(p, 1.4, 1) * 0.3 - 0.15) * 2.2, 0, 1)
+    g = 0.70 - 0.36 * mare + 0.04 * noise3(p, 3.0, 0) - 0.04 * np.clip(-h, 0, 1)
+    alb = g[..., None] * np.array([0.97, 0.97, 1.0])
+    compose('moon', R, alb, n, inside, soft, light(nn, 0.02, 0.0))
+
+
+def sun():
+    """M8 v1: the Sun, the tour's last stop: a hot disc with granulation and limb darkening, a corona round it."""
+    R = 30
+    n, p, lat, lon, inside, soft = sphere(R, tilt=0.2)
+    mu = n[..., 2]
+    gran = 1 + 0.10 * noise3(p, 3.5, 0) + 0.06 * noise3(p, 1.5, 1)
+    spots = np.clip(noise3(p, 1.1, 1) - 1.9, 0, 1)
+    limb = 0.40 + 0.60 * mu ** 0.7
+    t = np.clip(limb * gran, 0, 1.2)[..., None]
+    deep = np.array([0.85, 0.30, 0.05]); mid = np.array([1.0, 0.66, 0.20]); hot = np.array([1.0, 0.95, 0.72])
+    disc = np.where(t < 0.75, deep + (mid - deep) * (t / 0.75), mid + (hot - mid) * np.clip((t - 0.75) / 0.4, 0, 1))
+    sp = np.clip(spots * 1.5, 0, 1)[..., None]
+    disc = np.clip(disc * (1 - sp) + np.array([0.45, 0.14, 0.02]) * sp, 0, 1)
+    rr = np.hypot(X, Y) / R
+    ang = np.arctan2(Y, X)
+    streak = 0.75 + 0.25 * np.sin(ang * 9 + 1.3) * np.sin(ang * 4 - 0.4)
+    cor = np.exp(-np.clip(rr - 0.98, 0, None) / 0.22) * streak
+    a_disc = soft * inside
+    a_cor = np.clip(cor * 0.9, 0, 1)
+    a = a_disc + a_cor * (1 - a_disc)
+    col_cor = np.array([1.0, 0.62, 0.22])
+    rgb = (disc * a_disc[..., None] + col_cor * (a_cor * (1 - a_disc))[..., None]) / np.maximum(a, 1e-6)[..., None]
+    save('sun', rgb, a)
+
+
 only = sys.argv[3] if len(sys.argv) > 3 else ''
 for name, fn in [('mercury', mercury), ('venus', venus), ('earth', earth), ('mars', mars), ('jupiter', jupiter),
-                 ('saturn', saturn), ('uranus', uranus), ('neptune', neptune)]:
+                 ('saturn', saturn), ('uranus', uranus), ('neptune', neptune), ('moon', moon), ('sun', sun)]:
     if not only or only == name:
         fn()

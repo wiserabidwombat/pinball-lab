@@ -426,6 +426,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 if lit == 4 { self?.sun?.flare() }
             }, .wait(forDuration: 1.5)]))]))
         }
+        if ProcessInfo.processInfo.arguments.contains("-tourModes") {      // M8 v1: walk the tour (start, shots)
+            run(.sequence([.wait(forDuration: 3), .repeatForever(.sequence([
+                .run { [weak self] in
+                    guard let self else { return }
+                    if let s = self.modes.active { self.shotMade(s.shots.sorted()[self.modes.made % s.shots.count]) }
+                    else { self.startNextStop() }
+                }, .wait(forDuration: 2.2)]))]))
+        }
         if ProcessInfo.processInfo.arguments.contains("-tourPlanets") {     // M6 v11: flip through the window's stops
             run(.sequence([.wait(forDuration: 2), .repeatForever(.sequence([
                 .run { [weak self] in self?.nextTourStop() }, .wait(forDuration: 2.5)]))]))
@@ -716,10 +724,93 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M7 v4: GI (a veil that drops the table dark) and flashers (bursts of coloured light) for the big moments.
     private let flashers = TourFlashers()
 
+    /// DEBUG `-tourPlanets`: steps the window through its pictures.
     private func nextTourStop() {
         guard let w = planetWindow else { return }
         w.show(w.stop + 1)
+    }
+
+    // MARK: - M8 v1: the tour loop
+
+    private let modes = TourModes()
+    /// Liftoffs this game: each one makes the next countdown one hit longer (5, 6, 7 … 9).
+    private var launches = 0
+    private var modeStatusSecond = -1
+
+    private var launchHits: Int { min(9, TourTableLayout.countdownHits + launches) }
+
+    /// Mission Control: the next stop on the tour starts.
+    private func startNextStop() {
+        guard let s = modes.start(now: gameTime) else { return }
+        planetWindow?.show(planet: s.planet)
+        showBanner("\(s.title) · \(s.need) SHOTS")
+        flashers.flash(s.planet == "moon" ? "moon" : s.planet == "saturn" ? "saturn" : "rocket", times: 4)
+        modeStatusSecond = -1
+        updateModeStatus()
         updatePlanetArc()
+        updateShotArrows()
+        showCountdown()
+    }
+
+    /// A shot was made: progress on the running stop, or its finish.
+    private func modeShot(_ name: String) {
+        switch modes.shot(name) {
+        case .none:
+            return
+        case .progress:
+            game.add(TourPoints.modeShot)
+            if let s = modes.active { showBanner("\(s.title) \(modes.made)/\(s.need)") }
+            updateModeStatus()
+        case .complete(let s):
+            game.add(TourPoints.modeComplete * modes.tourNumber)
+            bigHaptic.impactOccurred()
+            flashers.giOut(for: 1.2)
+            flashers.flashAll(times: 4)
+            if modes.finishTourIfDone() {
+                showBanner("GRAND TOUR COMPLETE · TOUR \(modes.tourNumber)")
+                planetWindow?.show(planet: "earth")
+            } else {
+                showBanner("\(s.planet.uppercased()) VISITED")
+            }
+            endModeLamps()
+        }
+    }
+
+    /// The running stop ends unvisited: its time ran out or its ball drained. It starts again at the next Mission Control.
+    private func failMode(drained: Bool) {
+        guard let s = modes.fail() else { return }
+        if !drained { showBanner("\(s.planet.uppercased()) LOST · TIME") }
+        endModeLamps()
+    }
+
+    private func endModeLamps() {
+        modeStatusSecond = -1
+        updateModeStatus()
+        updatePlanetArc()
+        updateShotArrows()
+        showCountdown()
+    }
+
+    private func updateMode(_ now: TimeInterval) {
+        guard modes.active != nil else { return }
+        if now >= modes.endsAt {
+            failMode(drained: false)
+            return
+        }
+        updateModeStatus()
+    }
+
+    /// The HUD's status line: the running stop and its clock, or where Mission Control goes next.
+    private func updateModeStatus() {
+        if let s = modes.active {
+            let left = modes.secondsLeft(now: gameTime)
+            guard left != modeStatusSecond else { return }
+            modeStatusSecond = left
+            game.status = "\(s.title) · \(modes.made)/\(s.need) · \(left)s"
+        } else {
+            let t = modes.tourNumber > 1 ? "TOUR \(modes.tourNumber) · " : ""
+            game.status = "\(t)NEXT STOP: \(modes.nextStop.planet.uppercased())"
+        }
     }
 
     // MARK: - M7 v5: attract mode — the lamp show while the menu is up
@@ -865,11 +956,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// start, has no insert — it's the big Earth on the floor.)
     private func updatePlanetArc() {
         guard !planetLamps.isEmpty else { return }
-        let stops = TourPlanetWindow.stops
-        let at = planetWindow?.stop ?? 0
+        // M8 v1: visited stops lit, the running one blinking fast, the next one (idle) blinking.
+        let running = modes.active?.planet
+        let next = modes.nextStop.planet
         for (name, lamp) in planetLamps {
-            guard let i = stops.firstIndex(of: name), i > 0, i <= at else { lamp.set(.off); continue }
-            lamp.set(i == at ? .blink : .on)
+            if name == running { lamp.set(.blinkFast) }
+            else if modes.visited.contains(name) { lamp.set(.on) }
+            else if running == nil, name == next { lamp.set(.blink) }
+            else { lamp.set(.off) }
         }
     }
 
@@ -882,6 +976,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func shotMade(_ name: String) {
         shotCounts[name, default: 0] += 1
         updateShotArrows()
+        modeShot(name)
     }
 
     /// M7 v3 (stand-in until the rules milestone, but every lamp tells the truth):
@@ -894,7 +989,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         for (name, lamp) in arrowLamps {
             let made = shotCounts[name] ?? 0
             for (k, l) in (stackLamps[name] ?? []).enumerated() { l.isOn = made >= Self.ladder[k] }
-            if name == "rocket" {
+            if modes.active != nil {                         // M8 v1: a stop is running: only its shots are lit
+                lamp.set(modes.isLit(name) ? .blink : .off)
+            } else if name == "rocket" {
                 lamp.set(blastDoor.isDown ? .blinkFast : .blink)
             } else {
                 lamp.set(made >= Self.ladder[Self.ladder.count - 1] ? .off : .on)
@@ -1223,7 +1320,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             countdownResetAt = nil
             blastDoor.raise()
             updateShotArrows()
-            countdownLeft = TourTableLayout.countdownHits
+            countdownLeft = launchHits                      // M8 v1: 5, 6, 7 … 9
             showCountdown()
         }
         if let due = sampleResetAt, now >= due {
@@ -1245,6 +1342,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
         labEvent("rocket")
         hitHaptic.impactOccurred(intensity: 0.7)
         sfx(.standup)
+        if modes.active != nil {                           // M8 v1: no countdown while a stop is running
+            game.add(TourPoints.rocketRepeat)
+            return
+        }
         countdownLeft = max(0, countdownLeft - 1)
         showCountdown()
         if countdownLeft > 0 {
@@ -1254,6 +1355,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
         game.add(TourPoints.countdownComplete)
         bigHaptic.impactOccurred()
+        launches += 1
         showBanner("LIFTOFF · MISSION CONTROL OPEN")
         flashers.giOut(for: 2.6)                           // the table goes dark for the launch
         flashers.flash("rocket", times: 10, gap: 0.22)
@@ -1372,7 +1474,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func showCountdown() {
         for (i, lamp) in countdownLampNodes.enumerated() {
-            lamp.isOn = i + 1 <= countdownLeft             // M7 v1: lamp i reads i + 1
+            lamp.isOn = modes.active == nil && i + 1 <= countdownLeft   // M7 v1: lamp i reads i + 1 (M8: dark in a mode)
         }
     }
 
@@ -1392,7 +1494,6 @@ final class TourTableScene: SKScene, RendererHostedScene {
         game.add(TourPoints.rocketLetter)
         guard rocketStandups.allSatisfy({ $0.isLit }) else { return }
         game.add(TourPoints.rocketComplete)
-        nextTourStop()
         bigHaptic.impactOccurred()
         showBanner(TourTableLayout.rocketLabels.prefix(rocketStandups.count).joined(separator: "-"))
         flashers.giOut(for: 1.0)
@@ -1452,6 +1553,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 game.add(TourPoints.missionControl)
                 showBanner("MISSION CONTROL")
                 flashers.flash("rocket", times: 3)
+                startNextStop()                            // M8 v1: the tour's next stop
             } else if roverLit {
                 roverLit = false
                 game.add(TourPoints.roverHome)
@@ -1562,7 +1664,6 @@ final class TourTableScene: SKScene, RendererHostedScene {
         sfx(.ramp)
         showBanner(saturn ? "SATURN" : "MOON")
         flashers.flash(saturn ? "saturn" : "moon", times: 2)
-        nextTourStop()
         shotMade(saturn ? "saturn" : "moon")
         ball.holdReleaseHeading = saturn ? TourTableLayout.saturnReleaseHeading : TourTableLayout.moonReleaseHeading
         ball.holdReleaseSpeed = saturn ? TourTableLayout.saturnReleaseSpeed : TourTableLayout.moonReleaseSpeed
@@ -1653,7 +1754,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M7 v5")
+        let label = SKLabelNode(text: "T6 M8 v1")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1699,7 +1800,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M7 v5 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v1 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1754,6 +1855,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     func newGame() {
         planetWindow?.show(0, animated: false)             // M6 v11: every game's tour starts at Earth
+        modes.reset()                                      // M8 v1
+        launches = 0
         updatePlanetArc()
         shotCounts.removeAll()                             // M7 v3: the ladders start empty
         updateShotArrows()
@@ -1791,6 +1894,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
         setRocketPost(up: false)
         ballSaveUsed = false
         game.reset()
+        modeStatusSecond = -1
+        updateModeStatus()
         placeBallOnPlunger()
         refreshCamera()
     }
@@ -2016,6 +2121,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         updateScoops(now)
         updateSpinners(dt, now)
         updateMoonHolds(now)
+        updateMode(now)
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil
@@ -2047,6 +2153,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                     ballSaveUsed = false             // the next ball gets its own save
                     cameraRig.shake(strength: 4, duration: 0.3)
                     sfx(.drain)
+                    failMode(drained: true)          // M8 v1: a drained stop restarts at the next Mission Control
                     game.ballDrained()
                     if !game.isGameOver {
                         nextBallAt = now + 1.0

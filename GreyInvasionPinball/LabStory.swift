@@ -100,6 +100,18 @@ extension LabTable {
                 LabStat(label: "Code", value: "Milestone 1 of 10"),
                 LabStat(label: "Testing", value: "Shot Lab and Play Lab once the shots are in"),
             ]
+        case .chomp:
+            // T7 M1: a grey box so far.
+            return [
+                LabStat(label: "Table size", value: "600 × 1300 points, with a boat deck upstairs to come"),
+                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down"),
+                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones"),
+                LabStat(label: "Goal", value: "Save the tourists, hunt four rival sharks, then get Kevin to say cheese"),
+                LabStat(label: "Art", value: "Coming later: a sunny beach-postcard look"),
+                LabStat(label: "Sounds", value: "Monsoon's for now; its own come later"),
+                LabStat(label: "Code", value: "Milestone 1 of 11"),
+                LabStat(label: "Testing", value: "Shot Lab and Play Lab once the shots are in"),
+            ]
         }
     }
 
@@ -158,6 +170,13 @@ extension LabTable {
                 LabNote(title: "A rocket post", detail: "Spell ORBT and a post pops up between the flippers to save one ball."),
                 LabNote(title: "A kickback", detail: "The left outlane fires a draining ball back into play, once every ball."),
             ]
+        case .chomp:
+            return [
+                LabNote(title: "A fourth flipper", detail: "A small pier flipper on the right wall, on the right button, shoots back across the table."),
+                LabNote(title: "Up-posts", detail: "Posts pop up in the inlanes to hold the ball while a mode starts."),
+                LabNote(title: "An action button", detail: "Press it just before a ball drains down the left outlane and the inner tube saves it."),
+                LabNote(title: "A one-way gate", detail: "The right outlane has a post and a gate that can turn a draining ball back into the inlane."),
+            ]
         }
     }
 
@@ -204,6 +223,10 @@ extension LabTable {
         case .grandTour:
             return [
                 LabNote(title: "Start from what works", detail: "The walls, flippers and slings are the proven ones from Monsoon, so the new work goes into what sits around them."),
+            ]
+        case .chomp:
+            return [
+                LabNote(title: "Borrow the rules, make the rest", detail: "A parody keeps a classic table's rules and layout and changes everything you see and hear."),
             ]
         }
     }

@@ -6,7 +6,7 @@ import Foundation
 /// tables evolve as we get better at making them. The home screen lists the tables; tapping one plays it,
 /// and each table's own menu has a "Tables" button back here.
 enum LabTable: String, CaseIterable, Identifiable {
-    case orbit, greyInvasion, cthulhu, monsoon, lamplight, grandTour
+    case orbit, greyInvasion, cthulhu, monsoon, lamplight, grandTour, chomp
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .monsoon: return 4
         case .lamplight: return 5
         case .grandTour: return 6
+        case .chomp: return 7
         }
     }
 
@@ -29,6 +30,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .monsoon: return "Monsoon"
         case .lamplight: return "The Lamplight"
         case .grandTour: return "Orbit: Grand Tour"
+        case .chomp: return "CHOMP!"
         }
     }
 
@@ -40,6 +42,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .monsoon: return "Oct 2026 · table four"
         case .lamplight: return "Oct 2026 · table five"
         case .grandTour: return "Nov 2026 · table six"
+        case .chomp: return "Nov 2026 · table seven"
         }
     }
 
@@ -57,6 +60,8 @@ enum LabTable: String, CaseIterable, Identifiable {
             return "A cozy bookshop-café on a rainy evening. Nothing to beat: every game fills the shelves, furnishes the shop and brings back the regulars."
         case .grandTour:
             return "Orbit grown up: a rocket tour of the planets on a table packed with targets and lamps. Being built now, one milestone at a time."
+        case .chomp:
+            return "A shark with an ego terrorizes Calamity Island, and the mayor won't close the beach. A summer-movie spoof, being built now."
         }
     }
 
@@ -69,6 +74,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .monsoon: return ["Color as progress", "Habitrails", "Captive ball", "Dust devil", "Watercolor"]
         case .lamplight: return ["Cozy", "Collections", "The loft", "A cat", "Seasons"]
         case .grandTour: return ["Rocket post", "Kickback", "Lane change", "In progress"]
+        case .chomp: return ["Four flippers", "Up-posts", "Action button", "In progress"]
         }
     }
 
@@ -80,6 +86,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .monsoon: return Color(red: 0.96, green: 0.78, blue: 0.45)
         case .lamplight: return Color(red: 1.0, green: 0.74, blue: 0.40)
         case .grandTour: return Color(red: 1.0, green: 0.70, blue: 0.32)
+        case .chomp: return Color(red: 1.0, green: 0.82, blue: 0.30)
         }
     }
 
@@ -92,6 +99,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .monsoon: return "mon_lab_thumb"       // the finished table, half pencil, half watercolor (tools/mon_lab_thumb_table.py)
         case .lamplight: return "lmp_lab_thumb"     // the shop on a festival evening (tools/lmp_howto.py)
         case .grandTour: return nil                 // art comes in milestone 2
+        case .chomp: return nil                     // grey box until the art milestone
         }
     }
 
@@ -112,6 +120,7 @@ struct PinballLabRoot: View {
         case "monsoon": return .monsoon
         case "orbit": return .orbit
         case "grandtour": return .grandTour          // Table 06 (its view starts the Shot Lab on -shotlab grandtour)
+        case "chomp": return .chomp                  // Table 07 (opens the table; no labs yet)
         default: return nil
         }
         #else
@@ -134,6 +143,8 @@ struct PinballLabRoot: View {
                 LmpTableView(onExit: { playing = nil })
             case .some(.grandTour):
                 TourTableView(onExit: { playing = nil })
+            case .some(.chomp):
+                ChompTableView(onExit: { playing = nil })
             case .none:
                 LabHomeView { table in playing = table }
             }

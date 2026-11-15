@@ -31,17 +31,22 @@ final class ChompFlipper: SKNode {
     /// frame's length.
     private var raisedAtStep: CGFloat = 0
     private var stepDt: CGFloat = 1.0 / 120
+    /// T7 M2 v2: per-flipper rest angle and travel (the pier flipper hangs at 69° and swings 84°).
+    private let travel: CGFloat
 
     init(side: Side, pivot: CGPoint,
          length: CGFloat = ChompTableLayout.flipperLength,
          pivotRadius: CGFloat = ChompTableLayout.flipperPivotRadius,
-         tipRadius: CGFloat = ChompTableLayout.flipperTipRadius) {
+         tipRadius: CGFloat = ChompTableLayout.flipperTipRadius,
+         restAngle: CGFloat = ChompTableLayout.flipperRestAngle,
+         travel: CGFloat = ChompTableLayout.flipperTravel) {
         self.side = side
+        self.travel = travel
         self.length = length
         self.pivotRadius = pivotRadius
         self.tipRadius = tipRadius
         raiseSign = side == .left ? 1 : -1
-        restRotation = -raiseSign * ChompTableLayout.flipperRestAngle
+        restRotation = -raiseSign * restAngle
         super.init()
         position = pivot
         zRotation = restRotation   // start in the rest pose
@@ -68,7 +73,6 @@ final class ChompFlipper: SKNode {
     /// capped at the up/down speeds, slowing just enough to stop exactly on target.
     func step(dt: CGFloat) {
         guard let body = physicsBody, dt > 0 else { return }
-        let travel = ChompTableLayout.flipperTravel
 
         // Safety net: if anything ever knocks it outside its range, put it back.
         let slack: CGFloat = 0.05

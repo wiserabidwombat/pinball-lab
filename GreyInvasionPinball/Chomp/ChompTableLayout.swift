@@ -19,7 +19,10 @@ enum ChompTableLayout {
 
     // MARK: Physics
     static let gravity: CGFloat = -9.2
-    static let ballRadius: CGFloat = 9
+    /// M2 v4 (Aaron: "Let's scale the ball up."): real scale. The table is traced from the Jaws Pro drawing at ~28.9 pt
+    /// per inch (the real playfield ~585 pt / 20.25"), so the real 1-1/16" ball is ~30 pt: radius 15 (was 9, every
+    /// earlier table's). The real flipper (pivot to tip, ~59 px × 1.355 on p. 40) is ~80 pt (was 96).
+    static let ballRadius: CGFloat = 15
     static let ballMass: CGFloat = 0.08
     static let ballRestitution: CGFloat = 0.1
     /// Table 06 M2's real-table flippers need the higher cap (35 rad/s × 96 = 3,360 pt/s at the tip).
@@ -46,7 +49,7 @@ enum ChompTableLayout {
 
     // MARK: Walls
     static let leftWallX: CGFloat = 20
-    static let rightWallX: CGFloat = 580
+    static let rightWallX: CGFloat = 584      // M2 v4: shooter lane 548–584, 36 wide for the 30 pt ball (was 32)
     static let laneWallX: CGFloat = 548
     static let laneFloorY: CGFloat = 40
     static let archStartY: CGFloat = 1000
@@ -66,7 +69,7 @@ enum ChompTableLayout {
     // MARK: Flippers
     static let leftFlipperPivot = CGPoint(x: 179, y: 220)
     static let rightFlipperPivot = CGPoint(x: 389, y: 220)
-    static let flipperLength: CGFloat = 96
+    static let flipperLength: CGFloat = 80    // M2 v4: real scale (tip gap 59.4 pt, ~2 balls)
     static let flipperPivotRadius: CGFloat = 12
     static let flipperTipRadius: CGFloat = 6
     static let flipperRestAngle: CGFloat = .pi / 6
@@ -106,17 +109,23 @@ enum ChompTableLayout {
     static let mirrorSum: CGFloat = leftWallX + laneWallX   // 568
     static func mirrored(_ p: CGPoint) -> CGPoint { CGPoint(x: mirrorSum - p.x, y: p.y) }
 
-    static let laneGuideX: CGFloat = 54
-    static let laneGuideTop: CGFloat = 470
-    static let laneGuideBend: CGFloat = 330
+    /// M2 v3 (Aaron: "Do it all. And match the left sling to the real table. Every table doesn't have to have the
+    /// same slings or even drain layouts."): the lane guides, slings and outlane posts re-traced from the Jaws Pro
+    /// drawing (p. 40). The real lower table is near-symmetric about x 284 too, but its guides are at x 74 / 494 and
+    /// stop at y 405, and its slings sit ~34 pt further in and lower. (M1: guides x 54 / 514 to y 470, slings at 88.)
+    /// With our smaller ball (18 pt; the real one would be ~30 at this scale) the lanes are roomier: inlanes 50 wide,
+    /// outlanes 54.
+    static let laneGuideX: CGFloat = 74
+    static let laneGuideTop: CGFloat = 405
+    static let laneGuideBend: CGFloat = 315
     static var leftLaneGuide: [CGPoint] {
         [CGPoint(x: laneGuideX, y: laneGuideTop), CGPoint(x: laneGuideX, y: laneGuideBend), leftGuideEnd]
     }
     static var rightLaneGuide: [CGPoint] { leftLaneGuide.map { mirrored($0) } }
 
-    static let leftSling = (top: CGPoint(x: 88, y: 450),
-                            corner: CGPoint(x: 88, y: 347),
-                            tip: CGPoint(x: 150, y: 300.4))
+    static let leftSling = (top: CGPoint(x: 124, y: 425),
+                            corner: CGPoint(x: 124, y: 355),
+                            tip: CGPoint(x: 160, y: 320))
     static var rightSling: (top: CGPoint, corner: CGPoint, tip: CGPoint) {
         (mirrored(leftSling.top), mirrored(leftSling.corner), mirrored(leftSling.tip))
     }
@@ -141,7 +150,7 @@ enum ChompTableLayout {
     static var rightOutlaneWall: [CGPoint] { leftOutlaneWall.map { mirrored($0) } }
     /// Monsoon's outlane posts (Play Lab runs 3 and 6): a short rail from each lane guide's top post up and out, so a
     /// ball dropping off the side-wall bulge rolls into the inlane instead of catching the post's outer side.
-    static let leftOutlanePostTip = CGPoint(x: 44, y: 482)
+    static let leftOutlanePostTip = CGPoint(x: 64, y: 417)
     static var leftOutlanePostRail: [CGPoint] { [CGPoint(x: laneGuideX, y: laneGuideTop), leftOutlanePostTip] }
     static var rightOutlanePostRail: [CGPoint] { leftOutlanePostRail.map { mirrored($0) } }
 
@@ -150,53 +159,56 @@ enum ChompTableLayout {
     /// switches: no letters; the inlanes will light the flip-flop smack multiplier in the rules milestone).
     static let laneLetters = ["", "", "", ""]
     static var laneRolloverXs: [CGFloat] {
-        let outlane = (leftWallX + laneGuideX) / 2, inlane = (laneGuideX + leftSling.corner.x) / 2   // 37, 71
+        let outlane = (leftWallX + laneGuideX) / 2, inlane = (laneGuideX + leftSling.corner.x) / 2   // 47, 99
         return [outlane, inlane, mirrorSum - inlane, mirrorSum - outlane]
     }
-    static let laneRolloverY: CGFloat = 405
-    static let laneLampY: CGFloat = 378
-    static let laneSensorSize = CGSize(width: 24, height: 10)
+    static let laneRolloverY: CGFloat = 370
+    static let laneLampY: CGFloat = 343
+    static let laneSensorSize = CGSize(width: 36, height: 10)   // M2 v3: 36 wide so a ball anywhere in the 50 pt lanes trips it
     /// Inlane up-posts: one mid-channel near the bottom of each inlane (34 pt wide there), so a raised post leaves
     /// 12 pt each side and the ball sits on it — they hold the ball while a mode starts. M1: the mini-lane arms them
     /// as a test (the next inlane ball is held for upPostHoldSeconds).
-    static let upPostRadius: CGFloat = 5
-    static let leftUpPost = CGPoint(x: 128, y: 295.7)
+    /// M2 v3: at the (wider) inlane's narrowest point, sling tip to the guide's slant (55.6), r 12 → 15.8 pt each side.
+    static let upPostRadius: CGFloat = 6      // M2 v4: 21.8 pt each side, under the 30 pt ball
+    static let leftUpPost = CGPoint(x: 143.3, y: 297.8)
     static var rightUpPost: CGPoint { mirrored(leftUpPost) }
     static let upPostHoldSeconds: TimeInterval = 1.8
 
     /// The right outlane save: a small rubber post on the outer wall (27 pt to the lane guide, so the ball still
     /// passes) and a 32 pt one-way gate cut in the right lane guide: a ball the post turns back can roll through it into
     /// the inlane; nothing goes out that way (category diverter, solid while the ball moves right).
-    static let outlaneSavePost = CGPoint(x: 544.5, y: 440)
+    static let outlaneSavePost = CGPoint(x: 544.5, y: 400)
     static let outlaneSavePostRadius: CGFloat = 3.5
     static let outlaneSavePostRestitution: CGFloat = 0.6
     static var saveGateX: CGFloat { mirrorSum - laneGuideX }          // 514
-    static let saveGateTop: CGFloat = 425
-    static let saveGateBottom: CGFloat = 393
+    static let saveGateTop: CGFloat = 380      // M2 v4: 45 pt opening for the 30 pt ball
+    static let saveGateBottom: CGFloat = 335
     static var rightLaneGuideUpper: [CGPoint] { [CGPoint(x: saveGateX, y: laneGuideTop), CGPoint(x: saveGateX, y: saveGateTop)] }
     static var rightLaneGuideLower: [CGPoint] {
         [CGPoint(x: saveGateX, y: saveGateBottom)] + Array(rightLaneGuide.dropFirst())
     }
 
-    /// The pier mini-flipper pocket on the right wall, above the right sling: the feed lane (x 514–548) comes down the
-    /// wall onto the flipper's base; the flipper (on the right button) shoots up-left across the table, to the harpoon
-    /// lane and the left bank (milestone 2). Same rest angle and travel as the main flippers.
-    /// The pivot cap touches the wall (review, T7 M1 v1): at x 534 its 5 pt gap to the wall made a V a ball could rest in.
-    static let miniFlipperPivot = CGPoint(x: 539, y: 596)
-    static let miniFlipperLength: CGFloat = 56
+    /// The pier mini-flipper. M2 v3 (Aaron: "Do it all"): exactly where the real one is (Jaws Pro drawing, p. 40):
+    /// pivot (517, 533), length 51, hanging 64° below horizontal from the notch of a plastic block on the right wall,
+    /// swinging 79° (to 15° above horizontal, so a held-up flipper traps a ball against the block — flip-lock later).
+    /// Balls land on the block's nearly flat top, roll down its left edge onto the blade and off the tip onto the right
+    /// lane guide's top (into the inlane or the outlane, as on the real table). Held up, a ball sits at ~(495, 555) and
+    /// drops into the right inlane when let go (tools/chomp_pier_sim.py). (M2 v2 had it 12 pt right and 27 pt higher,
+    /// before the lane guides were shortened.)
+    static let miniFlipperPivot = CGPoint(x: 517, y: 533)
+    static let miniFlipperLength: CGFloat = 51
     static let miniFlipperPivotRadius: CGFloat = 9
     static let miniFlipperTipRadius: CGFloat = 5
-    static let feedLaneInner = [CGPoint(x: 514, y: 790), CGPoint(x: 514, y: 660)]
-    static let pocketFloor = [CGPoint(x: laneWallX, y: 575), CGPoint(x: 541, y: 585)]
-    /// M1 v2 (Aaron: "The ball got stuck in the corner of the mini flipper"): a ball coming down the wall landed on
-    /// the very top of the pivot cap, against the wall, and balanced there. M1 v3 (Aaron: v2's long deflector "feels
-    /// excessive… smaller like the one underneath"): a 17 pt cap over the corner, from the wall down onto the pivot
-    /// cap's surface at 120° (its left shoulder), so wall → cap → blade is one slope with no top to balance on. At rest
-    /// a ball rolls off the tip; held up it sits at ~(536, 617) on this cap and the blade, and rolls off when the
-    /// button is let go (tools/chomp_pocket_sim.py).
-    static let pocketDeflector = [CGPoint(x: laneWallX, y: 614), CGPoint(x: 534.5, y: 603.8)]
-    /// The mini-lane switch in the feed lane (skill shot 2, fish finder and quickshots later).
-    static let miniLaneSwitch = CGPoint(x: 531, y: 700)
+    static let miniFlipperRestAngle: CGFloat = 64 * .pi / 180
+    static let miniFlipperTravel: CGFloat = 79 * .pi / 180
+    /// The plastic block (closed): top (548, 618)→(519, 615) sheds left gently (steeper flew balls past the flipper;
+    /// flat kept them), the left edge down to (503, 547), round the pivot cap (gaps 10.8 / 6.8 / 2.4: closed) and down
+    /// the blade's right side to (514, 470); the right outlane's way in is under it (53 pt over the post rail tip).
+    static let pierPlastic = [CGPoint(x: 519, y: 615), CGPoint(x: laneWallX, y: 618), CGPoint(x: laneWallX, y: 470),
+                              CGPoint(x: 514, y: 470), CGPoint(x: 528, y: 530), CGPoint(x: 522, y: 548),
+                              CGPoint(x: 503, y: 547), CGPoint(x: 519, y: 615)]
+    /// The mini-lane switch on the way down the block's left edge (skill shot 2, fish finder and quickshots later).
+    static let miniLaneSwitch = CGPoint(x: 508, y: 590)
     /// The beach-ball bumper and the buoy target above the pocket.
     static let bumperCenter = CGPoint(x: 462, y: 752)
     static let bumperRadius: CGFloat = 22
@@ -207,16 +219,75 @@ enum ChompTableLayout {
     /// Two buoy hits this close together light the inner tube.
     static let buoyDoubleHitWindow: TimeInterval = 2
 
+    // MARK: Milestone 2 v1: the left side (tools/chomp_layout.py, checked in tools/chomp_render_m2.py)
+    // Traced over the Jaws Pro manual's top-down drawing (p. 40), registered on the flippers: the harpoon lane down the
+    // left wall (x 20–60), the left loop beside it (x 100–147) with a hairpin round the top of the tongue between them,
+    // the spinner across the loop, the one-way quickshot gate where the pier flipper's shot enters the harpoon lane, the
+    // harpoon lane's bottom deflector into the left inlane, and the Fish Phone 3-bank. A loop shot goes up the loop,
+    // round the hairpin and down the harpoon lane to the left inlane (the real game's "harpoon shot fed by the left
+    // orbit"); the pier flipper shoots straight into the harpoon lane through the gate.
+    static let harpoonX: CGFloat = 60
+    static var harpoonInner: [CGPoint] { [CGPoint(x: harpoonX, y: 580), CGPoint(x: harpoonX, y: 840)] }
+    /// One-way (category diverter, solid while the ball moves right, like the outlane save gate): in from the right only.
+    static var quickshotGate: (a: CGPoint, b: CGPoint) { (CGPoint(x: harpoonX, y: 840), CGPoint(x: harpoonX, y: 920)) }
+    /// The tongue between the harpoon lane and the loop: a closed outline with a round top (centre (80, 1040), r 20;
+    /// M2 v4 lowered it 40 pt so the harpoon lane beside it stays ≥ 37 wide under the arch for the 30 pt ball).
+    static var tongue: [CGPoint] {
+        var pts = [CGPoint(x: harpoonX, y: 920), CGPoint(x: harpoonX, y: 1040)]
+        for i in 1...11 {
+            let a = CGFloat.pi - CGFloat.pi * CGFloat(i) / 12
+            pts.append(CGPoint(x: 80 + 20 * cos(a), y: 1040 + 20 * sin(a)))
+        }
+        pts += [CGPoint(x: 100, y: 1040), CGPoint(x: 100, y: 920), CGPoint(x: harpoonX, y: 920)]
+        return pts
+    }
+    /// The point of the outer wall's top-left arch at x (the arch is x = 20 + 280 t², y = 1000 + 270 (1 − (1 − t)²)).
+    static func archPoint(atX x: CGFloat) -> CGPoint {
+        let t = sqrt((x - leftWallX) / 280)
+        return CGPoint(x: x, y: archStartY + 270 * (1 - (1 - t) * (1 - t)))
+    }
+    /// The loop's right wall: a flare at the mouth, up x 147, closing on the arch at x 157.
+    static var loopRight: [CGPoint] {
+        [CGPoint(x: 170, y: 862), CGPoint(x: 147, y: 905), CGPoint(x: 147, y: 1180), archPoint(atX: 157)]
+    }
+    /// Sends harpoon-lane balls on into the left inlane (M2 v3: ends over the wider inlane, 96 pt above the guide's
+    /// top); balls from the playfield still reach the left outlane under it.
+    static let harpoonDeflector = [CGPoint(x: 20, y: 560), CGPoint(x: 90, y: 500)]
+    static let spinnerLine = (a: CGPoint(x: 100, y: 960), b: CGPoint(x: 147, y: 960))
+    static let spinnerSwitch = ChompSwitch(a: spinnerLine.a, b: spinnerLine.b, forward: CGVector(dx: 0, dy: 1))
+    static let loopEntranceSwitch = ChompSwitch(a: CGPoint(x: 100, y: 1020), b: CGPoint(x: 147, y: 1020),
+                                                forward: CGVector(dx: 0, dy: 1))
+    /// The quickshot rollovers in the harpoon lane: top, mid, bottom.
+    static let quickshotSwitches = [CGPoint(x: 40, y: 1000), CGPoint(x: 40, y: 870), CGPoint(x: 40, y: 600)]
+    /// The Fish Phone 3-bank: standups on a backboard against the harpoon lane wall, facing down-right (−30°) toward the
+    /// right flipper and the pier flipper.
+    static let bankNormalDegrees: CGFloat = -30
+    static let bankTargetSize = CGSize(width: 26, height: 8)
+    static var bankCenters: [CGPoint] {
+        let t = (bankNormalDegrees + 90) * .pi / 180
+        return (0..<3).map { CGPoint(x: 72 + CGFloat($0) * 26 * cos(t), y: 610 + CGFloat($0) * 26 * sin(t)) }
+    }
+    static var bankBackboard: [CGPoint] {
+        let t = (bankNormalDegrees + 90) * .pi / 180, n = bankNormalDegrees * .pi / 180
+        let a = bankCenters[0], b = bankCenters[2]
+        let off = CGVector(dx: -6 * cos(n), dy: -6 * sin(n))
+        return [CGPoint(x: a.x - 16 * cos(t) + off.dx, y: a.y - 16 * sin(t) + off.dy),
+                CGPoint(x: b.x + 16 * cos(t) + off.dx, y: b.y + 16 * sin(t) + off.dy)]
+    }
+    /// The spinner's rendered frames, when the art comes (none yet: ChompSpinner draws its blade).
+    static let spinnerArtBox = CGRect(x: -22, y: -10, width: 44, height: 32)
+    static let spinnerFrames = (columns: 6, rows: 4)
+
     // MARK: Rules (milestone 1: slings and lanes score; the tour comes in milestone 7)
     static let ballsPerGame = 3
     static let bannerSeconds: TimeInterval = 1.6
     /// The inner tube save (the kickback's kicker): lit = qualified; the action button arms it for innerTubeArmSeconds,
     /// and a ball falling past the trigger while armed is fired back up. One press per innerTubeCooldown.
     /// M1 scaffolding: lit at the start of every ball (the rules qualify it with the buoy).
-    static let kickbackLamp = CGPoint(x: 37, y: 300)
+    static let kickbackLamp = CGPoint(x: 47, y: 300)
     static let innerTubeArmSeconds: TimeInterval = 0.6
     static let innerTubeCooldown: TimeInterval = 1.5
-    static let kickbackMaxX: CGFloat = 60
+    static let kickbackMaxX: CGFloat = 74          // M2 v3: the left outlane is x 20–74
     static let kickbackTriggerY: CGFloat = 240
     static let kickbackSpeed: CGFloat = 1500
     /// Ball save: armed while the ball waits on the plunger and for 10 s after launch, once per player ball.

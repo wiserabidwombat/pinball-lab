@@ -17,7 +17,8 @@ final class ChompBall: SKNode {
     private static let trailMinSpeed: CGFloat = 450
     private static let trailRate: CGFloat = 90
     /// Drawn this much bigger than the physics body (Grey Invasion M8 v3: true size looked too small).
-    static let lookScale: CGFloat = 1.2
+    /// T7 M2 v4: drawn at true size now that the ball is real scale (radius 15; was 1.2× a radius-9 ball).
+    static let lookScale: CGFloat = 1.0
     /// Where the ball was last frame (for line-crossing switches).
     var previousPosition: CGPoint
     /// Whether the one-way launch gate is solid for this ball (while it's above the gate moving down).

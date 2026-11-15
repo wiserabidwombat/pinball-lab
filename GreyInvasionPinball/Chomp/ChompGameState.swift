@@ -14,6 +14,12 @@ enum ChompPoints {
     static let buoy = 250
     static let innerTube = 1_000
     static let outlaneSave = 1_000
+    // M2 v1 (placeholders)
+    static let spin = 100
+    static let loop = 1_000
+    static let quickshotLane = 500
+    static let bankTarget = 500
+    static let bankComplete = 5_000
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

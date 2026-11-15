@@ -61,6 +61,13 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var upPostDropAt: [TimeInterval?] = [nil, nil]
     private var upPostsArmed = false
     private var laneOffAt: [ObjectIdentifier: TimeInterval] = [:]
+    // Milestone 2 v1: the left side.
+    private var spinner: ChompSpinner?
+    private var lastSpinSound: TimeInterval = 0
+    private var quickshotLanes: [ChompRollover] = []
+    private var bankTargets: [SKShapeNode] = []
+    private var bankDown = [false, false, false]
+    private var bankRelightPending = false
     // The ball save: once per player ball, on the plunger and for 10 s after launch.
     private var ballSaveUsed = false
     private var launchedAt: TimeInterval?
@@ -115,6 +122,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     static let floorColor = SKColor(red: 0.05, green: 0.07, blue: 0.14, alpha: 1)
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
+    static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
+    static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
     static let lampOffColor = SKColor(red: 0.14, green: 0.28, blue: 0.18, alpha: 0.9)
 
@@ -172,9 +181,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addWall(points: ChompTableLayout.rightApron)
         addWall(points: ChompTableLayout.rightLaneGuideUpper)      // the right lane guide, with the save gate's opening
         addWall(points: ChompTableLayout.rightLaneGuideLower)
-        addWall(points: ChompTableLayout.feedLaneInner)            // the pier pocket's feed lane
-        addWall(points: ChompTableLayout.pocketFloor)
-        addWall(points: ChompTableLayout.pocketDeflector)        // M1 v2: no resting on the pivot cap
+        addWall(points: ChompTableLayout.pierPlastic)              // M2 v2: the pier flipper hangs from this block
 
         for s in [ChompTableLayout.leftSling, ChompTableLayout.rightSling] {
             let sling = ChompSlingshot(top: s.top, corner: s.corner, tip: s.tip, artBaked: false,
@@ -192,7 +199,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         miniFlipper = ChompFlipper(side: .right, pivot: ChompTableLayout.miniFlipperPivot,
                                    length: ChompTableLayout.miniFlipperLength,
                                    pivotRadius: ChompTableLayout.miniFlipperPivotRadius,
-                                   tipRadius: ChompTableLayout.miniFlipperTipRadius)
+                                   tipRadius: ChompTableLayout.miniFlipperTipRadius,
+                                   restAngle: ChompTableLayout.miniFlipperRestAngle,
+                                   travel: ChompTableLayout.miniFlipperTravel)
         miniFlipper.attach(to: self)
 
         for (i, x) in ChompTableLayout.laneRolloverXs.enumerated() {
@@ -210,6 +219,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addKickbackLamp()
         addUpPosts()
         addOutlaneSave()
+        addLeftSide()
         addPlunger()
         addLaunchGate()
     }
@@ -348,6 +358,99 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addChild(gate)
     }
 
+    /// Milestone 2 v1: the harpoon lane, the left loop and tongue, the spinner, the quickshot gate and rollovers, the
+    /// harpoon lane's deflector and the Fish Phone 3-bank.
+    private func addLeftSide() {
+        addWall(points: ChompTableLayout.harpoonInner)
+        addWall(points: ChompTableLayout.tongue)
+        addWall(points: ChompTableLayout.loopRight)
+        addWall(points: ChompTableLayout.harpoonDeflector)
+        addWall(points: ChompTableLayout.bankBackboard)
+
+        let g = ChompTableLayout.quickshotGate
+        let gate = SKShapeNode()
+        let path = CGMutablePath()
+        path.move(to: g.a)
+        path.addLine(to: g.b)
+        gate.path = path
+        gate.strokeColor = Self.oneWayColor
+        gate.lineWidth = 2
+        gate.zPosition = -19
+        let gb = SKPhysicsBody(edgeFrom: g.a, to: g.b)
+        gb.friction = 0.05
+        gb.restitution = 0.2
+        gb.categoryBitMask = ChompPhysicsCategory.diverter
+        gb.collisionBitMask = ChompPhysicsCategory.ball
+        gate.physicsBody = gb
+        addChild(gate)
+
+        let s = ChompSpinner(from: ChompTableLayout.spinnerLine.a, to: ChompTableLayout.spinnerLine.b)
+        addChild(s)
+        spinner = s
+
+        for p in ChompTableLayout.quickshotSwitches {
+            let lane = ChompRollover(letter: "", x: p.x, y: p.y)
+            addChild(lane)
+            quickshotLanes.append(lane)
+        }
+
+        let size = ChompTableLayout.bankTargetSize
+        for c in ChompTableLayout.bankCenters {
+            let node = SKShapeNode(rectOf: size, cornerRadius: 2)
+            node.position = c
+            node.zRotation = (ChompTableLayout.bankNormalDegrees - 90) * .pi / 180   // the long side faces the normal
+            node.strokeColor = SKColor(white: 1, alpha: 0.6)
+            node.lineWidth = 1
+            node.zPosition = 1
+            let body = SKPhysicsBody(rectangleOf: size)
+            body.isDynamic = false
+            body.restitution = 0.2
+            body.friction = 0.2
+            body.categoryBitMask = ChompPhysicsCategory.target
+            body.collisionBitMask = ChompPhysicsCategory.ball
+            body.contactTestBitMask = ChompPhysicsCategory.ball
+            node.physicsBody = body
+            addChild(node)
+            bankTargets.append(node)
+        }
+        resetBank()
+    }
+
+    /// The Fish Phone bank's standups: lit = still to hit, dark = hit (M2 v1 placeholder until the fish finder rules).
+    private func resetBank() {
+        bankDown = [false, false, false]
+        for t in bankTargets { t.fillColor = Self.bankLitColor }
+    }
+
+    /// The loop's switches and the spinner, from the ball's move this frame (after physics: velocities and score only).
+    private func leftSideSwitches(_ ball: ChompBall, from p0: CGPoint, to p: CGPoint) {
+        guard let body = ball.physicsBody else { return }
+        let inLoop = p.x > 96 && p.x < 151                     // the switches reach ~10 pt past their ends
+        guard inLoop else { return }
+        if ChompTableLayout.spinnerSwitch.crossing(from: p0, to: p) != .none {
+            let v = body.velocity
+            spinner?.kick(ballSpeed: hypot(v.dx, v.dy))
+            body.velocity = CGVector(dx: v.dx * ChompSpinner.ballSpeedKept, dy: v.dy * ChompSpinner.ballSpeedKept)
+        }
+        if ChompTableLayout.loopEntranceSwitch.crossing(from: p0, to: p) == .forward {
+            game.add(ChompPoints.loop)
+            sfx(.orbit)
+            showBanner("LEFT LOOP")
+        }
+    }
+
+    /// Turns the spinner; each half-turn scores, with one tick sound per 50 ms.
+    private func updateSpinner(_ dt: CGFloat, _ now: TimeInterval) {
+        guard let s = spinner, s.isSpinning else { return }
+        let spins = s.update(dt: dt)
+        guard spins > 0 else { return }
+        game.add(ChompPoints.spin * spins)
+        if now - lastSpinSound >= 0.05 {
+            lastSpinSound = now
+            sfx(.spinner)
+        }
+    }
+
     /// The buoy standup above the pier pocket (category target): two quick hits light the inner tube.
     private func addBuoy() {
         let size = ChompTableLayout.buoySize
@@ -462,6 +565,12 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             }
             return
         }
+        if let i = quickshotLanes.firstIndex(where: { $0 === lane }) {
+            game.add(ChompPoints.quickshotLane)
+            sfx(.lane)
+            if i == 2 { showBanner("HARPOON LANE") }          // the bottom one: the lane was made
+            return
+        }
         game.add(ChompPoints.lane)
         sfx(.lane)
         // Inlanes are rollovers 1 (left) and 2 (right).
@@ -477,7 +586,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     /// Raises a pending up-post once no ball overlaps it, and drops a raised one when its hold runs out.
     private func updateUpPosts(_ now: TimeInterval) {
-        for lane in rollovers + [miniLane].compactMap({ $0 }) {
+        for lane in rollovers + quickshotLanes + [miniLane].compactMap({ $0 }) {
             if let due = laneOffAt[ObjectIdentifier(lane)], now >= due {
                 lane.isLit = false
                 laneOffAt[ObjectIdentifier(lane)] = nil
@@ -553,7 +662,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M1 v3")
+        let label = SKLabelNode(text: "T7 M2 v4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -599,7 +708,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T7 M1 v3 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T7 M2 v4 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -663,6 +772,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         buoyLastHit = -10
         upPostsArmed = false
         for i in upPosts.indices { upPostRaisePending[i] = false; setUpPost(i, up: false) }
+        resetBank()
         ballSaveUsed = false
         game.reset()
         placeBallOnPlunger()
@@ -854,6 +964,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         updateGates()
         updateSaveGate()
         updateUpPosts(now)
+        updateSpinner(dt, now)
+        if bankRelightPending { bankRelightPending = false; resetBank() }
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil
@@ -939,6 +1051,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             let wasAbove = gx * (p0.y - low.y) - gy * (p0.x - low.x) > 0
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
+            leftSideSwitches(ball, from: p0, to: p)
             ball.previousPosition = ball.position
             ball.updateLook()
         }
@@ -982,6 +1095,21 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 sfx(.bumper)
             }
         case ChompPhysicsCategory.target:
+            // M2 v1: the Fish Phone bank (placeholder: all three → "FISH PHONE", then they relight).
+            if let i = bankTargets.firstIndex(where: { $0 === node }) {
+                if !bankDown[i] {
+                    bankDown[i] = true
+                    bankTargets[i].fillColor = Self.bankDarkColor
+                    game.add(ChompPoints.bankTarget)
+                    sfx(.standup)
+                    if !bankDown.contains(false) {
+                        game.add(ChompPoints.bankComplete)
+                        showBanner("FISH PHONE")
+                        bankRelightPending = true             // relit in update(), not in the contact callback
+                    }
+                }
+                break
+            }
             // The buoy: two hits inside the window light the inner tube.
             if node === buoy {
                 let since = gameTime - buoyLastHit

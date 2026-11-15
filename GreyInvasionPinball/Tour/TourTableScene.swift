@@ -430,8 +430,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
             run(.sequence([.wait(forDuration: 3), .repeatForever(.sequence([
                 .run { [weak self] in
                     guard let self else { return }
-                    if let s = self.modes.active { self.shotMade(s.shots.sorted()[self.modes.made % s.shots.count]) }
-                    else { self.startNextStop() }
+                    guard self.modes.active != nil else { self.startNextStop(); return }
+                    guard let step = self.modes.debugStepName() else { return }
+                    switch step.kind {
+                    case "event": self.modeEvent(step.name)
+                    case "reveal": if let r = self.rocketStandups.first { self.hitStandup(r) }
+                    default: self.modeShot(step.name)
+                    }
                 }, .wait(forDuration: 2.2)]))]))
         }
         if ProcessInfo.processInfo.arguments.contains("-tourPlanets") {     // M6 v11: flip through the window's stops
@@ -743,7 +748,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func startNextStop() {
         guard let s = modes.start(now: gameTime) else { return }
         planetWindow?.show(planet: s.planet)
-        showBanner("\(s.title) · \(s.need) SHOTS")
+        switch s.kind {                                     // M8 v2: each stop says what it wants
+        case .mercury: showBanner("\(s.title) · HIT BOTH LIT SHOTS")
+        case .venus: showBanner("\(s.title) · HIT R-O-C-K-E-T TO SEE")
+        case .mars:
+            sampleBank.forEach { $0.raise() }                // a fresh bank: drop all three, then the rover
+            sampleResetAt = nil
+            roverLit = false
+            showBanner("\(s.title) · DROP THE SAMPLES")
+        case .shots: showBanner("\(s.title) · \(s.need) SHOTS")
+        }
         flashers.flash(s.planet == "moon" ? "moon" : s.planet == "saturn" ? "saturn" : "rocket", times: 4)
         modeStatusSecond = -1
         updateModeStatus()
@@ -753,14 +767,20 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     /// A shot was made: progress on the running stop, or its finish.
-    private func modeShot(_ name: String) {
-        switch modes.shot(name) {
+    private func modeShot(_ name: String) { applyMode(modes.shot(name)) }
+
+    /// M8 v2: Mars's steps ("samples", "rover").
+    private func modeEvent(_ name: String) { applyMode(modes.event(name)) }
+
+    private func applyMode(_ result: TourModes.Result) {
+        switch result {
         case .none:
             return
         case .progress:
             game.add(TourPoints.modeShot)
-            if let s = modes.active { showBanner("\(s.title) \(modes.made)/\(s.need)") }
-            updateModeStatus()
+            if let s = modes.active { showBanner("\(s.title) · \(modes.stepText)") }
+            updateModeStatus(force: true)
+            updateShotArrows()
         case .complete(let s):
             game.add(TourPoints.modeComplete * modes.tourNumber)
             bigHaptic.impactOccurred()
@@ -801,12 +821,12 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     /// The HUD's status line: the running stop and its clock, or where Mission Control goes next.
-    private func updateModeStatus() {
+    private func updateModeStatus(force: Bool = false) {
         if let s = modes.active {
             let left = modes.secondsLeft(now: gameTime)
-            guard left != modeStatusSecond else { return }
+            guard force || left != modeStatusSecond else { return }
             modeStatusSecond = left
-            game.status = "\(s.title) · \(modes.made)/\(s.need) · \(left)s"
+            game.status = "\(s.title) · \(modes.stepText) · \(left)s"
         } else {
             let t = modes.tourNumber > 1 ? "TOUR \(modes.tourNumber) · " : ""
             game.status = "\(t)NEXT STOP: \(modes.nextStop.planet.uppercased())"
@@ -1314,6 +1334,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 bigHaptic.impactOccurred()
                 showBanner("SAMPLES COLLECTED · ROVER OPEN")
                 flashers.flash("right", times: 3)
+                modeEvent("samples")                       // M8 v2: Mars Recon's first step
             }
         }
         if let due = countdownResetAt, now >= due {
@@ -1344,6 +1365,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         sfx(.standup)
         if modes.active != nil {                           // M8 v1: no countdown while a stop is running
             game.add(TourPoints.rocketRepeat)
+            modeShot("rocket")                             // M8 v2: the door is the rocket shot (Venus)
             return
         }
         countdownLeft = max(0, countdownLeft - 1)
@@ -1485,6 +1507,12 @@ final class TourTableScene: SKScene, RendererHostedScene {
         labEvent(index >= 3 ? "ket" + TourTableLayout.rocketLabels[index] : "roc")
         sfx(.standup)
         hitHaptic.impactOccurred(intensity: 0.5)
+        if modes.reveal() != nil {                         // M8 v2: Venus — the clouds part over one shot
+            showBanner("VENUS VEIL · SHOT REVEALED")
+            flashers.flash("left", times: 1)
+            updateShotArrows()
+            updateModeStatus(force: true)
+        }
         guard rocketClearAt == nil else { return }
         if s.isLit {
             game.add(TourPoints.rocketRepeat)
@@ -1558,6 +1586,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 roverLit = false
                 game.add(TourPoints.roverHome)
                 showBanner("ROVER HOME · SAMPLES SAFE")
+                modeEvent("rover")                         // M8 v2: Mars Recon's finish
             } else {
                 game.add(TourPoints.rover)
                 showBanner("ROVER")
@@ -1754,7 +1783,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v1")
+        let label = SKLabelNode(text: "T6 M8 v2")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1800,7 +1829,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v1 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v2 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

@@ -32,7 +32,7 @@ final class TourModes {
     static let floorShots: Set<String> = ["leftOrbit", "moon", "saturn", "rightOrbit"]
     /// The ring's order (left to right on the arc).
     static let tour: [TourStop] = [
-        TourStop(planet: "mercury", title: "MERCURY DASH", kind: .mercury, need: 2, seconds: 20),
+        TourStop(planet: "mercury", title: "MERCURY DASH", kind: .mercury, need: 2, seconds: 30),   // v3: 20 → 30
         TourStop(planet: "venus", title: "VENUS VEIL", kind: .venus, need: 3, seconds: 40),
         TourStop(planet: "mars", title: "MARS RECON", kind: .mars, need: 2, seconds: 45),
         TourStop(planet: "moon", title: "MOONSHOT", kind: .shots(["moon"]), need: 2, seconds: 45),
@@ -49,7 +49,9 @@ final class TourModes {
     /// The running stop, if any, and its progress.
     private(set) var active: TourStop?
     private(set) var made = 0
-    private(set) var endsAt: TimeInterval = 0
+    /// v3: the clock counts only while the scene says it runs (not while a ball sits in Mission Control, a crater or
+    /// on the plunger), so a stop's time starts when its ball is kicked out.
+    private(set) var timeLeft: TimeInterval = 0
     /// The shots that count right now (their arrows blink).
     private(set) var lit: Set<String> = []
     /// Venus: the chosen shots still under the clouds.
@@ -73,7 +75,7 @@ final class TourModes {
         let s = nextStop
         active = s
         made = 0
-        endsAt = now + s.seconds
+        timeLeft = s.seconds
         hidden = []
         switch s.kind {
         case .shots(let pool):
@@ -159,7 +161,9 @@ final class TourModes {
         return true
     }
 
-    func secondsLeft(now: TimeInterval) -> Int { max(0, Int((endsAt - now).rounded(.up))) }
+    func tick(_ dt: TimeInterval) { timeLeft -= max(0, min(dt, 0.25)) }
+    var timeUp: Bool { active != nil && timeLeft <= 0 }
+    var secondsLeft: Int { max(0, Int(timeLeft.rounded(.up))) }
 
     #if DEBUG
     /// `-tourModes`: one step of the running stop, as if the player made it.

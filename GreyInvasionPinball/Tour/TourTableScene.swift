@@ -741,12 +741,17 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// Liftoffs this game: each one makes the next countdown one hit longer (5, 6, 7 … 9).
     private var launches = 0
     private var modeStatusSecond = -1
+    /// M8 v3: the stop clock's last tick, and a ball save given when a stop's ball is kicked out of Mission Control.
+    private var lastModeTick: TimeInterval = 0
+    private var stopSaveUntil: TimeInterval = -1
+    private static let stopSaveSeconds: TimeInterval = 6
 
     private var launchHits: Int { min(9, TourTableLayout.countdownHits + launches) }
 
     /// Mission Control: the next stop on the tour starts.
     private func startNextStop() {
         guard let s = modes.start(now: gameTime) else { return }
+        lastModeTick = gameTime
         labMark("stopStarted")
         planetWindow?.show(planet: s.planet)
         switch s.kind {                                     // M8 v2: each stop says what it wants
@@ -816,17 +821,26 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func updateMode(_ now: TimeInterval) {
         guard modes.active != nil else { return }
-        if now >= modes.endsAt {
+        let dt = now - lastModeTick
+        lastModeTick = now
+        if !stopClockPaused { modes.tick(dt) }
+        if modes.timeUp {
             failMode(drained: false)
             return
         }
         updateModeStatus()
     }
 
+    /// M8 v3: the stop clock waits while no ball is in play — every ball in Mission Control, a crater hold or on the
+    /// plunger (or none on the table between balls).
+    private var stopClockPaused: Bool {
+        launchedAt == nil || balls.allSatisfy { $0.heldIn != nil || $0.moonReleaseAt != nil }
+    }
+
     /// The HUD's status line: the running stop and its clock, or where Mission Control goes next.
     private func updateModeStatus(force: Bool = false) {
         if let s = modes.active {
-            let left = modes.secondsLeft(now: gameTime)
+            let left = modes.secondsLeft
             guard force || left != modeStatusSecond else { return }
             modeStatusSecond = left
             game.status = "\(s.title) · \(modes.stepText) · \(left)s"
@@ -1553,6 +1567,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                         ball.position = TourTableLayout.missionSubwayExit
                         ball.previousPosition = ball.position
                         countdownResetAt = now + TourTableLayout.bankResetDelay
+                        if modes.active != nil { stopSaveUntil = now + Self.stopSaveSeconds }   // M8 v3
                     } else if scoop === roverScoop {
                         sampleBank.filter { !$0.isDown }.forEach { $0.drop() }
                         sampleResetAt = now + TourTableLayout.bankResetDelay
@@ -1786,7 +1801,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v2")
+        let label = SKLabelNode(text: "T6 M8 v3")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1832,7 +1847,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v2 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v3 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1888,6 +1903,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     func newGame() {
         planetWindow?.show(0, animated: false)             // M6 v11: every game's tour starts at Earth
         modes.reset()                                      // M8 v1
+        stopSaveUntil = -1
         launches = 0
         updatePlanetArc()
         shotCounts.removeAll()                             // M7 v3: the ladders start empty
@@ -2175,8 +2191,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         if !drained.isEmpty {
             drained.forEach { removeBall($0) }
             if balls.isEmpty, nextBallAt == nil {
-                if ballSaveNow, !nudge.tilted {
-                    ballSaveUsed = true
+                let stopSave = now < stopSaveUntil                // M8 v3: a stop's start has its own save
+                if ballSaveNow || stopSave, !nudge.tilted {
+                    if stopSave { stopSaveUntil = -1 } else { ballSaveUsed = true }
                     game.ballSaved()
                     showBanner("BALL SAVED"); sfx(.ballSave)
                     bigHaptic.impactOccurred()

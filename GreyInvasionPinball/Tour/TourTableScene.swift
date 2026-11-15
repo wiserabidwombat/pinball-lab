@@ -747,6 +747,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// Mission Control: the next stop on the tour starts.
     private func startNextStop() {
         guard let s = modes.start(now: gameTime) else { return }
+        labMark("stopStarted")
         planetWindow?.show(planet: s.planet)
         switch s.kind {                                     // M8 v2: each stop says what it wants
         case .mercury: showBanner("\(s.title) · HIT BOTH LIT SHOTS")
@@ -786,6 +787,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             bigHaptic.impactOccurred()
             flashers.giOut(for: 1.2)
             flashers.flashAll(times: 4)
+            labMark(s.planet + "Visited")
             if modes.finishTourIfDone() {
                 showBanner("GRAND TOUR COMPLETE · TOUR \(modes.tourNumber)")
                 planetWindow?.show(planet: "earth")
@@ -799,6 +801,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// The running stop ends unvisited: its time ran out or its ball drained. It starts again at the next Mission Control.
     private func failMode(drained: Bool) {
         guard let s = modes.fail() else { return }
+        labMark(drained ? "stopDrained" : "stopTimedOut")
         if !drained { showBanner("\(s.planet.uppercased()) LOST · TIME") }
         endModeLamps()
     }
@@ -2787,6 +2790,11 @@ extension TourTableScene: PlayLabHost {
     /// ramps, the rocket (the countdown / Mission Control), then the orbits.
     private func robotWanted() -> [String] {
         var w: [String] = []
+        // M8 v2: a running stop's lit shots come first; Venus with nothing revealed wants the R-O-C-K-E-T standups.
+        if modes.active != nil {
+            w += TourModes.arrowShots.filter { modes.isLit($0) }
+            if case .venus? = modes.active?.kind, modes.lit.isEmpty { w += ["roc", "ketK", "ketE", "ketT"] }
+        }
         let lit = rocketStandups.map { $0.isLit }
         if lit.count >= 6 {
             if lit[0..<3].contains(false) { w.append("roc") }
@@ -2794,6 +2802,11 @@ extension TourTableScene: PlayLabHost {
         }
         w += ["moon", "saturn", "rocket", "leftOrbit", "rightOrbit", "roc", "ketK", "ketE", "ketT"]
         return w
+    }
+
+    /// M8: a Play Lab objective that isn't a banner (stops started, visited, lost).
+    fileprivate func labMark(_ name: String) {
+        playLab?.objective(name, now: gameTime)
     }
 
     /// Banners double as the objective record: the first of each per game is what the report shows.

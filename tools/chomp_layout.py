@@ -167,3 +167,53 @@ def outer_wall():
     import chomp_base_tour_layout as T
     T.rightWallX = rightWallX
     return T.outer_wall()
+
+# ---- Milestone 2 v5: the wave ramp (the real table's Left Metal Ramp). Its mouth sits right beside the loop (the
+# real wooden channel x ~150-190 behind one shared post), it runs straight up, bends right over the top-left and
+# climbs as the plastic ramp toward the top centre, then a wire turns down the right side and drops the ball onto the
+# pier flipper's plastic block (which rolls it onto the pier flipper). Same path builder as TourRampPath.
+loopRight = [(147, 885), (147, 1180), _arch_point_at_x(157)]          # the flare is gone: the ramp's post is here now
+class RampPath:
+    def __init__(self, start, heading):
+        self.points, self.headings, self.dist, self.h = [start], [heading], [0.0], heading
+    def line(self, L, step=10):
+        n = max(1, math.ceil(L / step)); x0, y0 = self.points[-1]; s0 = self.dist[-1]
+        for i in range(1, n + 1):
+            d = L * i / n
+            self.points.append((x0 + d * math.cos(self.h), y0 + d * math.sin(self.h))); self.headings.append(self.h); self.dist.append(s0 + d)
+    def arc(self, r, turn, step=8):
+        n = max(2, math.ceil(abs(turn) * r / step)); sg = 1 if turn > 0 else -1
+        x0, y0 = self.points[-1]; c = (x0 - sg * r * math.sin(self.h), y0 + sg * r * math.cos(self.h))
+        a0 = math.atan2(y0 - c[1], x0 - c[0]); s0 = self.dist[-1]; h0 = self.h
+        for i in range(1, n + 1):
+            f = i / n; a = a0 + turn * f
+            self.points.append((c[0] + r * math.cos(a), c[1] + r * math.sin(a))); self.headings.append(h0 + turn * f)
+            self.dist.append(s0 + abs(turn) * r * f)
+        self.h = h0 + turn
+    def rails(self, w):
+        L = [(p[0] - w(s) * math.sin(h), p[1] + w(s) * math.cos(h)) for p, h, s in zip(self.points, self.headings, self.dist)]
+        R = [(p[0] + w(s) * math.sin(h), p[1] - w(s) * math.cos(h)) for p, h, s in zip(self.points, self.headings, self.dist)]
+        return L, R
+    def at(self, s):
+        for i in range(1, len(self.dist)):
+            if self.dist[i] >= s:
+                t = (s - self.dist[i-1]) / max(self.dist[i] - self.dist[i-1], 1e-3); a, b = self.points[i-1], self.points[i]
+                return (a[0] + (b[0]-a[0]) * t, a[1] + (b[1]-a[1]) * t), self.headings[i]
+        return self.points[-1], self.headings[-1]
+
+waveMouth = (172, 885)
+waveMouthHalfWidth, waveHalfWidth, waveFlareLength = 24, 21, 40
+waveLowLength = 60                 # the floor-solid U at the low end (mouth to y ~945)
+def wave_path():
+    p = RampPath(waveMouth, math.pi / 2)
+    p.line(215)                                  # up the channel beside the loop
+    p.arc(70, -math.radians(55))                 # bend right over the top-left
+    p.line(110)                                  # the plastic ramp climbing toward the top centre
+    p.arc(55, -math.radians(75))                 # over the top: heading -40 deg (down-right)
+    p.line(188)                                  # the wire across the upper right
+    p.arc(60, -math.radians(50))                 # turn straight down the right side
+    p.line(380)                                  # down to the pier block
+    return p
+WP = wave_path()
+# apex = the top of the over-the-top arc (heading 0)
+waveApexDistance = 215 + 70 * math.radians(55) + 110 + 55 * math.radians(35)

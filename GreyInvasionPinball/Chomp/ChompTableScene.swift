@@ -63,6 +63,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var laneOffAt: [ObjectIdentifier: TimeInterval] = [:]
     // Milestone 2 v1: the left side.
     private var spinner: ChompSpinner?
+    /// M2 v5: the wave ramp (more ramps join this list later).
+    private var ramps: [ChompRamp] = []
     private var lastSpinSound: TimeInterval = 0
     private var quickshotLanes: [ChompRollover] = []
     private var bankTargets: [SKShapeNode] = []
@@ -220,6 +222,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addUpPosts()
         addOutlaneSave()
         addLeftSide()
+        addWaveRamp()
         addPlunger()
         addLaunchGate()
     }
@@ -424,7 +427,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     /// The loop's switches and the spinner, from the ball's move this frame (after physics: velocities and score only).
     private func leftSideSwitches(_ ball: ChompBall, from p0: CGPoint, to p: CGPoint) {
-        guard let body = ball.physicsBody else { return }
+        guard ball.isOnFloor, let body = ball.physicsBody else { return }
         let inLoop = p.x > 96 && p.x < 151                     // the switches reach ~10 pt past their ends
         guard inLoop else { return }
         if ChompTableLayout.spinnerSwitch.crossing(from: p0, to: p) != .none {
@@ -437,6 +440,60 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             sfx(.orbit)
             showBanner("LEFT LOOP")
         }
+    }
+
+    /// M2 v5: the wave ramp (ChompRamp, Table 06's ramp): a plastic ramp from the mouth beside the loop up and over the
+    /// top-left, then a wire down the right side onto the pier flipper's block.
+    private func addWaveRamp() {
+        let ramp = ChompRamp(path: ChompTableLayout.wavePath, apexDistance: ChompTableLayout.waveApexDistance,
+                             mouthHalfWidth: ChompTableLayout.waveMouthHalfWidth, halfWidth: ChompTableLayout.waveHalfWidth,
+                             flareLength: ChompTableLayout.waveFlareLength, postLength: 0,
+                             lowLength: ChompTableLayout.waveLowLength)
+        addChild(ramp)
+        ramps.append(ramp)
+    }
+
+    /// The ramps' switches, from the ball's move this frame (Table 06's updateRampLayer): the entry puts a floor ball on
+    /// the ramp (backward = it fell back out), the made switch just past the top scores it, the exit at the end of the
+    /// wire puts it back on the floor. A ramp ball found far from its channel drops to the floor (the safety net).
+    private func updateRampLayer(_ ball: ChompBall, from p0: CGPoint, to p: CGPoint) {
+        if ball.isOnFloor {
+            if let ramp = ramps.first(where: { $0.entrySwitch.crossing(from: p0, to: p) == .forward
+                                               && $0.distanceToCenterline(p) < $0.maxHalfWidth }) {
+                ball.activeRamp = ramp
+                ball.setLayer(.rampUp)
+            }
+            return
+        }
+        guard let ramp = ball.activeRamp else { ball.setLayer(.floor); return }
+        switch ball.layer {
+        case .floor:
+            return
+        case .rampUp:
+            if ramp.entrySwitch.crossing(from: p0, to: p) == .backward {
+                ball.setLayer(.floor)
+            } else if ramp.madeSwitch.crossing(from: p0, to: p) == .forward {
+                ball.setLayer(.rampDown)
+                rampMade(ball, ramp)
+            }
+        case .rampDown:
+            if ramp.exitSwitch.crossing(from: p0, to: p) == .forward {
+                ball.setLayer(.floor)
+            } else if ramp.madeSwitch.crossing(from: p0, to: p) == .backward {
+                ball.setLayer(.rampUp)
+            }
+        }
+        if !ball.isOnFloor, ramp.distanceToCenterline(p) > ramp.maxHalfWidth + ChompTableLayout.ballRadius + 12 {
+            ball.setLayer(.floor)
+        }
+    }
+
+    /// M2 v5: the wave ramp is made (placeholder scoring until the rules, M4).
+    private func rampMade(_ ball: ChompBall, _ ramp: ChompRamp) {
+        game.add(ChompPoints.waveRamp)
+        hitHaptic.impactOccurred()
+        sfx(.ramp)
+        showBanner("WAVE RAMP")
     }
 
     /// Turns the spinner; each half-turn scores, with one tick sound per 50 ms.
@@ -662,7 +719,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M2 v4")
+        let label = SKLabelNode(text: "T7 M2 v5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -708,7 +765,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T7 M2 v4 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T7 M2 v5 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1052,6 +1109,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
             leftSideSwitches(ball, from: p0, to: p)
+            updateRampLayer(ball, from: p0, to: p)
+            ball.rampHeight = ball.isOnFloor ? 0 : (ball.activeRamp?.height(at: p) ?? 0)
             ball.previousPosition = ball.position
             ball.updateLook()
         }

@@ -246,10 +246,47 @@ enum ChompTableLayout {
         let t = sqrt((x - leftWallX) / 280)
         return CGPoint(x: x, y: archStartY + 270 * (1 - (1 - t) * (1 - t)))
     }
-    /// The loop's right wall: a flare at the mouth, up x 147, closing on the arch at x 157.
+    /// The loop's right wall: up x 147, closing on the arch at x 157. M2 v5: its mouth flare is gone; its bottom end at
+    /// (147, 885) is the post shared with the wave ramp's mouth beside it (as on the real table).
     static var loopRight: [CGPoint] {
-        [CGPoint(x: 170, y: 862), CGPoint(x: 147, y: 905), CGPoint(x: 147, y: 1180), archPoint(atX: 157)]
+        [CGPoint(x: 147, y: 885), CGPoint(x: 147, y: 1180), archPoint(atX: 157)]
     }
+
+    // MARK: Milestone 2 v5: the wave ramp (the real table's Left Metal Ramp)
+
+    /// Ramp values from Table 06 / Monsoon (ChompRamp is their copy).
+    static let rampEntryDistance: CGFloat = 12
+    static let rampMadeAfterApex: CGFloat = 10
+    static let rampExitBeforeEnd: CGFloat = 15
+    static let rampFriction: CGFloat = 0.05
+    static let rampRestitution: CGFloat = 0.1
+    static let rampTopHeight: CGFloat = 40
+    static let rampRiseLength: CGFloat = 110
+    static let rampEndHeight: CGFloat = 12
+    /// Traced over p. 40 (tools/chomp_layout.py wave_path, tools/chomp_render_m2.py): the mouth sits right beside the
+    /// loop behind their shared post, the ramp runs straight up the channel, bends right over the top-left and climbs
+    /// as plastic toward the top centre; past the top a wire runs down-right and then straight down the right side,
+    /// dropping the ball at (524, 671) onto the pier flipper's plastic block, which rolls it onto the pier flipper
+    /// (tools/chomp_wave_exit_sim.py: into the right inlane at rest, held by a raised pier flipper, at any exit speed).
+    static let waveMouth = CGPoint(x: 172, y: 885)
+    static let waveMouthHalfWidth: CGFloat = 24        // 48 wide for the 30 pt ball
+    static let waveHalfWidth: CGFloat = 21             // a 42 pt channel
+    static let waveFlareLength: CGFloat = 40
+    /// The low end (mouth to y ~945) is solid for floor balls: a U open only at the mouth.
+    static let waveLowLength: CGFloat = 60
+    static var wavePath: ChompRampPath {
+        var p = ChompRampPath(start: waveMouth, heading: .pi / 2)
+        p.line(215)                                  // up the channel beside the loop
+        p.arc(radius: 70, turn: -55 * .pi / 180)     // bend right over the top-left
+        p.line(110)                                  // the plastic ramp climbing toward the top centre
+        p.arc(radius: 55, turn: -75 * .pi / 180)     // over the top: heading −40° (down-right)
+        p.line(188)                                  // the wire across the upper right
+        p.arc(radius: 60, turn: -50 * .pi / 180)     // turn straight down the right side
+        p.line(380)                                  // down to the pier block
+        return p
+    }
+    /// The top of the over-the-top bend (heading 0): plastic up to here, wire after; made 10 pt past it.
+    static let waveApexDistance: CGFloat = 215 + 70 * 55 * .pi / 180 + 110 + 55 * 35 * .pi / 180
     /// Sends harpoon-lane balls on into the left inlane (M2 v3: ends over the wider inlane, 96 pt above the guide's
     /// top); balls from the playfield still reach the left outlane under it.
     static let harpoonDeflector = [CGPoint(x: 20, y: 560), CGPoint(x: 90, y: 500)]

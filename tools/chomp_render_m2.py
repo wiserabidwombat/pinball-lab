@@ -40,6 +40,16 @@ for c in C.bankCenters:
 # shot lines: right flipper -> loop mouth, pier flipper -> quickshot gate
 for a, b, col in [((330, 255), (123, 900), '#008800'), ((500, 585), (60, 880), '#008800')]:
     ax.annotate('', xy=b, xytext=a, arrowprops=dict(arrowstyle='->', color=col, lw=1.5, ls=':'))
+# M2 v5: the wave ramp: rails (purple dashed = up on the ramp), the low end's floor-solid U (blue), switches
+_w = lambda s: C.waveMouthHalfWidth + (C.waveHalfWidth - C.waveMouthHalfWidth) * min(s / C.waveFlareLength, 1)
+WL, WR = C.WP.rails(_w)
+poly(WL, c='#9933cc', lw=1.6, ls='--'); poly(WR, c='#9933cc', lw=1.6, ls='--')
+_low = [i for i, d in enumerate(C.WP.dist) if d < C.waveLowLength]
+_bp, _bh = C.WP.at(C.waveLowLength); _bw = _w(C.waveLowLength)
+waveU = [WL[i] for i in _low] + [(_bp[0] - _bw*math.sin(_bh), _bp[1] + _bw*math.cos(_bh)), (_bp[0] + _bw*math.sin(_bh), _bp[1] - _bw*math.cos(_bh))] + [WR[i] for i in reversed(_low)]
+poly(waveU)
+_ap = C.WP.at(C.waveApexDistance)[0]; ax.plot(*_ap, 'o', color='#9933cc'); ax.text(_ap[0]+5, _ap[1]-18, 'made', fontsize=7)
+ax.annotate('', xy=(172, 900), xytext=(370, 255), arrowprops=dict(arrowstyle='->', color='#008800', lw=1.5, ls=':'))
 ax.set_xlim(*XL); ax.set_ylim(*YL); ax.set_aspect('equal')
 ax.set_title('Table 07 CHOMP! M2 v1: left side over the reference drawing (p.40)', fontsize=9)
 fig.savefig(sys.argv[1] if len(sys.argv) > 1 else 'build/chomp_m2_left.png', dpi=110, bbox_inches='tight')
@@ -63,7 +73,12 @@ report('deflector end to the left outlane post rail tip', math.dist(C.harpoonDef
 report('deflector end to the left sling top', math.dist(C.harpoonDeflector[1], C.leftSling[0]), 'pass')
 report('quickshot gate opening', C.quickshotGate[1][1] - C.quickshotGate[0][1], 'pass')
 report('bank backboard start to the harpoon wall', C.bankBackboard[0][0] - C.harpoonX if C.bankBackboard[0][0] > C.harpoonX else 0, 'closed')
-report('loop mouth (flare tip to tongue corner)', math.dist(C.loopRight[0], (100, 920)), 'pass')
+report('loop mouth (shared post to tongue corner)', math.dist(C.loopRight[0], (100, 920)), 'pass')
+report('wave ramp U left side to the loop wall (closed)', min(abs(p[0] - 147) for p in waveU[:len(_low)]), 'closed')
+report('wave ramp mouth width', 2 * C.waveMouthHalfWidth, 'pass')
+report('wave ramp channel width', 2 * C.waveHalfWidth, 'lane')
+_ow = C.outer_wall()
+print('wave rails: closest to the outer wall %.1f pt, rightmost x %.1f (lane wall 548)' % (min(poly_dist(q, _ow) for q in WL + WR if q[1] > 700), max(q[0] for q in WL + WR)))
 # pier flipper (M2 v2)
 mt, mu = C.mini_tip(), C.mini_tip(C.miniSwing)
 ax.plot([C.miniPivot[0], mu[0]], [C.miniPivot[1], mu[1]], color='#cc00cc', lw=1.5, ls=':')

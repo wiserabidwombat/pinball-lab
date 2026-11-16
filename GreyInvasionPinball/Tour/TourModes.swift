@@ -7,6 +7,9 @@
 //   Mercury Dash: one shot lit on each side, make both;
 //   Venus Veil: three of the five shots hidden; each R-O-C-K-E-T hit reveals one; make the revealed ones;
 //   Mars Recon: drop all three sample targets, then shoot the rover.
+// v4: Moonshot: two Moon ramps lock (a virtual lock: the ball sinks into lunar orbit, a new one is served); the second
+//   starts a 2-ball multiball (the locked ball comes back out of Mission Control); the first jackpot (Moon or Saturn)
+//   visits the Moon. The clock runs only for the locks.
 // The other stops keep the stand-in until their rounds.
 import Foundation
 
@@ -17,6 +20,7 @@ struct TourStop {
         case mercury                // one lit shot per side; each goes dark when made
         case venus                  // hidden shots, revealed by R-O-C-K-E-T hits
         case mars                   // samples, then the rover
+        case moonshot               // v4: two Moon locks start a 2-ball multiball; the first jackpot finishes it
     }
     let planet: String          // the ring's insert name and the window's picture (tour_window_<planet>)
     let title: String           // the mode's name on the banner
@@ -35,7 +39,7 @@ final class TourModes {
         TourStop(planet: "mercury", title: "MERCURY DASH", kind: .mercury, need: 2, seconds: 30),   // v3: 20 → 30
         TourStop(planet: "venus", title: "VENUS VEIL", kind: .venus, need: 3, seconds: 40),
         TourStop(planet: "mars", title: "MARS RECON", kind: .mars, need: 2, seconds: 45),
-        TourStop(planet: "moon", title: "MOONSHOT", kind: .shots(["moon"]), need: 2, seconds: 45),
+        TourStop(planet: "moon", title: "MOONSHOT", kind: .moonshot, need: 3, seconds: 45),
         TourStop(planet: "jupiter", title: "JUPITER STORM", kind: .shots(floorShots), need: 3, seconds: 40),
         TourStop(planet: "saturn", title: "RING RUNNER", kind: .shots(["saturn"]), need: 3, seconds: 45),
         TourStop(planet: "uranus", title: "URANUS ROLL", kind: .shots(floorShots), need: 5, seconds: 40),
@@ -87,6 +91,8 @@ final class TourModes {
             lit = []
         case .mars:
             lit = []
+        case .moonshot:
+            lit = ["moon"]
         }
         return s
     }
@@ -103,6 +109,8 @@ final class TourModes {
         case .shots: break                       // stays lit
         case .mercury, .venus: lit.remove(name)  // each lit shot counts once
         case .mars: return .none
+        case .moonshot:                          // lock, lock, then a jackpot on either ramp
+            if made + 1 == 2 { lit = ["moon", "saturn"] }
         }
         return step()
     }
@@ -139,6 +147,7 @@ final class TourModes {
         guard let s = active else { return "" }
         switch s.kind {
         case .mars: return made == 0 ? "DROP SAMPLES" : "ROVER"
+        case .moonshot: return made < 2 ? "LOCK \(made + 1)" : "JACKPOT"
         case .venus where lit.isEmpty && !hidden.isEmpty: return "\(made)/\(s.need) · HIT R-O-C-K-E-T"
         default: return "\(made)/\(s.need)"
         }
@@ -166,6 +175,11 @@ final class TourModes {
     var secondsLeft: Int { max(0, Int(timeLeft.rounded(.up))) }
 
     #if DEBUG
+    /// `-tourStartAt <planet>`: every stop before it counts as visited, so Mission Control starts it.
+    func debugSkip(to planet: String) {
+        for st in Self.tour { if st.planet == planet { break }; visited.insert(st.planet) }
+    }
+
     /// `-tourModes`: one step of the running stop, as if the player made it.
     func debugStepName() -> (kind: String, name: String)? {
         guard let s = active else { return nil }

@@ -745,6 +745,12 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var lastModeTick: TimeInterval = 0
     private var stopSaveUntil: TimeInterval = -1
     private static let stopSaveSeconds: TimeInterval = 6
+    /// M8 v4: Moonshot — the next Moon hold is a lock; the multiball; its jackpot; its ball save.
+    private var lockNextHold = false
+    private var moonMultiball = false
+    private var jackpotValue = TourPoints.jackpot
+    private var multiballSaveUntil: TimeInterval = -1
+    private static let multiballSaveSeconds: TimeInterval = 10
 
     private var launchHits: Int { min(9, TourTableLayout.countdownHits + launches) }
 
@@ -762,6 +768,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             sampleResetAt = nil
             roverLit = false
             showBanner("\(s.title) · DROP THE SAMPLES")
+        case .moonshot: showBanner("\(s.title) · SHOOT THE MOON TO LOCK")
         case .shots: showBanner("\(s.title) · \(s.need) SHOTS")
         }
         flashers.flash(s.planet == "moon" ? "moon" : s.planet == "saturn" ? "saturn" : "rocket", times: 4)
@@ -785,6 +792,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
         case .progress:
             game.add(TourPoints.modeShot)
             if let s = modes.active { showBanner("\(s.title) · \(modes.stepText)") }
+            if case .moonshot? = modes.active?.kind {        // M8 v4
+                if modes.made == 1 {
+                    lockNextHold = true
+                    showBanner("BALL LOCKED · LOCK 2")
+                } else if modes.made == 2 {
+                    startMoonMultiball()
+                }
+            }
             updateModeStatus(force: true)
             updateShotArrows()
         case .complete(let s):
@@ -793,18 +808,72 @@ final class TourTableScene: SKScene, RendererHostedScene {
             flashers.giOut(for: 1.2)
             flashers.flashAll(times: 4)
             labMark(s.planet + "Visited")
+            if s.planet == "moon" { showBanner("JACKPOT · MOON VISITED") }
             if modes.finishTourIfDone() {
                 showBanner("GRAND TOUR COMPLETE · TOUR \(modes.tourNumber)")
                 planetWindow?.show(planet: "earth")
             } else {
-                showBanner("\(s.planet.uppercased()) VISITED")
+                if s.planet != "moon" { showBanner("\(s.planet.uppercased()) VISITED") }
             }
             endModeLamps()
         }
     }
 
+    // MARK: M8 v4: Moonshot
+
+    /// The second lock: the ball making the ramp rolls on, and the locked one comes back out of Mission Control.
+    private func startMoonMultiball() {
+        moonMultiball = true
+        jackpotValue = TourPoints.jackpot
+        multiballSaveUntil = gameTime + Self.multiballSaveSeconds
+        showBanner("MOONSHOT MULTIBALL")
+        bigHaptic.impactOccurred()
+        flashers.giOut(for: 1.5)
+        flashers.flash("moon", times: 6, gap: 0.15)
+        serveFromMissionControl(after: 1.2)
+        updateShotArrows()
+    }
+
+    /// A ball appears held in Mission Control and is kicked out like any other (through the subway to the left inlane).
+    private func serveFromMissionControl(after delay: TimeInterval) {
+        guard let scoop = missionScoop else { return }
+        let ball = TourBall(at: scoop.position)
+        addChild(ball)
+        balls.append(ball)
+        ball.heldIn = scoop
+        ball.releaseAt = gameTime + delay
+        ball.physicsBody?.affectedByGravity = false
+        ball.physicsBody?.velocity = .zero
+    }
+
+    private func moonJackpot() {
+        game.add(jackpotValue)
+        showBanner("JACKPOT \(jackpotValue.formatted())")
+        jackpotValue += TourPoints.jackpotStep
+        bigHaptic.impactOccurred()
+        flashers.giOut(for: 0.8)
+        flashers.flashAll(times: 2)
+        labMark("jackpot")
+    }
+
+    /// Down to one ball: the multiball is over. A Moonshot still waiting for its first jackpot is lost.
+    private func endMoonMultiball() {
+        guard moonMultiball else { return }
+        moonMultiball = false
+        multiballSaveUntil = -1
+        if case .moonshot? = modes.active?.kind {
+            _ = modes.fail()
+            labMark("stopDrained")
+            showBanner("MOONSHOT LOST")
+            endModeLamps()
+        } else {
+            updateShotArrows()
+        }
+    }
+
     /// The running stop ends unvisited: its time ran out or its ball drained. It starts again at the next Mission Control.
     private func failMode(drained: Bool) {
+        lockNextHold = false
         guard let s = modes.fail() else { return }
         labMark(drained ? "stopDrained" : "stopTimedOut")
         if !drained { showBanner("\(s.planet.uppercased()) LOST · TIME") }
@@ -834,7 +903,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M8 v3: the stop clock waits while no ball is in play — every ball in Mission Control, a crater hold or on the
     /// plunger (or none on the table between balls).
     private var stopClockPaused: Bool {
-        launchedAt == nil || balls.allSatisfy { $0.heldIn != nil || $0.moonReleaseAt != nil }
+        moonMultiball || launchedAt == nil || balls.allSatisfy { $0.heldIn != nil || $0.moonReleaseAt != nil }
     }
 
     /// The HUD's status line: the running stop and its clock, or where Mission Control goes next.
@@ -1026,7 +1095,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         for (name, lamp) in arrowLamps {
             let made = shotCounts[name] ?? 0
             for (k, l) in (stackLamps[name] ?? []).enumerated() { l.isOn = made >= Self.ladder[k] }
-            if modes.active != nil {                         // M8 v1: a stop is running: only its shots are lit
+            if moonMultiball, name == "moon" || name == "saturn" {   // M8 v4: jackpots
+                lamp.set(.blinkFast)
+            } else if modes.active != nil {                  // M8 v1: a stop is running: only its shots are lit
                 lamp.set(modes.isLit(name) ? .blink : .off)
             } else if name == "rocket" {
                 lamp.set(blastDoor.isDown ? .blinkFast : .blink)
@@ -1042,7 +1113,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
         addChild(w)
         planetWindow = w
         parallax.add(w.deepLayer, anchor: w.center, height: TourTableLayout.planetWindowStarDepth)
-        parallax.add(w.planetLayer, anchor: w.center, height: TourTableLayout.planetWindowPlanetDepth)
+        parallax.add(w.planetLayer, anchor: w.center, height: TourTableLayout.planetWindowPlanetDepth,
+                     maxShift: TourTableLayout.planetWindowPlanetMaxShift)
     }
 
     private func addFloor() {
@@ -1566,7 +1638,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                         // Out through the subway at the top of the left inlane; the countdown resets behind it.
                         ball.position = TourTableLayout.missionSubwayExit
                         ball.previousPosition = ball.position
-                        countdownResetAt = now + TourTableLayout.bankResetDelay
+                        if blastDoor.isDown { countdownResetAt = now + TourTableLayout.bankResetDelay }   // M8 v4: not for a served ball
                         if modes.active != nil { stopSaveUntil = now + Self.stopSaveSeconds }   // M8 v3
                     } else if scoop === roverScoop {
                         sampleBank.filter { !$0.isDown }.forEach { $0.drop() }
@@ -1711,12 +1783,17 @@ final class TourTableScene: SKScene, RendererHostedScene {
         sfx(.ramp)
         showBanner(saturn ? "SATURN" : "MOON")
         flashers.flash(saturn ? "saturn" : "moon", times: 2)
+        if moonMultiball { moonJackpot() }                   // M8 v4
         shotMade(saturn ? "saturn" : "moon")
         ball.holdReleaseHeading = saturn ? TourTableLayout.saturnReleaseHeading : TourTableLayout.moonReleaseHeading
         ball.holdReleaseSpeed = saturn ? TourTableLayout.saturnReleaseSpeed : TourTableLayout.moonReleaseSpeed
         ball.moonReleaseAt = tableNow + TourTableLayout.moonHold
         ball.physicsBody?.affectedByGravity = false
         ball.physicsBody?.velocity = .zero
+        if lockNextHold, !saturn {                           // M8 v4: Moonshot's first lock
+            lockNextHold = false
+            ball.lockOnRelease = true
+        }
     }
 
     /// Holds paused balls still in the crater; on time, rolls each on down the wire (along the path past the crater).
@@ -1729,6 +1806,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 continue
             }
             ball.moonReleaseAt = nil
+            if ball.lockOnRelease {                          // M8 v4: into lunar orbit; a new ball to the plunger
+                Effects.burst(in: self, at: ball.position, color: SKColor(white: 0.9, alpha: 1), count: 24, speed: 120,
+                              lifetime: 0.6)
+                removeBall(ball)
+                placeBallOnPlunger()
+                continue
+            }
             body.affectedByGravity = true
             // The exact tangent at the crater (the path's sample gives the next point's heading, ~7° into the turn).
             let h = ball.holdReleaseHeading
@@ -1801,7 +1885,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v3")
+        let label = SKLabelNode(text: "T6 M8 v4b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1847,7 +1931,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v3 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v4b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -1903,7 +1987,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
     func newGame() {
         planetWindow?.show(0, animated: false)             // M6 v11: every game's tour starts at Earth
         modes.reset()                                      // M8 v1
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-tourStartAt"), i + 1 < args.count { modes.debugSkip(to: args[i + 1]) }
+        #endif
         stopSaveUntil = -1
+        lockNextHold = false                               // M8 v4
+        moonMultiball = false
+        multiballSaveUntil = -1
         launches = 0
         updatePlanetArc()
         shotCounts.removeAll()                             // M7 v3: the ladders start empty
@@ -2190,6 +2281,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let drained = balls.filter { $0.position.y < -TourTableLayout.ballRadius * 3 }
         if !drained.isEmpty {
             drained.forEach { removeBall($0) }
+            if moonMultiball {                               // M8 v4: Moonshot's save, then down to one ball = over
+                if now < multiballSaveUntil {
+                    drained.forEach { _ in serveFromMissionControl(after: 0.8) }
+                    showBanner("BALL SAVED")
+                } else if balls.count <= 1 {
+                    endMoonMultiball()
+                }
+            }
             if balls.isEmpty, nextBallAt == nil {
                 let stopSave = now < stopSaveUntil                // M8 v3: a stop's start has its own save
                 if ballSaveNow || stopSave, !nudge.tilted {
@@ -2672,7 +2771,15 @@ extension TourTableScene: PlayLabHost {
          PlayObjective(name: "rover", text: "Shoot the rover"),
          PlayObjective(name: "kickback", text: "Use the kickback"),
          PlayObjective(name: "rocketPostSave", text: "The rocket post saves a ball"),
-         PlayObjective(name: "ballSaved", text: "The ball save saves a ball")]
+         PlayObjective(name: "ballSaved", text: "The ball save saves a ball"),
+         PlayObjective(name: "stopStarted", text: "Start a tour stop at Mission Control"),
+         PlayObjective(name: "mercuryVisited", text: "Finish Mercury Dash"),
+         PlayObjective(name: "venusVisited", text: "Finish Venus Veil"),
+         PlayObjective(name: "marsVisited", text: "Finish Mars Recon"),
+         PlayObjective(name: "moonVisited", text: "Finish Moonshot (first multiball jackpot)"),
+         PlayObjective(name: "jackpot", text: "Score a Moonshot jackpot"),
+         PlayObjective(name: "stopTimedOut", text: "A stop runs out of time"),
+         PlayObjective(name: "stopDrained", text: "A stop ends with a drain")]
     }
 
     /// Flip delays = the middle of each Shot Lab window (cradle): 120 Hz from shotlab-grand-tour-2026-11-09T14-12-00Z

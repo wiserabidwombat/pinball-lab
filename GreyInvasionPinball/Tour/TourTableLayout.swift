@@ -518,6 +518,8 @@ enum TourTableLayout {
     static let planetWindowRadius: CGFloat = 46
     static let planetWindowPlanetDepth: CGFloat = -90
     static let planetWindowStarDepth: CGFloat = -240
+    /// M8 v4b: the planet slides at most this far (pt), so even Saturn's rings and the Sun stay inside the glass.
+    static let planetWindowPlanetMaxShift: CGFloat = 4
     static let rampRiseLength: CGFloat = 110
     static let rampEndHeight: CGFloat = 12
     static let moonMouth = CGPoint(x: 200, y: 760)

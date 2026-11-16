@@ -12,6 +12,7 @@ final class TourParallax {
         let node: SKNode
         let anchor: CGPoint
         let height: CGFloat
+        let maxShift: CGFloat
     }
     private var items: [Item] = []
     /// 0 = off, 1 = the planned amount, 2 = doubled (DEBUG pause button cycles it to judge the look).
@@ -19,8 +20,10 @@ final class TourParallax {
 
     /// `node` is a holder at (0, 0) whose children sit at their own positions; it moves as one piece of height `height`
     /// standing at `anchor` (world points, on the floor).
-    func add(_ node: SKNode, anchor: CGPoint, height: CGFloat) {
-        items.append(Item(node: node, anchor: anchor, height: height))
+    /// M8 v4b: `maxShift` caps how far it slides (the planet window's planet: in the TOP camera the window sits far from
+    /// the camera's centre and the full slide pushed the planet half out of its glass).
+    func add(_ node: SKNode, anchor: CGPoint, height: CGFloat, maxShift: CGFloat = .infinity) {
+        items.append(Item(node: node, anchor: anchor, height: height, maxShift: maxShift))
     }
 
     /// The offset of something `height` points up at world point `p`, seen from a camera centred on `camera`.
@@ -32,7 +35,10 @@ final class TourParallax {
     /// Once per frame, after the camera has moved.
     func update(camera: CGPoint) {
         for item in items {
-            item.node.position = shift(at: item.anchor, height: item.height, camera: camera)
+            var p = shift(at: item.anchor, height: item.height, camera: camera)
+            let len = hypot(p.x, p.y)
+            if len > item.maxShift { p = CGPoint(x: p.x * item.maxShift / len, y: p.y * item.maxShift / len) }
+            item.node.position = p
         }
     }
 }

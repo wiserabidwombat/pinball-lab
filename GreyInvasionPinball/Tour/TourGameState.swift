@@ -35,6 +35,8 @@ enum TourPoints {
     // M8 v1: the tour (first guesses; tuned in the balance round)
     static let modeShot = 10_000
     static let modeComplete = 100_000     // × the tour number
+    static let jackpot = 150_000          // M8 v4: Moonshot's first jackpot, +jackpotStep each after
+    static let jackpotStep = 50_000
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

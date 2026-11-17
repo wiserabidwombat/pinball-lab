@@ -434,6 +434,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
                     guard let step = self.modes.debugStepName() else { return }
                     switch step.kind {
                     case "event": self.modeEvent(step.name)
+                    case "spin": self.modeEvent("spin", amount: 10)
+                    case "bumper": self.modeEvent("bumper", amount: 4)
                     case "reveal": if let r = self.rocketStandups.first { self.hitStandup(r) }
                     default: self.modeShot(step.name)
                     }
@@ -769,6 +771,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
             roverLit = false
             showBanner("\(s.title) · DROP THE SAMPLES")
         case .moonshot: showBanner("\(s.title) · SHOOT THE MOON TO LOCK")
+        case .jupiter: showBanner("\(s.title) · SPIN THE ORBITS")
+        case .ringRunner: showBanner("\(s.title) · 3 QUICK SATURNS")
+        case .uranus: showBanner("\(s.title) · LEFT, RIGHT, LEFT…")
+        case .neptune: showBanner("\(s.title) · SPIN TO DIVE")
         case .shots: showBanner("\(s.title) · \(s.need) SHOTS")
         }
         flashers.flash(s.planet == "moon" ? "moon" : s.planet == "saturn" ? "saturn" : "rocket", times: 4)
@@ -783,12 +789,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func modeShot(_ name: String) { applyMode(modes.shot(name)) }
 
     /// M8 v2: Mars's steps ("samples", "rover").
-    private func modeEvent(_ name: String) { applyMode(modes.event(name)) }
+    private func modeEvent(_ name: String, amount: Int = 1) { applyMode(modes.event(name, amount: amount)) }
 
     private func applyMode(_ result: TourModes.Result) {
         switch result {
         case .none:
             return
+        case .counting:                                      // M8 v5: a spin / bumper toward a step
+            updateModeStatus(force: true)
         case .progress:
             game.add(TourPoints.modeShot)
             if let s = modes.active { showBanner("\(s.title) · \(modes.stepText)") }
@@ -1836,6 +1844,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             let spins = s.update(dt: dt)
             guard spins > 0 else { continue }
             game.add(TourPoints.spin * spins)
+            modeEvent("spin", amount: spins)                     // M8 v5: Jupiter / Neptune
             if now - lastSpinSound >= 0.05 {
                 lastSpinSound = now
                 sfx(.spinner)
@@ -1885,7 +1894,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v4b")
+        let label = SKLabelNode(text: "T6 M8 v5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1931,7 +1940,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v4b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v5 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2446,6 +2455,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                bumper.hit(ball: ballBody, ballPosition: ballNode.position, at: gameTime) {
                 labEvent("bumper")
                 game.add(TourPoints.bumper)
+                modeEvent("bumper")                              // M8 v5: Neptune
                 hitHaptic.impactOccurred(intensity: 0.8)
                 sfx(.bumper)
             } else if node === rocketPost, rocketPostUp, rocketPostDropAt == nil {
@@ -2778,6 +2788,10 @@ extension TourTableScene: PlayLabHost {
          PlayObjective(name: "marsVisited", text: "Finish Mars Recon"),
          PlayObjective(name: "moonVisited", text: "Finish Moonshot (first multiball jackpot)"),
          PlayObjective(name: "jackpot", text: "Score a Moonshot jackpot"),
+         PlayObjective(name: "jupiterVisited", text: "Finish Jupiter Storm"),
+         PlayObjective(name: "saturnVisited", text: "Finish Ring Runner"),
+         PlayObjective(name: "uranusVisited", text: "Finish Uranus Roll"),
+         PlayObjective(name: "neptuneVisited", text: "Finish Neptune Deep"),
          PlayObjective(name: "stopTimedOut", text: "A stop runs out of time"),
          PlayObjective(name: "stopDrained", text: "A stop ends with a drain")]
     }
@@ -2918,6 +2932,7 @@ extension TourTableScene: PlayLabHost {
         if modes.active != nil {
             w += TourModes.arrowShots.filter { modes.isLit($0) }
             if case .venus? = modes.active?.kind, modes.lit.isEmpty { w += ["roc", "ketK", "ketE", "ketT"] }
+            if modes.wantsOrbits { w += ["leftOrbit", "rightOrbit"] }                 // M8 v5
         }
         let lit = rocketStandups.map { $0.isLit }
         if lit.count >= 6 {

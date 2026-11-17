@@ -10,7 +10,9 @@
 // v4: Moonshot: two Moon ramps lock (a virtual lock: the ball sinks into lunar orbit, a new one is served); the second
 //   starts a 2-ball multiball (the locked ball comes back out of Mission Control); the first jackpot (Moon or Saturn)
 //   visits the Moon. The clock runs only for the locks.
-// The other stops keep the stand-in until their rounds.
+// v5: the outer leg — Jupiter Storm (40 spins, then a ramp), Ring Runner (3 Saturns, each within 8 s of the last),
+//   Uranus Roll (5 lit shots, sides alternating), Neptune Deep (60 spins, then 10 bumpers).
+// The Sun keeps the stand-in until its round.
 import Foundation
 
 /// One stop on the tour: its planet, its kind of goal and a timer.
@@ -21,6 +23,10 @@ struct TourStop {
         case venus                  // hidden shots, revealed by R-O-C-K-E-T hits
         case mars                   // samples, then the rover
         case moonshot               // v4: two Moon locks start a 2-ball multiball; the first jackpot finishes it
+        case jupiter                // v5: 40 spinner spins build the storm, then either ramp
+        case ringRunner             // v5: 3 Saturn ramps, each within 8 s of the last
+        case uranus                 // v5: 5 lit shots, the lit side alternating after each
+        case neptune                // v5: 60 spins dive deep, then 10 pop-bumper hits
     }
     let planet: String          // the ring's insert name and the window's picture (tour_window_<planet>)
     let title: String           // the mode's name on the banner
@@ -40,10 +46,10 @@ final class TourModes {
         TourStop(planet: "venus", title: "VENUS VEIL", kind: .venus, need: 3, seconds: 40),
         TourStop(planet: "mars", title: "MARS RECON", kind: .mars, need: 2, seconds: 45),
         TourStop(planet: "moon", title: "MOONSHOT", kind: .moonshot, need: 3, seconds: 45),
-        TourStop(planet: "jupiter", title: "JUPITER STORM", kind: .shots(floorShots), need: 3, seconds: 40),
-        TourStop(planet: "saturn", title: "RING RUNNER", kind: .shots(["saturn"]), need: 3, seconds: 45),
-        TourStop(planet: "uranus", title: "URANUS ROLL", kind: .shots(floorShots), need: 5, seconds: 40),
-        TourStop(planet: "neptune", title: "NEPTUNE DEEP", kind: .shots(floorShots), need: 4, seconds: 50),
+        TourStop(planet: "jupiter", title: "JUPITER STORM", kind: .jupiter, need: 2, seconds: 40),
+        TourStop(planet: "saturn", title: "RING RUNNER", kind: .ringRunner, need: 3, seconds: 45),
+        TourStop(planet: "uranus", title: "URANUS ROLL", kind: .uranus, need: 5, seconds: 40),
+        TourStop(planet: "neptune", title: "NEPTUNE DEEP", kind: .neptune, need: 2, seconds: 50),
         TourStop(planet: "sun", title: "SUN SLINGSHOT", kind: .shots(floorShots), need: 3, seconds: 60),
     ]
 
@@ -60,6 +66,12 @@ final class TourModes {
     private(set) var lit: Set<String> = []
     /// Venus: the chosen shots still under the clouds.
     private var hidden: [String] = []
+    /// v5: Jupiter / Neptune — spins or bumper hits counted toward the current step; Ring Runner — time left to chain.
+    private(set) var count = 0
+    private(set) var chainLeft: TimeInterval = 0
+    static let jupiterSpins = 40, neptuneSpins = 60, neptuneBumpers = 10
+    static let ringChain: TimeInterval = 8
+    static let leftShots: Set<String> = ["leftOrbit", "moon"], rightShots: Set<String> = ["saturn", "rightOrbit"]
 
     /// The next stop Mission Control will start (the first on the ring not yet visited this tour).
     var nextStop: TourStop { Self.tour.first { !visited.contains($0.planet) } ?? Self.tour[0] }
@@ -81,6 +93,8 @@ final class TourModes {
         made = 0
         timeLeft = s.seconds
         hidden = []
+        count = 0
+        chainLeft = 0
         switch s.kind {
         case .shots(let pool):
             lit = pool
@@ -93,6 +107,12 @@ final class TourModes {
             lit = []
         case .moonshot:
             lit = ["moon"]
+        case .jupiter, .neptune:
+            lit = []
+        case .ringRunner:
+            lit = ["saturn"]
+        case .uranus:
+            lit = Bool.random() ? Self.leftShots : Self.rightShots
         }
         return s
     }
@@ -100,7 +120,8 @@ final class TourModes {
     /// Whether `shot` counts toward the running goal.
     func isLit(_ shot: String) -> Bool { lit.contains(shot) }
 
-    enum Result { case none, progress, complete(TourStop) }
+    /// v5: `counting` = a spin / bumper counted toward a step (the HUD changes; no step yet).
+    enum Result { case none, counting, progress, complete(TourStop) }
 
     /// A shot was made (an arrow's shot; "rocket" = the blast door during a stop).
     func shot(_ name: String) -> Result {
@@ -111,6 +132,14 @@ final class TourModes {
         case .mars: return .none
         case .moonshot:                          // lock, lock, then a jackpot on either ramp
             if made + 1 == 2 { lit = ["moon", "saturn"] }
+        case .jupiter, .neptune: break           // jupiter: the ramp after the storm
+        case .ringRunner:                        // a Saturn after the chain ran out starts again at 1
+            if made > 0, chainLeft <= 0 { made = 0 }
+            chainLeft = Self.ringChain
+        case .uranus:                            // the lit side swaps after every make
+            let r = step()
+            if case .progress = r { lit = Self.leftShots.contains(name) ? Self.rightShots : Self.leftShots }
+            return r
         }
         return step()
     }
@@ -124,10 +153,32 @@ final class TourModes {
     }
 
     /// Mars: "samples" (the bank is down) then "rover" (the rover hole while it's lit).
-    func event(_ name: String) -> Result {
-        guard case .mars? = active?.kind else { return .none }
-        if name == "samples", made == 0 { return step() }
-        if name == "rover", made == 1 { return step() }
+    func event(_ name: String, amount: Int = 1) -> Result {
+        switch active?.kind {
+        case .mars?:
+            if name == "samples", made == 0 { return step() }
+            if name == "rover", made == 1 { return step() }
+        case .jupiter?:                          // v5: spins build the storm, then the ramps light
+            guard name == "spin", made == 0 else { return .none }
+            count += amount
+            guard count >= Self.jupiterSpins else { return .counting }
+            count = 0
+            lit = ["moon", "saturn"]
+            return step()
+        case .neptune?:                          // v5: spins, then bumpers
+            if name == "spin", made == 0 {
+                count += amount
+                guard count >= Self.neptuneSpins else { return .counting }
+                count = 0
+                return step()
+            }
+            if name == "bumper", made == 1 {
+                count += amount
+                guard count >= Self.neptuneBumpers else { return .counting }
+                return step()
+            }
+        default: break
+        }
         return .none
     }
 
@@ -139,6 +190,7 @@ final class TourModes {
         active = nil
         lit = []
         hidden = []
+        count = 0
         return .complete(s)
     }
 
@@ -148,6 +200,11 @@ final class TourModes {
         switch s.kind {
         case .mars: return made == 0 ? "DROP SAMPLES" : "ROVER"
         case .moonshot: return made < 2 ? "LOCK \(made + 1)" : "JACKPOT"
+        case .jupiter: return made == 0 ? "SPINS \(count)/\(Self.jupiterSpins)" : "SHOOT A RAMP"
+        case .neptune: return made == 0 ? "SPINS \(count)/\(Self.neptuneSpins)" : "BUMPERS \(count)/\(Self.neptuneBumpers)"
+        case .ringRunner:
+            return made == 0 ? "SATURN 0/\(s.need)" : "SATURN \(made)/\(s.need) · \(Int(chainLeft.rounded(.up)))s"
+        case .uranus: return "\(made)/\(s.need) · \(lit.isSubset(of: Self.leftShots) ? "LEFT" : "RIGHT")"
         case .venus where lit.isEmpty && !hidden.isEmpty: return "\(made)/\(s.need) · HIT R-O-C-K-E-T"
         default: return "\(made)/\(s.need)"
         }
@@ -170,7 +227,23 @@ final class TourModes {
         return true
     }
 
-    func tick(_ dt: TimeInterval) { timeLeft -= max(0, min(dt, 0.25)) }
+    /// v5: the robot's hint — the orbits feed the spinners (and loop into the pops).
+    var wantsOrbits: Bool {
+        switch active?.kind {
+        case .jupiter?: return made == 0
+        case .neptune?: return true
+        default: return false
+        }
+    }
+
+    func tick(_ dt: TimeInterval) {
+        let d = max(0, min(dt, 0.25))
+        timeLeft -= d
+        if case .ringRunner? = active?.kind, made > 0 {   // v5: the chain runs with the stop clock
+            chainLeft -= d
+            if chainLeft <= 0 { made = 0 }
+        }
+    }
     var timeUp: Bool { active != nil && timeLeft <= 0 }
     var secondsLeft: Int { max(0, Int(timeLeft.rounded(.up))) }
 
@@ -185,6 +258,8 @@ final class TourModes {
         guard let s = active else { return nil }
         switch s.kind {
         case .mars: return ("event", made == 0 ? "samples" : "rover")
+        case .jupiter where made == 0: return ("spin", "")
+        case .neptune: return made == 0 ? ("spin", "") : ("bumper", "")
         case .venus where lit.isEmpty: return ("reveal", "")
         default: return lit.sorted().first.map { ("shot", $0) }
         }

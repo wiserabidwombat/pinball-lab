@@ -29,6 +29,9 @@ protocol ShotLabHost: AnyObject {
     var shotLabProbes: [ShotLab.Probe] { get }
     /// The shot events that end a trial (Pinball Lab: each table has its own shots).
     var shotLabMajorEvents: Set<String> { get }
+    /// T7 (CHOMP! M2 v15): the cradle sweep's flip delays, for a table whose ball rolls slower (its own gravity).
+    /// Default: ShotLab.minDelay…maxDelay, as before.
+    var shotLabCradleDelays: ClosedRange<Double> { get }
     /// Optional number recorded at each flip (Table 03: where Cthulhu is in his sway, 0–1), or nil.
     var shotLabContext: Double? { get }
 }
@@ -36,6 +39,7 @@ protocol ShotLabHost: AnyObject {
 extension ShotLabHost {
     var shotLabProbes: [ShotLab.Probe] { [] }
     var shotLabMajorEvents: Set<String> { ShotLab.majorEvents }
+    var shotLabCradleDelays: ClosedRange<Double> { ShotLab.minDelay...ShotLab.maxDelay }
     var shotLabContext: Double? { nil }
 }
 
@@ -222,7 +226,7 @@ final class ShotLab {
         probes = host.shotLabProbes
         majorEvents = host.shotLabMajorEvents
         startKind = start
-        let range = start.delayRange
+        let range = start == .cradle ? host.shotLabCradleDelays : start.delayRange
         let steps = Int(((range.upperBound - range.lowerBound) / Self.delayStep).rounded())
         var chosen = flippers.indices.filter { i in only.map { $0.contains(flippers[i].name.lowercased()) } ?? true }
         if chosen.isEmpty { chosen = Array(flippers.indices) }

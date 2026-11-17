@@ -18,7 +18,12 @@ enum ChompTableLayout {
     static let worldSize = CGSize(width: 600, height: 1300)
 
     // MARK: Physics
-    static let gravity: CGFloat = -9.2
+    /// M2 v14 (Aaron: "If the ball is falling too fast but it's makeable on a real table, is the gravity too high?" →
+    /// "Yes please"): a real rolling ball. A playfield tilted ~6.5° pulls along it at 9.81 × sin 6.5° ≈ 1.11 m/s²; a
+    /// rolling ball speeds up at 5/7 of that (our 2D ball slides, so it gets all of it) ≈ 0.79 m/s²; at this table's
+    /// real scale (28.9 pt/in ≈ 1,138 pt/m) that's ~900 pt/s², = 6.0 here (SpriteKit: 150 pt per metre). Was 9.2
+    /// (1,380 pt/s², every other table's).
+    static let gravity: CGFloat = -6.0
     /// M2 v4 (Aaron: "Let's scale the ball up."): real scale. The table is traced from the Jaws Pro drawing at ~28.9 pt
     /// per inch (the real playfield ~585 pt / 20.25"), so the real 1-1/16" ball is ~30 pt: radius 15 (was 9, every
     /// earlier table's). The real flipper (pivot to tip, ~59 px × 1.355 on p. 40) is ~80 pt (was 96).
@@ -76,6 +81,30 @@ enum ChompTableLayout {
     static let flipperTravel: CGFloat = .pi / 3
     /// Table 06 M2's real-table flippers (Aaron, 7 Nov 2026: "Love it"): 35 rad/s and a 0.3 rubber bounce.
     static let flipperUpSpeed: CGFloat = 35
+    /// T7 M2 v9: the flipper carry (ChompFlipper.contactLaunch): a smooth, rate-independent launch model. Its fan
+    /// probe is smooth, but it sends every ball met within ~50 pt of the pivot the same way (~94°, let go at the stop)
+    /// and narrowed the shots (Shot Lab run 4); off until Aaron picks a direction. false = the physics catch + flip assist.
+    static let flipperCarry = false
+    /// T7 M2 v10 (Aaron: "What gets us the most realistic pinball physics?" → "Let's do it!"): the flipper model,
+    /// Visual Pinball's approach. On the way up the flipper is driven by a coil that builds up (it doesn't jump to full
+    /// speed), and a ball within its reach is the model's for that frame, not SpriteKit's: 0.5 ms sub-steps of the
+    /// moving face against the ball, a rubber bounce that weakens on harder hits, and friction that rolls the ball along
+    /// the face. Holding, cradling and the way down stay SpriteKit's. Starting values, to calibrate with the fan probe
+    /// and Shot Lab (VPX guides: elasticity 0.88 with a little fall-off, friction 0.9, coil ramp-up 2.5).
+    static let flipperModel = true
+    /// Probe round 2: with a 40 rad/s top speed the face stopped speeding up ~16 ms in, the ball ran ahead of it and
+    /// was caught again or not depending on where it started (jumps of 10–15°). A real coil pulls all the way to the
+    /// stop, so: no top speed; the stop in 47 ms at 49.5 rad/s (tip 3,960 pt/s; the ball's own cap is 3,500).
+    static let flipperCoilAccel: CGFloat = 1200          // rad/s² once the coil is fully on
+    static let flipperCoilRamp: CGFloat = 0.006          // s: the coil reaches 63 % of full pull in this time
+    static let flipperMaxSpeed: CGFloat = 1000           // rad/s: no top speed in practice
+    static let flipperElasticity: CGFloat = 0.85         // bounce off the rubber at low speed
+    static let flipperElasticityFalloff: CGFloat = 0.35  // per 1,000 pt/s of impact: 0.85 → 0.50 at 2,000 pt/s
+    /// Probe round 3 (tools/flip/flipsim.py, the Python twin, swept): friction braked the ball rolling out along the
+    /// face (the model has no spin, so rolling looked like slip), it never left before the stop and half the flipper
+    /// shot ~62°. 0 = the ball rolls freely along the face, as a real rolling ball does.
+    static let flipperRubberFriction: CGFloat = 0
+    static let flipperBounceThreshold: CGFloat = 600     // pt/s: slower contacts don't bounce (a carried ball)
     static let flipperRestitution: CGFloat = 0.3
     static let flipperDownSpeed: CGFloat = 14
     static let flipperMass: CGFloat = 2
@@ -204,9 +233,12 @@ enum ChompTableLayout {
     /// The plastic block (closed): top (548, 618)→(519, 615) sheds left gently (steeper flew balls past the flipper;
     /// flat kept them), the left edge down to (503, 547), round the pivot cap (gaps 10.8 / 6.8 / 2.4: closed) and down
     /// the blade's right side to (514, 470); the right outlane's way in is under it (53 pt over the post rail tip).
+    /// M2 v15 (pier probe: at real gravity the ball let down from the held flipper sat balanced on the block's
+    /// lower-left corner at (503, 547) for over a second): the corner moves in to (511, 548), still closed on the cap
+    /// (6.8 pt), so the dropped ball falls clear onto the flipper.
     static let pierPlastic = [CGPoint(x: 519, y: 615), CGPoint(x: laneWallX, y: 618), CGPoint(x: laneWallX, y: 470),
                               CGPoint(x: 514, y: 470), CGPoint(x: 528, y: 530), CGPoint(x: 522, y: 548),
-                              CGPoint(x: 503, y: 547), CGPoint(x: 519, y: 615)]
+                              CGPoint(x: 511, y: 548), CGPoint(x: 519, y: 615)]
     /// The mini-lane switch on the way down the block's left edge (skill shot 2, fish finder and quickshots later).
     static let miniLaneSwitch = CGPoint(x: 508, y: 590)
     /// The beach-ball bumper and the buoy target above the pocket.
@@ -227,18 +259,26 @@ enum ChompTableLayout {
     // round the hairpin and down the harpoon lane to the left inlane (the real game's "harpoon shot fed by the left
     // orbit"); the pier flipper shoots straight into the harpoon lane through the gate.
     static let harpoonX: CGFloat = 60
-    static var harpoonInner: [CGPoint] { [CGPoint(x: harpoonX, y: 580), CGPoint(x: harpoonX, y: 840)] }
+    /// M2 v13 (Aaron: "Yes please" — the harpoon is "a makeable shot from the right mini flipper" on the real table;
+    /// ours made it 1–2 times in 96): the wall stops at y 760 and the one-way gate above it is twice as tall (760–920), so
+    /// it takes the pier flipper's ~137–148° shots instead of only ~137–141°.
+    /// v13b (Shot Lab run 9: 150° shots hit the wall's top at 760): down to 720, the gate 720–920.
+    static var harpoonInner: [CGPoint] { [CGPoint(x: harpoonX, y: 580), CGPoint(x: harpoonX, y: 720)] }
     /// One-way (category diverter, solid while the ball moves right, like the outlane save gate): in from the right only.
-    static var quickshotGate: (a: CGPoint, b: CGPoint) { (CGPoint(x: harpoonX, y: 840), CGPoint(x: harpoonX, y: 920)) }
+    static var quickshotGate: (a: CGPoint, b: CGPoint) { (CGPoint(x: harpoonX, y: 720), CGPoint(x: harpoonX, y: 920)) }
     /// The tongue between the harpoon lane and the loop: a closed outline with a round top (centre (80, 1040), r 20;
     /// M2 v4 lowered it 40 pt so the harpoon lane beside it stays ≥ 37 wide under the arch for the 30 pt ball).
+    /// M2 v7 (Shot Lab run 1: loop shots, 106–108° and drifting left, clipped the tongue's bottom-right corner at
+    /// (100, 920)): the tongue is narrower, x 60–88, so the loop channel is 59 wide.
+    static let tongueRightX: CGFloat = 88
     static var tongue: [CGPoint] {
+        let r = (tongueRightX - harpoonX) / 2, cx = harpoonX + r
         var pts = [CGPoint(x: harpoonX, y: 920), CGPoint(x: harpoonX, y: 1040)]
         for i in 1...11 {
             let a = CGFloat.pi - CGFloat.pi * CGFloat(i) / 12
-            pts.append(CGPoint(x: 80 + 20 * cos(a), y: 1040 + 20 * sin(a)))
+            pts.append(CGPoint(x: cx + r * cos(a), y: 1040 + r * sin(a)))
         }
-        pts += [CGPoint(x: 100, y: 1040), CGPoint(x: 100, y: 920), CGPoint(x: harpoonX, y: 920)]
+        pts += [CGPoint(x: tongueRightX, y: 1040), CGPoint(x: tongueRightX, y: 920), CGPoint(x: harpoonX, y: 920)]
         return pts
     }
     /// The point of the outer wall's top-left arch at x (the arch is x = 20 + 280 t², y = 1000 + 270 (1 − (1 − t)²)).
@@ -268,31 +308,59 @@ enum ChompTableLayout {
     /// as plastic toward the top centre; past the top a wire runs down-right and then straight down the right side,
     /// dropping the ball at (524, 671) onto the pier flipper's plastic block, which rolls it onto the pier flipper
     /// (tools/chomp_wave_exit_sim.py: into the right inlane at rest, held by a raised pier flipper, at any exit speed).
-    static let waveMouth = CGPoint(x: 172, y: 885)
-    static let waveMouthHalfWidth: CGFloat = 24        // 48 wide for the 30 pt ball
-    static let waveHalfWidth: CGFloat = 21             // a 42 pt channel
+    /// M2 v11 (Aaron: does the angled mouth match the real table? → "Yep, let's do it now that we have the new flipper
+    /// modifications"): the real layout. The channel runs straight up between the post shared with the loop (its wall
+    /// down to y 870) and a wall on its right that stops higher, at y 945, with a rounded end — a staggered opening that
+    /// takes shots coming up-left from the right flipper under the right wall's end. Those floor walls guide the ball
+    /// into the 42 pt lane; the plastic ramp (its entrance flap) starts at y 1000. (v7 leaned the whole mouth 10° right
+    /// with its right post at (222, 871), in what is open floor on the real table.)
+    /// M2 v12 (Aaron: "Option 1"; Shot Lab run 7: 2 / 0 from the right flipper with the 42 lane and a 5 pt post): the
+    /// lane is 46 wide (the real channel ~45) and the right wall ends in the real table's fat rounded block, so a ball
+    /// that clips it is turned into the lane instead of bouncing out.
+    static let waveMouth = CGPoint(x: 174, y: 1000)
+    static let waveMouthHalfWidth: CGFloat = 23        // the lane: 46 wide
+    static let waveHalfWidth: CGFloat = 23
     static let waveFlareLength: CGFloat = 40
-    /// The low end (mouth to y ~945) is solid for floor balls: a U open only at the mouth.
+    /// The low end (y 1000–1060) is solid for floor balls: a U open only at the mouth.
     static let waveLowLength: CGFloat = 60
-    static var wavePath: ChompRampPath {
+    static let waveLaneLeft = [CGPoint(x: 151, y: 870), CGPoint(x: 151, y: 1000)]
+    /// The block right of the lane (x 197–233) up to the ramp's entrance, its bottom a half-round, centre (215, 950) r 18.
+    static let waveEndCentre = CGPoint(x: 215, y: 950)
+    static let waveEndRadius: CGFloat = 18
+    static var waveRightBlock: [CGPoint] {
+        let c = waveEndCentre, r = waveEndRadius
+        var pts = [CGPoint(x: c.x - r, y: 1000), CGPoint(x: c.x - r, y: c.y)]
+        for i in 1...11 {
+            let a = CGFloat.pi + CGFloat.pi * CGFloat(i) / 12
+            pts.append(CGPoint(x: c.x + r * cos(a), y: c.y + r * sin(a)))
+        }
+        pts += [CGPoint(x: c.x + r, y: c.y), CGPoint(x: c.x + r, y: 1000), CGPoint(x: c.x - r, y: 1000)]
+        return pts
+    }
+    /// The path up to the top of the channel (y 1100).
+    private static var waveChannel: ChompRampPath {
         var p = ChompRampPath(start: waveMouth, heading: .pi / 2)
-        p.line(215)                                  // up the channel beside the loop
+        p.line(100)
+        return p
+    }
+    static var wavePath: ChompRampPath {
+        var p = waveChannel
         p.arc(radius: 70, turn: -55 * .pi / 180)     // bend right over the top-left
         p.line(110)                                  // the plastic ramp climbing toward the top centre
         p.arc(radius: 55, turn: -75 * .pi / 180)     // over the top: heading −40° (down-right)
-        p.line(188)                                  // the wire across the upper right
+        p.line(185)                                  // the wire across the upper right
         p.arc(radius: 60, turn: -50 * .pi / 180)     // turn straight down the right side
         p.line(380)                                  // down to the pier block
         return p
     }
     /// The top of the over-the-top bend (heading 0): plastic up to here, wire after; made 10 pt past it.
-    static let waveApexDistance: CGFloat = 215 + 70 * 55 * .pi / 180 + 110 + 55 * 35 * .pi / 180
+    static var waveApexDistance: CGFloat { waveChannel.length + 70 * 55 * .pi / 180 + 110 + 55 * 35 * .pi / 180 }
     /// Sends harpoon-lane balls on into the left inlane (M2 v3: ends over the wider inlane, 96 pt above the guide's
     /// top); balls from the playfield still reach the left outlane under it.
     static let harpoonDeflector = [CGPoint(x: 20, y: 560), CGPoint(x: 90, y: 500)]
-    static let spinnerLine = (a: CGPoint(x: 100, y: 960), b: CGPoint(x: 147, y: 960))
+    static let spinnerLine = (a: CGPoint(x: tongueRightX, y: 960), b: CGPoint(x: 147, y: 960))
     static let spinnerSwitch = ChompSwitch(a: spinnerLine.a, b: spinnerLine.b, forward: CGVector(dx: 0, dy: 1))
-    static let loopEntranceSwitch = ChompSwitch(a: CGPoint(x: 100, y: 1020), b: CGPoint(x: 147, y: 1020),
+    static let loopEntranceSwitch = ChompSwitch(a: CGPoint(x: tongueRightX, y: 1020), b: CGPoint(x: 147, y: 1020),
                                                 forward: CGVector(dx: 0, dy: 1))
     /// The quickshot rollovers in the harpoon lane: top, mid, bottom.
     static let quickshotSwitches = [CGPoint(x: 40, y: 1000), CGPoint(x: 40, y: 870), CGPoint(x: 40, y: 600)]

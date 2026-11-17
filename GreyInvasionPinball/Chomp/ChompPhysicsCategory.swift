@@ -37,4 +37,7 @@ enum ChompPhysicsCategory {
     /// walls; it takes this category, which nothing collides with.
     static let rideBall: UInt32 = 1 << 16
     static let rideWall: UInt32 = 1 << 17
+    /// T7 M2 v9: a floor ball just launched by a flipper's contact launch, for a few steps: everything but the
+    /// flippers treats it as a ball (its own mask has them), and the flippers (masked to `ball`) neither hit nor feel it.
+    static let ghostBall: UInt32 = 1 << 18
 }

@@ -217,3 +217,93 @@ def wave_path():
 WP = wave_path()
 # apex = the top of the over-the-top arc (heading 0)
 waveApexDistance = 215 + 70 * math.radians(55) + 110 + 55 * math.radians(35)
+
+# ---- Milestone 2 v7 (Shot Lab run 1: wave ramp 0/192, loop 2/192 from the right flipper; Aaron: "Option 1 for sure"):
+# wider mouths. The wave ramp's mouth flares to 66 and leans right (the right flipper's ~100-101 deg shots cross
+# y 865 at x ~200-215, just right of the old 48 pt mouth); the tongue narrows to x 60-88 so loop shots (106-108 deg,
+# drifting left) clear its bottom-right corner.
+tongueRightX = 88
+def _tongue3():
+    r = (tongueRightX - harpoonX) / 2; cx = harpoonX + r
+    pts = [(harpoonX, 920), (harpoonX, _tongueTop)]
+    for i in range(1, 12):
+        a = math.pi - math.pi * i / 12
+        pts.append((cx + r * math.cos(a), _tongueTop + r * math.sin(a)))
+    pts += [(tongueRightX, _tongueTop), (tongueRightX, 920), (harpoonX, 920)]
+    return pts
+tongue = _tongue3()
+spinnerLine = ((tongueRightX, 960), (147, 960))
+loopEntranceSwitch = ((tongueRightX, 1020), (147, 1020))
+waveMouth = (190, 865)
+waveMouthHalfWidth, waveHalfWidth, waveFlareLength = 33, 21, 70
+waveLowLength = 70
+def wave_path():
+    p = RampPath(waveMouth, math.radians(100))
+    p.line(80)                                   # the leaning mouth
+    p.arc(120, -math.radians(10))                # straighten up the channel
+    p.line(1100 - p.points[-1][1])               # up the channel beside the loop
+    p.arc(70, -math.radians(55))
+    p.line(110)
+    p.arc(55, -math.radians(75))
+    p.line(185)
+    p.arc(60, -math.radians(50))
+    p.line(380)
+    return p
+WP = wave_path()
+
+_p = RampPath(waveMouth, math.radians(100)); _p.line(80); _p.arc(120, -math.radians(10)); waveChannelStart = _p.points[-1]
+waveApexDistance = 80 + 120 * math.radians(10) + (1100 - waveChannelStart[1]) + 70 * math.radians(55) + 110 + 55 * math.radians(35)
+
+# ---- Milestone 2 v11 (Aaron: does the angled mouth match the real table? → "Yep, let's do it"): the real layout.
+# The real channel runs straight up (x ~150-195) between the post shared with the loop (down to y ~870) and a wall on
+# its right that stops higher, at y ~940, with a rounded end: a staggered opening that takes shots coming up-left
+# from the right flipper under the right wall's end. The plastic ramp (its entrance flap) starts higher, at y 1000.
+waveMouth = (172, 1000)
+waveMouthHalfWidth, waveHalfWidth, waveFlareLength = 21, 21, 40
+waveLowLength = 60
+waveLaneLeft = [(151, 870), (151, 1000)]
+waveLaneRight = [(193, 945), (193, 1000)]
+waveLaneRightEndRadius = 5          # the rounded end (a rubber post)
+def wave_path():
+    p = RampPath(waveMouth, math.pi / 2)
+    p.line(100)
+    p.arc(70, -math.radians(55))
+    p.line(110)
+    p.arc(55, -math.radians(75))
+    p.line(185)
+    p.arc(60, -math.radians(50))
+    p.line(380)
+    return p
+WP = wave_path()
+waveApexDistance = 100 + 70 * math.radians(55) + 110 + 55 * math.radians(35)
+
+# ---- Milestone 2 v12 (Aaron: "Option 1"): the real table's fat rounded end on the lane's right wall (the blue block
+# right of the channel ends at y ~940 in a round ~40 pt across), and the channel 46 wide.
+waveMouth = (174, 1000)
+waveMouthHalfWidth, waveHalfWidth, waveFlareLength = 23, 23, 40
+waveEndCentre, waveEndRadius = (215, 950), 18
+def _right_block():
+    cx, cy = waveEndCentre; r = waveEndRadius
+    pts = [(cx - r, 1000), (cx - r, cy)]
+    for i in range(1, 12):
+        a = math.pi + math.pi * i / 12
+        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    pts += [(cx + r, cy), (cx + r, 1000), (cx - r, 1000)]
+    return pts
+waveRightBlock = _right_block()
+waveLaneRight = [(197, 950), (197, 1000)]
+waveLaneRightEndRadius = 0
+WP = wave_path()
+
+# ---- Milestone 2 v13 (Aaron: "Yes please" — the harpoon shot from the pier flipper, "a makeable shot from the right
+# mini flipper" on the real table; ours made it 1-2 times in 96): the gate opening is taller, down to y 760 (was 840),
+# so it takes the pier flipper's ~137-148 deg shots instead of ~137-141.
+harpoonInner = [(harpoonX, 580), (harpoonX, 760)]
+quickshotGate = ((harpoonX, 760), (harpoonX, 920))
+# v13b: 150 deg pier shots hit the wall's top at 760 -> the gate 720-920
+harpoonInner = [(harpoonX, 580), (harpoonX, 720)]
+quickshotGate = ((harpoonX, 720), (harpoonX, 920))
+
+# ---- Milestone 2 v15: real gravity (-6.0, v14) left the ball let down from the held pier flipper balanced on the
+# block's lower-left corner (503, 547); the corner moves in to (511, 548), still closed on the pivot cap (7.2 pt).
+pierPlastic = [(519, 615), (548, 618), (548, 470), (514, 470), (528, 530), (522, 548), (511, 548), (519, 615)]

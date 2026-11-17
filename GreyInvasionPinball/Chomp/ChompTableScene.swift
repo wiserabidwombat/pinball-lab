@@ -65,6 +65,15 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var spinner: ChompSpinner?
     /// M2 v5: the wave ramp (more ramps join this list later).
     private var ramps: [ChompRamp] = []
+    #if DEBUG
+    /// M2 v6: the Shot Lab robot (shared ShotLab, Table 06's host pattern) and its own clock.
+    fileprivate var shotLab: ShotLab?
+    fileprivate var shotLabTime: TimeInterval = 0
+    /// M2 v8: the flipper fan probe (`-shotlab chomp -shotlab-scenario fanprobe`).
+    fileprivate var fanProbe: ChompFanProbe?
+    /// M2 v15: the pier probe's clock (nil when it isn't running).
+    fileprivate var pierProbeT: Double?
+    #endif
     private var lastSpinSound: TimeInterval = 0
     private var quickshotLanes: [ChompRollover] = []
     private var bankTargets: [SKShapeNode] = []
@@ -101,6 +110,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             guard isAttractMode != oldValue else { return }
             physicsWorld.speed = isAttractMode ? 0 : 1
             if isAttractMode { releaseAllControls() }
+            #if DEBUG
+            if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
+            #endif
             refreshCamera()
         }
     }
@@ -160,7 +172,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     }
 
     private var effectiveCameraMode: CameraMode {
-        isAttractMode ? .topDown : settings.cameraMode
+        #if DEBUG
+        if shotLab != nil { return .topDown }
+        #endif
+        return isAttractMode ? .topDown : settings.cameraMode
     }
 
     func refreshCamera() {
@@ -428,14 +443,16 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// The loop's switches and the spinner, from the ball's move this frame (after physics: velocities and score only).
     private func leftSideSwitches(_ ball: ChompBall, from p0: CGPoint, to p: CGPoint) {
         guard ball.isOnFloor, let body = ball.physicsBody else { return }
-        let inLoop = p.x > 96 && p.x < 151                     // the switches reach ~10 pt past their ends
+        let inLoop = p.x > ChompTableLayout.tongueRightX - 4 && p.x < 151                     // the switches reach ~10 pt past their ends
         guard inLoop else { return }
         if ChompTableLayout.spinnerSwitch.crossing(from: p0, to: p) != .none {
             let v = body.velocity
             spinner?.kick(ballSpeed: hypot(v.dx, v.dy))
+            labEvent("spinner")
             body.velocity = CGVector(dx: v.dx * ChompSpinner.ballSpeedKept, dy: v.dy * ChompSpinner.ballSpeedKept)
         }
         if ChompTableLayout.loopEntranceSwitch.crossing(from: p0, to: p) == .forward {
+            labEvent("leftLoop")
             game.add(ChompPoints.loop)
             sfx(.orbit)
             showBanner("LEFT LOOP")
@@ -451,6 +468,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                              lowLength: ChompTableLayout.waveLowLength)
         addChild(ramp)
         ramps.append(ramp)
+        // M2 v11: the lane's floor walls below the ramp's entrance — the left one down to the loop's post, the right one
+        // ending higher with a rounded rubber end (the staggered opening).
+        addWall(points: ChompTableLayout.waveLaneLeft)
+        addWall(points: ChompTableLayout.waveRightBlock)       // M2 v12: the fat rounded end
     }
 
     /// The ramps' switches, from the ball's move this frame (Table 06's updateRampLayer): the entry puts a floor ball on
@@ -490,6 +511,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     /// M2 v5: the wave ramp is made (placeholder scoring until the rules, M4).
     private func rampMade(_ ball: ChompBall, _ ramp: ChompRamp) {
+        labEvent("waveRamp")
         game.add(ChompPoints.waveRamp)
         hitHaptic.impactOccurred()
         sfx(.ramp)
@@ -612,6 +634,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// up-posts as a test; an inlane with the up-posts armed raises its post to hold that ball.
     private func rollOver(_ lane: ChompRollover, at now: TimeInterval) {
         lane.isLit = true
+        labEvent(lane === miniLane ? "miniLane" : "lane")
         laneOffAt[ObjectIdentifier(lane)] = now + 0.25        // a short blink; updateUpPosts puts it out
         if lane === miniLane {
             game.add(ChompPoints.miniLane)
@@ -719,7 +742,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M2 v5")
+        let label = SKLabelNode(text: "T7 M2 v15")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -765,7 +788,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T7 M2 v5 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)T7 M2 v15 \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -818,6 +841,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         fpsLow = 0
         isAttractMode = false
         padAArmed = false                          // the A press that started the game isn't a plunger pull
+        #if DEBUG
+        if shotLab != nil { physicsWorld.speed = 1 }
+        shotLab = nil                              // a new game stops the Shot Lab
+        #endif
         removeAllBalls()
         nextBallAt = nil
         bannerClearAt = nil
@@ -907,6 +934,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     }
 
     private func updateFlippers() {
+        #if DEBUG
+        if shotLab != nil { return }               // the robot has the flippers
+        #endif
         var left = activeTouches.values.contains(.left) || padLeft
         var right = activeTouches.values.contains(.right) || padRight
         if nudge.tilted { left = false; right = false }      // tilted: dead flippers until the next ball
@@ -1008,6 +1038,21 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
+        #if DEBUG
+        if shotLab != nil {                        // Shot Lab: the robot's frame instead of a game frame
+            updateShotLab(CGFloat(step))
+            return
+        }
+        if fanProbe != nil {                       // M2 v8: the flipper fan probe
+            updateFanProbe(CGFloat(step))
+            return
+        }
+        if pierProbeT != nil {                     // M2 v15: the pier probe
+            physicsWorld.speed = 0.5               // 120 Hz steps, as on the phone
+            updatePierProbe(CGFloat(step) * 0.5)
+            return
+        }
+        #endif
         if isAttractMode { return }
 
         let dt = CGFloat(step)
@@ -1016,6 +1061,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         miniFlipper.step(dt: dt)
+        handBallsToSwingingFlippers()
         slingshots.forEach { $0.settle() }
         governInlanes()                          // the inlane speed limit (2026-11-02)
         updateGates()
@@ -1075,6 +1121,18 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    /// T7 M2 v10: a floor ball within reach of a flipper swinging up this frame belongs to the flipper model for the
+    /// physics step (ghosted from the flippers); ChompFlipper.solveSwing works out the frame afterwards.
+    private func handBallsToSwingingFlippers() {
+        guard ChompTableLayout.flipperModel else { return }
+        let r = ChompTableLayout.ballRadius
+        for ball in balls where ball.isOnFloor {
+            for f in [leftFlipper!, rightFlipper!, miniFlipper!] where f.isSwingingUp && f.reaches(ball.position, ballRadius: r) {
+                ball.flipperGhostSteps = max(ball.flipperGhostSteps, 1)
+            }
+        }
+    }
+
     /// Hot inlane feeds: a ball rolling down an inlane is held to InlaneGovernor.maxSpeed (800 pt/s) so a held-up
     /// flipper can trap it.
     private func governInlanes() {
@@ -1090,11 +1148,28 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     override func didSimulatePhysics() {
         for ball in balls {
             guard let body = ball.physicsBody else { continue }
+            if ball.flipperGhostSteps > 0 { ball.flipperGhostSteps -= 1 }
             // The flip assist: a flip gives the ball its full speed on long steps too (off at 120 Hz steps).
             let r = ChompTableLayout.ballRadius
-            leftFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
-            rightFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
-            miniFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+            // T7 M2 v9: the contact launch replaces the flip assist (at every step length): smooth aim along the flipper.
+            // Off for now (ChompTableLayout.flipperCarry): smooth, but it narrowed the fan (Shot Lab run 4).
+            if ChompTableLayout.flipperModel {
+                if ball.isOnFloor {
+                    leftFlipper.solveSwing(ball, ballRadius: r)
+                    rightFlipper.solveSwing(ball, ballRadius: r)
+                    miniFlipper.solveSwing(ball, ballRadius: r)
+                }
+            } else if ChompTableLayout.flipperCarry {
+                if ball.isOnFloor {
+                    leftFlipper.contactLaunch(ball, ballRadius: r)
+                    rightFlipper.contactLaunch(ball, ballRadius: r)
+                    miniFlipper.contactLaunch(ball, ballRadius: r)
+                }
+            } else {
+                leftFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                rightFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+                miniFlipper.flipAssist(body, ballAt: ball.position, ballRadius: r)
+            }
             let v = body.velocity
             let speed = hypot(v.dx, v.dy)
             if speed > ChompTableLayout.maxBallSpeed {
@@ -1109,9 +1184,13 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
             leftSideSwitches(ball, from: p0, to: p)
+            // M2 v6: a ball through the quickshot gate into the harpoon lane (the pier flipper's shot), for the labs.
+            let gate = ChompTableLayout.quickshotGate
+            if ball.isOnFloor, p0.x >= gate.a.x, p.x < gate.a.x, p.y > gate.a.y, p.y < gate.b.y { labEvent("harpoonGate") }
             updateRampLayer(ball, from: p0, to: p)
             ball.rampHeight = ball.isOnFloor ? 0 : (ball.activeRamp?.height(at: p) ?? 0)
             ball.previousPosition = ball.position
+            ball.previousVelocity = ball.physicsBody?.velocity ?? .zero
             ball.updateLook()
         }
     }
@@ -1128,9 +1207,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     fileprivate func handleContact(_ contact: SKPhysicsContact) {
         let a = contact.bodyA, b = contact.bodyB
         let ballBody: SKPhysicsBody, other: SKPhysicsBody
-        if a.categoryBitMask == ChompPhysicsCategory.ball {
+        let ballish = ChompPhysicsCategory.ball | ChompPhysicsCategory.ghostBall   // M2 v9: a just-launched ball too
+        if a.categoryBitMask & ballish != 0 {
             ballBody = a; other = b
-        } else if b.categoryBitMask == ChompPhysicsCategory.ball {
+        } else if b.categoryBitMask & ballish != 0 {
             ballBody = b; other = a
         } else {
             return
@@ -1141,6 +1221,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         case ChompPhysicsCategory.slingshot:
             // The kicking face is a child of the slingshot node.
             if let sling = node.parent as? ChompSlingshot, sling.hit(ball: ballBody, at: gameTime) {
+                labEvent("sling")
                 game.add(ChompPoints.slingshot)
                 hitHaptic.impactOccurred(intensity: 0.6)
                 Effects.burst(in: self, at: ballNode.position, color: Self.wallColor, count: 8,
@@ -1156,6 +1237,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         case ChompPhysicsCategory.target:
             // M2 v1: the Fish Phone bank (placeholder: all three → "FISH PHONE", then they relight).
             if let i = bankTargets.firstIndex(where: { $0 === node }) {
+                labEvent("fishPhone")
                 if !bankDown[i] {
                     bankDown[i] = true
                     bankTargets[i].fillColor = Self.bankDarkColor
@@ -1173,6 +1255,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             if node === buoy {
                 let since = gameTime - buoyLastHit
                 guard since > 0.15 else { break }            // the same hit chattering on the target
+                labEvent("buoy")
                 game.add(ChompPoints.buoy)
                 sfx(.standup)
                 if since <= ChompTableLayout.buoyDoubleHitWindow, !kickbackLit {
@@ -1196,3 +1279,265 @@ extension ChompTableScene: SKPhysicsContactDelegate {
         MainActor.assumeIsolated { handleContact(contact) }
     }
 }
+
+extension ChompTableScene {
+    /// A shot event for the labs (a no-op in play and in Release builds).
+    fileprivate func labEvent(_ name: String) {
+        #if DEBUG
+        shotLab?.event(name, at: shotLabTime)
+        #endif
+    }
+}
+
+#if DEBUG
+// MARK: - M2 v6: the Shot Lab host (Table 06's pattern). The robot sweeps flip timings from the left, right and pier
+// flippers and records the first shot each flip makes. Run in the Simulator: tools/shotlab_run.sh chomp
+extension ChompTableScene: ShotLabHost {
+    var shotLabTableName: String { "Chomp" }
+
+    /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "harpoonGate", "fishPhone", "buoy"] }
+
+    /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
+    /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.
+    var shotLabCradleDelays: ClosedRange<Double> { 0.20...0.85 }
+
+    /// Left and right flippers cradled as on the other tables (40 pt out, above the raised flipper by the ball's
+    /// radius + 5); the pier flipper's ball dropped onto its block with it held up (it settles at ~(490, 562),
+    /// tools/chomp_pier_sim.py).
+    var shotLabFlippers: [ShotLab.FlipperSpec] {
+        let up = ChompTableLayout.flipperTravel - ChompTableLayout.flipperRestAngle
+        let along: CGFloat = 40, above: CGFloat = ChompTableLayout.ballRadius + 5
+        let l = ChompTableLayout.leftFlipperPivot
+        let left = CGPoint(x: l.x + along * cos(up) - above * sin(up), y: l.y + along * sin(up) + above * cos(up))
+        let right = CGPoint(x: ChompTableLayout.mirrorSum - left.x, y: left.y)
+        let ix = ChompTableLayout.laneGuideX + 25, iy = ChompTableLayout.laneGuideTop + 10     // the inlane's centre
+        let r = ChompTableLayout.rightFlipperPivot
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left,
+                                    starts: ShotLab.lowerStarts(pivot: l, pointsLeft: false, inlaneX: ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: right,
+                                    starts: ShotLab.lowerStarts(pivot: r, pointsLeft: true,
+                                                                inlaneX: ChompTableLayout.mirrorSum - ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "pier", pivot: ChompTableLayout.miniFlipperPivot, cradle: CGPoint(x: 500, y: 600))]
+    }
+
+    func shotLabSetFlipper(_ index: Int, pressed: Bool) {
+        switch index {
+        case 0: leftFlipper.isPressed = pressed
+        case 1: rightFlipper.isPressed = pressed
+        default: miniFlipper.isPressed = pressed
+        }
+    }
+
+    func shotLabPlaceBall(at point: CGPoint) {
+        let ball = ChompBall(at: point)
+        addChild(ball)
+        balls.append(ball)
+    }
+
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector) {
+        shotLabPlaceBall(at: point)
+        balls.last?.physicsBody?.velocity = velocity
+    }
+
+    /// Every ball gone, the bank up, the up-posts down, nothing armed.
+    func shotLabResetTable() {
+        removeAllBalls()
+        nextBallAt = nil
+        resetBank()
+        bankRelightPending = false
+        setUpPost(0, up: false)
+        setUpPost(1, up: false)
+        upPostsArmed = false
+        upPostRaisePending = [false, false]
+        buoyLastHit = -10
+        innerTubeArmedUntil = -1
+    }
+
+    /// Where shots cross the mouths' height (the loop and the wave ramp at y ~885) and the lower shot line.
+    var shotLabProbes: [ShotLab.Probe] {
+        [ShotLab.Probe(name: "mouths", y: 860), ShotLab.Probe(name: "shotLine", y: 600)]
+    }
+
+    var shotLabBall: (position: CGPoint, velocity: CGVector)? {
+        guard let ball = balls.first else { return nil }
+        return (ball.position, ball.physicsBody?.velocity ?? .zero)
+    }
+
+    func debugStartShotLab() {
+        isAttractMode = false
+        removeAllBalls()
+        shotLabTime = 0
+        shotLab = ShotLab(host: self)
+        refreshCamera()
+    }
+
+    /// The robot's frame: only what the physics and shot detection need (no serving, drains, saves or banners).
+    fileprivate func updateShotLab(_ realDt: CGFloat) {
+        guard let lab = shotLab else { return }
+        let speed = CGFloat(lab.physicsSpeed)
+        physicsWorld.speed = speed
+        let dt = realDt * speed
+        shotLabTime += TimeInterval(dt)
+        let now = shotLabTime
+        lastStep = dt
+        leftFlipper.step(dt: dt)
+        rightFlipper.step(dt: dt)
+        miniFlipper.step(dt: dt)
+        handBallsToSwingingFlippers()
+        slingshots.forEach { $0.settle() }
+        governInlanes()
+        updateGates()
+        updateSaveGate()
+        updateSpinner(dt, now)
+        if bankRelightPending { bankRelightPending = false; resetBank() }
+        if lab.update(now: now) {
+            game.banner = lab.progressText
+        } else {
+            let saved = lab.save(now: now)
+            shotLab = nil
+            physicsWorld.speed = 1
+            shotLabResetTable()
+            game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+            ShotLab.quitIfLaunchedForLab()          // launched by tools/shotlab_run.sh chomp → quit
+        }
+    }
+}
+#endif
+
+#if DEBUG
+// MARK: - M2 v8: the flipper fan probe. Shot Lab's cradle sweep only sees the ball where it happens to be at each frame,
+// and run 2 found a 101° → 106° jump between two neighbouring frames (ball 48.8 → 50.4 pt along the right flipper).
+// This places the ball on the resting right flipper at fine steps along it (0.25 pt), rolling toward the tip, flips
+// on the next frame and prints the launch: `FAN pass along speed degrees launchSpeed`. Then the app quits.
+struct ChompFanProbe {
+    var trials: [(along: CGFloat, roll: CGFloat)] = []
+    var passes: [CGFloat] = [0.5, 1.0]            // physics speed at the Simulator's 60 fps: 120 Hz, then 60 Hz steps
+    var pass = 0
+    var i = 0
+    var stage = 0
+    var t: TimeInterval = 0
+    var flipPoint = CGPoint.zero
+}
+
+extension ChompTableScene {
+    func debugFanProbe() {
+        isAttractMode = false
+        removeAllBalls()
+        var p = ChompFanProbe()
+        for roll in [250, 400] as [CGFloat] {
+            for k in 0...160 { p.trials.append((30 + CGFloat(k) * 0.25, roll)) }
+        }
+        fanProbe = p
+        ChompFlipper.debugLog = true
+        refreshCamera()
+        print("FAN start \(p.trials.count) trials x \(p.passes.count) passes")
+    }
+
+    /// Where the ball sits on the resting right flipper `along` pt from the pivot (touching the top face).
+    private func fanBallPoint(along: CGFloat) -> (point: CGPoint, down: CGVector) {
+        let piv = ChompTableLayout.rightFlipperPivot
+        let a = ChompTableLayout.flipperRestAngle
+        let d = CGVector(dx: -cos(a), dy: -sin(a))                   // along the arm, toward the tip
+        let n = CGVector(dx: d.dy, dy: -d.dx)                        // the top face's normal (up)
+        let r0 = ChompTableLayout.flipperPivotRadius, r1 = ChompTableLayout.flipperTipRadius
+        let half = r0 + (r1 - r0) * along / ChompTableLayout.flipperLength
+        let off = half + ChompTableLayout.ballRadius + 0.5
+        return (CGPoint(x: piv.x + along * d.dx + off * n.dx, y: piv.y + along * d.dy + off * n.dy), d)
+    }
+
+    fileprivate func updateFanProbe(_ realDt: CGFloat) {
+        guard var p = fanProbe else { return }
+        let speed = p.passes[p.pass]
+        physicsWorld.speed = speed
+        let dt = realDt * speed
+        p.t += TimeInterval(dt)
+        lastStep = dt
+        leftFlipper.step(dt: dt)
+        rightFlipper.step(dt: dt)
+        miniFlipper.step(dt: dt)
+        handBallsToSwingingFlippers()
+        slingshots.forEach { $0.settle() }
+        switch p.stage {
+        case 0:                                                      // flipper down and settled, then place the ball
+            removeAllBalls()
+            rightFlipper.isPressed = false
+            if p.t >= 0.3 {
+                let tr = p.trials[p.i]
+                let (pt, d) = fanBallPoint(along: tr.along)
+                let ball = ChompBall(at: pt)
+                addChild(ball)
+                balls.append(ball)
+                ball.physicsBody?.velocity = CGVector(dx: d.dx * tr.roll, dy: d.dy * tr.roll)
+                p.stage = 1; p.t = 0
+            }
+        case 1:                                                      // flip on the next frame
+            rightFlipper.isPressed = true
+            p.flipPoint = balls.first?.position ?? .zero
+            p.stage = 2; p.t = 0
+        default:                                                     // the launch: the first 60 pt off the flipper
+            guard let b = balls.first else { p.stage = 0; p.t = 0; break }
+            let piv0 = ChompTableLayout.rightFlipperPivot
+            let reach = ChompTableLayout.flipperLength + ChompTableLayout.flipperPivotRadius + ChompTableLayout.ballRadius + 20
+            // M2 v10: the launch is the ball's direction once it's out of the flipper's reach (it can ride the face).
+            if hypot(b.position.x - piv0.x, b.position.y - piv0.y) >= reach || p.t > 0.6 {
+                let v = b.physicsBody?.velocity ?? .zero
+                let dx = v.dx, dy = v.dy
+                let tr = p.trials[p.i]
+                let piv = ChompTableLayout.rightFlipperPivot
+                let a = ChompTableLayout.flipperRestAngle
+                let along = (p.flipPoint.x - piv.x) * -cos(a) + (p.flipPoint.y - piv.y) * -sin(a)
+                print(String(format: "FAN %.1f %.2f %.0f %.2f %.0f %.2f", Double(speed), Double(tr.along), Double(tr.roll),
+                             Double(atan2(dy, dx) * 180 / .pi), Double(hypot(v.dx, v.dy)), Double(along)))
+                rightFlipper.isPressed = false
+                p.stage = 0; p.t = 0; p.i += 1
+                if p.i >= p.trials.count {
+                    p.i = 0; p.pass += 1
+                    if p.pass >= p.passes.count {
+                        print("FAN done")
+                        fanProbe = nil
+                        physicsWorld.speed = 1
+                        removeAllBalls()
+                        ShotLab.quitIfLaunchedForLab()
+                        return
+                    }
+                }
+            }
+        }
+        fanProbe = p
+    }
+}
+#endif
+
+#if DEBUG
+// MARK: - M2 v15: the pier probe (`-shotlab chomp -shotlab-scenario pierprobe`). Shot Lab run 11 (gravity −6.0) found the
+// pier's dropped ball sitting at ~(503, 563), inside the plastic's outline, never reaching the flipper. This replays the
+// sweep's set-up — the pier flipper raised, a ball dropped at (500, 600), held 1.2 s, the flipper let down — and prints
+// `PIER t phase x y vx vy` every 50 ms, then quits.
+extension ChompTableScene {
+    func debugPierProbe() {
+        isAttractMode = false
+        removeAllBalls()
+        pierProbeT = 0
+        miniFlipper.isPressed = true
+        print("PIER start gravity \(physicsWorld.gravity.dy)")
+    }
+
+    fileprivate func updatePierProbe(_ dt: CGFloat) {
+        guard let t0 = pierProbeT else { return }
+        let t = t0 + Double(dt)
+        pierProbeT = t
+        leftFlipper.step(dt: dt); rightFlipper.step(dt: dt); miniFlipper.step(dt: dt)
+        handBallsToSwingingFlippers()
+        if t0 < 0.3, t >= 0.3 { shotLabPlaceBall(at: CGPoint(x: 500, y: 600)) }
+        if t0 < 1.5, t >= 1.5 { miniFlipper.isPressed = false }
+        if Int(t0 / 0.05) != Int(t / 0.05), let b = balls.first {
+            let v = b.physicsBody?.velocity ?? .zero
+            print(String(format: "PIER %.2f %@ %.1f %.1f %.0f %.0f flip %.1f", t, t < 1.5 ? "held" : "down",
+                         Double(b.position.x), Double(b.position.y), Double(v.dx), Double(v.dy),
+                         Double(miniFlipper.zRotation * 180 / .pi)))
+        }
+        if t > 3.0 { print("PIER done"); pierProbeT = nil; ShotLab.quitIfLaunchedForLab() }
+    }
+}
+#endif

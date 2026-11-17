@@ -24,6 +24,13 @@ final class ChompBall: SKNode {
     static let lookScale: CGFloat = 1.0
     /// Where the ball was last frame (for line-crossing switches).
     var previousPosition: CGPoint
+    /// T7 M2 v9: and its velocity then (for the flipper's contact launch).
+    var previousVelocity = CGVector.zero
+    /// T7 M2 v9: after a contact launch the flippers let this ball go for a few physics steps, so the still-rising face
+    /// doesn't catch it a second time (which brought the stepped aim back).
+    var flipperGhostSteps = 0 {
+        didSet { if (flipperGhostSteps > 0) != (oldValue > 0) { updateCollisionMask() } }
+    }
     /// Whether the one-way launch gate is solid for this ball (while it's above the gate moving down).
     private(set) var launchGateSolid = false
     /// T7 M1: whether the right outlane's one-way save gate is solid for this ball (while it moves right, so a ball
@@ -134,13 +141,14 @@ final class ChompBall: SKNode {
             body.contactTestBitMask = 0
             return
         }
-        body.categoryBitMask = ChompPhysicsCategory.ball
+        body.categoryBitMask = flipperGhostSteps > 0 ? ChompPhysicsCategory.ghostBall : ChompPhysicsCategory.ball
         body.contactTestBitMask = ChompPhysicsCategory.slingshot | ChompPhysicsCategory.bumper
             | ChompPhysicsCategory.rollover | ChompPhysicsCategory.target
         var mask = ChompPhysicsCategory.wall | ChompPhysicsCategory.flipper | ChompPhysicsCategory.slingshot
             | ChompPhysicsCategory.bumper | ChompPhysicsCategory.target | ChompPhysicsCategory.ball
         if launchGateSolid { mask |= ChompPhysicsCategory.launchGate }
         if saveGateSolid { mask |= ChompPhysicsCategory.diverter }
+        if flipperGhostSteps > 0 { mask &= ~ChompPhysicsCategory.flipper }
         body.collisionBitMask = mask
     }
 }

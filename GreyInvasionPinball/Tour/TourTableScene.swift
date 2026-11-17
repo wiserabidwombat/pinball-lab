@@ -750,6 +750,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M8 v4: Moonshot — the next Moon hold is a lock; the multiball; its jackpot; its ball save.
     private var lockNextHold = false
     private var moonMultiball = false
+    /// M8 v6: Sun Slingshot's 3-ball multiball.
+    private var sunMultiball = false
+    private var anyMultiball: Bool { moonMultiball || sunMultiball }
     private var jackpotValue = TourPoints.jackpot
     private var multiballSaveUntil: TimeInterval = -1
     private static let multiballSaveSeconds: TimeInterval = 10
@@ -758,6 +761,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     /// Mission Control: the next stop on the tour starts.
     private func startNextStop() {
+        guard !sunMultiball else { return }                 // M8 v6: no new stop during the finale's multiball
         guard let s = modes.start(now: gameTime) else { return }
         lastModeTick = gameTime
         labMark("stopStarted")
@@ -775,6 +779,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         case .ringRunner: showBanner("\(s.title) · 3 QUICK SATURNS")
         case .uranus: showBanner("\(s.title) · LEFT, RIGHT, LEFT…")
         case .neptune: showBanner("\(s.title) · SPIN TO DIVE")
+        case .sun: startSunMultiball()
         case .shots: showBanner("\(s.title) · \(s.need) SHOTS")
         }
         flashers.flash(s.planet == "moon" ? "moon" : s.planet == "saturn" ? "saturn" : "rocket", times: 4)
@@ -800,6 +805,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
         case .progress:
             game.add(TourPoints.modeShot)
             if let s = modes.active { showBanner("\(s.title) · \(modes.stepText)") }
+            if case .sun? = modes.active?.kind {             // M8 v6: a floor jackpot, then the super
+                let v = TourPoints.sunJackpot * modes.tourNumber
+                game.add(v)
+                showBanner(modes.made < 4 ? "SUN JACKPOT \(v.formatted())" : "SUPER JACKPOT LIT · MISSION CONTROL")
+                flashers.flashAll(times: 2)
+                if modes.made == 4 {
+                    blastDoor.drop()
+                    flashers.flash("rocket", times: 8, gap: 0.18)
+                }
+            }
             if case .moonshot? = modes.active?.kind {        // M8 v4
                 if modes.made == 1 {
                     lockNextHold = true
@@ -816,9 +831,15 @@ final class TourTableScene: SKScene, RendererHostedScene {
             flashers.giOut(for: 1.2)
             flashers.flashAll(times: 4)
             labMark(s.planet + "Visited")
+            if s.planet == "sun" {                           // M8 v6: the super jackpot
+                game.add(TourPoints.superJackpot * modes.tourNumber)
+                sun?.flare()
+                flashers.giOut(for: 2.5)
+                flashers.flashAll(times: 6)
+            }
             if s.planet == "moon" { showBanner("JACKPOT · MOON VISITED") }
             if modes.finishTourIfDone() {
-                showBanner("GRAND TOUR COMPLETE · TOUR \(modes.tourNumber)")
+                showBanner("SUPER JACKPOT · TOUR \(modes.tourNumber) BEGINS")
                 planetWindow?.show(planet: "earth")
             } else {
                 if s.planet != "moon" { showBanner("\(s.planet.uppercased()) VISITED") }
@@ -854,9 +875,23 @@ final class TourTableScene: SKScene, RendererHostedScene {
         ball.physicsBody?.velocity = .zero
     }
 
+    /// M8 v6: the finale — the ball in Mission Control plus two more out of it, a 15 s save, the Sun flares.
+    private func startSunMultiball() {
+        sunMultiball = true
+        multiballSaveUntil = gameTime + 15
+        showBanner("SUN SLINGSHOT · 3-BALL MULTIBALL")
+        bigHaptic.impactOccurred()
+        sun?.flare()
+        flashers.giOut(for: 2.0)
+        flashers.flashAll(times: 5)
+        serveFromMissionControl(after: 2.0)
+        serveFromMissionControl(after: 3.2)
+    }
+
     private func moonJackpot() {
-        game.add(jackpotValue)
-        showBanner("JACKPOT \(jackpotValue.formatted())")
+        let v = jackpotValue * modes.tourNumber              // M8 v6: × the tour
+        game.add(v)
+        showBanner("JACKPOT \(v.formatted())")
         jackpotValue += TourPoints.jackpotStep
         bigHaptic.impactOccurred()
         flashers.giOut(for: 0.8)
@@ -866,10 +901,18 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     /// Down to one ball: the multiball is over. A Moonshot still waiting for its first jackpot is lost.
     private func endMoonMultiball() {
-        guard moonMultiball else { return }
+        guard anyMultiball else { return }
+        let wasSun = sunMultiball
         moonMultiball = false
+        sunMultiball = false
         multiballSaveUntil = -1
-        if case .moonshot? = modes.active?.kind {
+        if wasSun, case .sun? = modes.active?.kind {         // M8 v6: the finale ended without its super
+            _ = modes.fail()
+            labMark("stopDrained")
+            showBanner("SUN SLINGSHOT LOST")
+            if blastDoor.isDown, countdownResetAt == nil { blastDoor.raise() }
+            endModeLamps()
+        } else if case .moonshot? = modes.active?.kind {
             _ = modes.fail()
             labMark("stopDrained")
             showBanner("MOONSHOT LOST")
@@ -911,7 +954,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M8 v3: the stop clock waits while no ball is in play — every ball in Mission Control, a crater hold or on the
     /// plunger (or none on the table between balls).
     private var stopClockPaused: Bool {
-        moonMultiball || launchedAt == nil || balls.allSatisfy { $0.heldIn != nil || $0.moonReleaseAt != nil }
+        anyMultiball || launchedAt == nil || balls.allSatisfy { $0.heldIn != nil || $0.moonReleaseAt != nil }
     }
 
     /// The HUD's status line: the running stop and its clock, or where Mission Control goes next.
@@ -1894,7 +1937,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v5")
+        let label = SKLabelNode(text: "T6 M8 v6")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1940,7 +1983,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v5 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v6 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2003,6 +2046,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         stopSaveUntil = -1
         lockNextHold = false                               // M8 v4
         moonMultiball = false
+        sunMultiball = false
         multiballSaveUntil = -1
         launches = 0
         updatePlanetArc()
@@ -2290,7 +2334,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let drained = balls.filter { $0.position.y < -TourTableLayout.ballRadius * 3 }
         if !drained.isEmpty {
             drained.forEach { removeBall($0) }
-            if moonMultiball {                               // M8 v4: Moonshot's save, then down to one ball = over
+            if anyMultiball {                                // M8 v4: Moonshot's save, then down to one ball = over
                 if now < multiballSaveUntil {
                     drained.forEach { _ in serveFromMissionControl(after: 0.8) }
                     showBanner("BALL SAVED")
@@ -2792,6 +2836,7 @@ extension TourTableScene: PlayLabHost {
          PlayObjective(name: "saturnVisited", text: "Finish Ring Runner"),
          PlayObjective(name: "uranusVisited", text: "Finish Uranus Roll"),
          PlayObjective(name: "neptuneVisited", text: "Finish Neptune Deep"),
+         PlayObjective(name: "sunVisited", text: "Super jackpot: finish the Grand Tour"),
          PlayObjective(name: "stopTimedOut", text: "A stop runs out of time"),
          PlayObjective(name: "stopDrained", text: "A stop ends with a drain")]
     }

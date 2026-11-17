@@ -12,7 +12,8 @@
 //   visits the Moon. The clock runs only for the locks.
 // v5: the outer leg — Jupiter Storm (40 spins, then a ramp), Ring Runner (3 Saturns, each within 8 s of the last),
 //   Uranus Roll (5 lit shots, sides alternating), Neptune Deep (60 spins, then 10 bumpers).
-// The Sun keeps the stand-in until its round.
+// v6: Sun Slingshot — a 3-ball multiball; the four floor shots are jackpots; all four drop the blast door and light the
+//   super jackpot at Mission Control, which finishes the tour (tour 2 starts; everything × the tour number).
 import Foundation
 
 /// One stop on the tour: its planet, its kind of goal and a timer.
@@ -27,6 +28,7 @@ struct TourStop {
         case ringRunner             // v5: 3 Saturn ramps, each within 8 s of the last
         case uranus                 // v5: 5 lit shots, the lit side alternating after each
         case neptune                // v5: 60 spins dive deep, then 10 pop-bumper hits
+        case sun                    // v6: 3-ball multiball; 4 jackpots light the super jackpot at Mission Control
     }
     let planet: String          // the ring's insert name and the window's picture (tour_window_<planet>)
     let title: String           // the mode's name on the banner
@@ -50,7 +52,7 @@ final class TourModes {
         TourStop(planet: "saturn", title: "RING RUNNER", kind: .ringRunner, need: 3, seconds: 45),
         TourStop(planet: "uranus", title: "URANUS ROLL", kind: .uranus, need: 5, seconds: 40),
         TourStop(planet: "neptune", title: "NEPTUNE DEEP", kind: .neptune, need: 2, seconds: 50),
-        TourStop(planet: "sun", title: "SUN SLINGSHOT", kind: .shots(floorShots), need: 3, seconds: 60),
+        TourStop(planet: "sun", title: "SUN SLINGSHOT", kind: .sun, need: 5, seconds: 60),
     ]
 
     /// Which tour this is (1, then 2 after the Sun …) and the stops done on it.
@@ -113,6 +115,8 @@ final class TourModes {
             lit = ["saturn"]
         case .uranus:
             lit = Bool.random() ? Self.leftShots : Self.rightShots
+        case .sun:
+            lit = Self.floorShots
         }
         return s
     }
@@ -136,6 +140,9 @@ final class TourModes {
         case .ringRunner:                        // a Saturn after the chain ran out starts again at 1
             if made > 0, chainLeft <= 0 { made = 0 }
             chainLeft = Self.ringChain
+        case .sun:                               // each floor jackpot once, then the super at Mission Control
+            lit.remove(name)
+            if made + 1 == 4 { lit = ["rocket"] }
         case .uranus:                            // the lit side swaps after every make
             let r = step()
             if case .progress = r { lit = Self.leftShots.contains(name) ? Self.rightShots : Self.leftShots }
@@ -205,6 +212,7 @@ final class TourModes {
         case .ringRunner:
             return made == 0 ? "SATURN 0/\(s.need)" : "SATURN \(made)/\(s.need) · \(Int(chainLeft.rounded(.up)))s"
         case .uranus: return "\(made)/\(s.need) · \(lit.isSubset(of: Self.leftShots) ? "LEFT" : "RIGHT")"
+        case .sun: return made < 4 ? "JACKPOTS \(made)/4" : "SUPER · MISSION CONTROL"
         case .venus where lit.isEmpty && !hidden.isEmpty: return "\(made)/\(s.need) · HIT R-O-C-K-E-T"
         default: return "\(made)/\(s.need)"
         }

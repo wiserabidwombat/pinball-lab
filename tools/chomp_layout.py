@@ -311,3 +311,48 @@ pierPlastic = [(519, 615), (548, 618), (548, 470), (514, 470), (528, 530), (522,
 # ---- Milestone 2 v16: the right outlane's one-way gate is gone (the real table has only the post, which saves with a
 # nudge); the right lane guide is solid again.
 rightLaneGuideWithGate = [rightLaneGuide]
+
+# ---- Milestone 3 v1: the center ramp (p. 40: a lane x ~235-285 right of the wave ramp's block, entrance ~y 1000; the
+# ramp climbs the lane, turns round at the top and its wire comes back down over the left side into the left inlane,
+# "the easiest shot in the game"). On the real table the return wire is stacked over the climb; in 2D the U-turn sets it
+# beside it (the down leg 48 pt left of the climb), then it bends down-left and runs straight down into the left inlane.
+centerMouth = (259, 1000)
+centerMouthHalfWidth, centerHalfWidth, centerFlareLength = 23, 20, 110
+centerLowLength = 60
+centerClimb = 110
+centerTurnRadius = 24
+def center_path():
+    p = RampPath(centerMouth, math.pi / 2)
+    p.line(centerClimb)                          # up the lane (the plastic)
+    p.arc(centerTurnRadius, math.pi)             # the U-turn, to the left: apex at its top (heading 180)
+    p.line(1110 - 870)                           # the wire straight down beside the climb
+    p.arc(80, -math.radians(40))                 # bend down-left
+    p.line(116)
+    p.arc(80, math.radians(40))                  # straight down again, over the left inlane (x 99)
+    p.line(p.points[-1][1] - 440)                # down to the inlane
+    return p
+CP = center_path()
+centerApexDistance = centerClimb + centerTurnRadius * math.pi / 2
+
+# ---- Milestone 3 v2 (Aaron: is it flared on the real table? -> "Yes please!" to tracing the real entrance): p. 40 shows
+# the block left of the lane with its right edge at x ~228 (ours was 233), a rubber post at ~(300, 1000) with the wall
+# slanting in from it to the ramp's entrance flap at y ~1020, which is ~52 wide (x ~228-280): a short funnel, ~66 pt
+# across where the ball arrives at y 1000.
+waveEndCentre, waveEndRadius = (212.5, 950), 15.5     # the block x 197-228 (its left side, the wave lane, unchanged)
+waveRightBlock = _right_block()
+centerMouth = (254, 1020)
+centerMouthHalfWidth, centerHalfWidth, centerFlareLength = 26, 20, 110
+centerJamb = [(228, 1000), (228, 1020)]              # the block's edge up to the flap
+centerPost, centerPostRadius = (300, 1000), 6        # the rubber post
+centerFunnel = [(296.0, 1004.5), (280, 1020)]        # from the post up-left to the ramp's right rail
+def center_path():
+    p = RampPath(centerMouth, math.pi / 2)
+    p.line(centerClimb)
+    p.arc(centerTurnRadius, math.pi)
+    p.line(p.points[-1][1] - 870)
+    p.arc(80, -math.radians(40))
+    p.line(108)
+    p.arc(80, math.radians(40))
+    p.line(p.points[-1][1] - 440)
+    return p
+CP = center_path()

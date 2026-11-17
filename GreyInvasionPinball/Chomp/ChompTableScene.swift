@@ -65,6 +65,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var spinner: ChompSpinner?
     /// M2 v5: the wave ramp (more ramps join this list later).
     private var ramps: [ChompRamp] = []
+    /// M3 v1: the center ramp (rampMade tells the ramps apart).
+    private weak var centerRamp: ChompRamp?
     #if DEBUG
     /// M2 v6: the Shot Lab robot (shared ShotLab, Table 06's host pattern) and its own clock.
     fileprivate var shotLab: ShotLab?
@@ -237,6 +239,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addOutlaneSave()
         addLeftSide()
         addWaveRamp()
+        addCenterRamp()
         addPlunger()
         addLaunchGate()
     }
@@ -456,6 +459,39 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addWall(points: ChompTableLayout.waveRightBlock)       // M2 v12: the fat rounded end
     }
 
+    /// M3 v1: the center ramp: up the lane right of the wave ramp's block, round a U-turn and down its wire into the
+    /// left inlane. Its own wire level (lowWire), drawn just under the wave ramp where they cross.
+    private func addCenterRamp() {
+        let ramp = ChompRamp(path: ChompTableLayout.centerPath, apexDistance: ChompTableLayout.centerApexDistance,
+                             mouthHalfWidth: ChompTableLayout.centerMouthHalfWidth,
+                             halfWidth: ChompTableLayout.centerHalfWidth,
+                             flareLength: ChompTableLayout.centerFlareLength, postLength: 0,
+                             lowLength: ChompTableLayout.centerLowLength,
+                             wallCategory: ChompPhysicsCategory.lowWireWall, ballCategory: ChompPhysicsCategory.lowWireBall,
+                             zShift: -1)
+        addChild(ramp)
+        ramps.append(ramp)
+        centerRamp = ramp
+        // M3 v2: the real entrance's funnel — the block's edge up to the flap, a rubber post and the wall from it.
+        addWall(points: ChompTableLayout.centerJamb)
+        addWall(points: ChompTableLayout.centerFunnel)
+        let r = ChompTableLayout.centerPostRadius
+        let post = SKShapeNode(circleOfRadius: r)
+        post.position = ChompTableLayout.centerPost
+        post.fillColor = SKColor(white: 0.6, alpha: 1)
+        post.strokeColor = SKColor(white: 1, alpha: 0.6)
+        post.lineWidth = 1
+        post.zPosition = 1
+        let body = SKPhysicsBody(circleOfRadius: r)
+        body.isDynamic = false
+        body.restitution = ChompTableLayout.outlaneSavePostRestitution      // the same rubber
+        body.friction = 0.2
+        body.categoryBitMask = ChompPhysicsCategory.wall
+        body.collisionBitMask = ChompPhysicsCategory.ball
+        post.physicsBody = body
+        addChild(post)
+    }
+
     /// The ramps' switches, from the ball's move this frame (Table 06's updateRampLayer): the entry puts a floor ball on
     /// the ramp (backward = it fell back out), the made switch just past the top scores it, the exit at the end of the
     /// wire puts it back on the floor. A ramp ball found far from its channel drops to the floor (the safety net).
@@ -493,11 +529,12 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     /// M2 v5: the wave ramp is made (placeholder scoring until the rules, M4).
     private func rampMade(_ ball: ChompBall, _ ramp: ChompRamp) {
-        labEvent("waveRamp")
-        game.add(ChompPoints.waveRamp)
+        let center = ramp === centerRamp                    // M3 v1
+        labEvent(center ? "centerRamp" : "waveRamp")
+        game.add(center ? ChompPoints.centerRamp : ChompPoints.waveRamp)
         hitHaptic.impactOccurred()
         sfx(.ramp)
-        showBanner("WAVE RAMP")
+        showBanner(center ? "CENTER RAMP" : "WAVE RAMP")
     }
 
     /// Turns the spinner; each half-turn scores, with one tick sound per 50 ms.
@@ -724,7 +761,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M2 v16")
+        let label = SKLabelNode(text: "T7 M3 v3")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1278,7 +1315,7 @@ extension ChompTableScene: ShotLabHost {
     var shotLabTableName: String { "Chomp" }
 
     /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
-    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "harpoonGate", "fishPhone", "buoy"] }
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "harpoonGate", "fishPhone", "buoy"] }
 
     /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
     /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.

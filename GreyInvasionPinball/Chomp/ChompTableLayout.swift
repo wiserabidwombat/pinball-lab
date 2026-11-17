@@ -78,7 +78,10 @@ enum ChompTableLayout {
     static let flipperPivotRadius: CGFloat = 12
     static let flipperTipRadius: CGFloat = 6
     static let flipperRestAngle: CGFloat = .pi / 6
-    static let flipperTravel: CGFloat = .pi / 3
+    /// M3 v3 (Aaron: "Option 1" — check our stroke against a real flipper): Visual Pinball's standard modern flipper
+    /// rests at 121° and stops at 70° (VPX StartAngle / EndAngle defaults): 31° below horizontal up to 20° above, a 51°
+    /// stroke. Ours swung 60° (to 30° above), which turns every flip shot ~10° further left at the stop.
+    static let flipperTravel: CGFloat = 51 * .pi / 180
     /// Table 06 M2's real-table flippers (Aaron, 7 Nov 2026: "Love it"): 35 rad/s and a 0.3 rubber bounce.
     static let flipperUpSpeed: CGFloat = 35
     /// T7 M2 v9: the flipper carry (ChompFlipper.contactLaunch): a smooth, rate-independent launch model. Its fan
@@ -316,9 +319,10 @@ enum ChompTableLayout {
     /// The low end (y 1000–1060) is solid for floor balls: a U open only at the mouth.
     static let waveLowLength: CGFloat = 60
     static let waveLaneLeft = [CGPoint(x: 151, y: 870), CGPoint(x: 151, y: 1000)]
-    /// The block right of the lane (x 197–233) up to the ramp's entrance, its bottom a half-round, centre (215, 950) r 18.
-    static let waveEndCentre = CGPoint(x: 215, y: 950)
-    static let waveEndRadius: CGFloat = 18
+    /// The block right of the lane (x 197–228) up to the ramp's entrance, its bottom a half-round, centre (212.5, 950)
+    /// r 15.5. M3 v2: its right edge traced at x 228 (was 233, so the center ramp's entrance is the real width).
+    static let waveEndCentre = CGPoint(x: 212.5, y: 950)
+    static let waveEndRadius: CGFloat = 15.5
     static var waveRightBlock: [CGPoint] {
         let c = waveEndCentre, r = waveEndRadius
         var pts = [CGPoint(x: c.x - r, y: 1000), CGPoint(x: c.x - r, y: c.y)]
@@ -347,6 +351,42 @@ enum ChompTableLayout {
     }
     /// The top of the over-the-top bend (heading 0): plastic up to here, wire after; made 10 pt past it.
     static var waveApexDistance: CGFloat { waveChannel.length + 70 * 55 * .pi / 180 + 110 + 55 * 35 * .pi / 180 }
+
+    // MARK: Milestone 3 v1: the center ramp
+    /// Traced over p. 40 (tools/chomp_layout.py center_path, tools/chomp_render_m3.py): a lane x ~236–282 right of the
+    /// wave ramp's block, entrance y 1000; the ramp climbs the lane, turns round at the top and its wire comes back
+    /// down the left side into the left inlane ("the easiest shot in the game", U-turn → left flipper). The real return
+    /// wire is stacked over the climb; in 2D the U-turn (r 24) sets it beside it, 48 pt left, then it bends down-left
+    /// and runs straight down over the left inlane (x 99), ending at y 440 above the guide's top (405).
+    /// Its own wire level (lowWire categories), so it never touches the wave ramp's rails where they cross.
+    /// M3 v2 (Aaron: "Is it flared on the actual table?" → "Yes please!" to tracing it): the real entrance flap is at
+    /// y ~1020 and ~52 wide (x 228–280); below it a short funnel — the block's edge on the left (x 228) and a rubber post
+    /// at (300, 1000) on the right with the wall slanting in from it — 66 pt across where the ball arrives at y 1000.
+    static let centerMouth = CGPoint(x: 254, y: 1020)
+    static let centerMouthHalfWidth: CGFloat = 26        // the flap: 52 wide
+    static let centerHalfWidth: CGFloat = 20             // narrows to 40 by the top (the U-turn and the wire)
+    static let centerFlareLength: CGFloat = 110
+    static let centerLowLength: CGFloat = 60             // the floor-solid U at the low end (y 1020–1080)
+    static let centerJamb = [CGPoint(x: 228, y: 1000), CGPoint(x: 228, y: 1020)]       // the block's edge up to the flap
+    static let centerPost = CGPoint(x: 300, y: 1000)
+    static let centerPostRadius: CGFloat = 6
+    static let centerFunnel = [CGPoint(x: 296, y: 1004.5), CGPoint(x: 280, y: 1020)]   // post → the ramp's right rail
+    static let centerClimb: CGFloat = 110
+    static let centerTurnRadius: CGFloat = 24
+    static var centerPath: ChompRampPath {
+        var p = ChompRampPath(start: centerMouth, heading: .pi / 2)
+        p.line(centerClimb)                                  // up the lane (the plastic)
+        p.arc(radius: centerTurnRadius, turn: .pi)           // the U-turn to the left: apex at its top
+        p.line(p.points[p.points.count - 1].y - 870)         // the wire straight down beside the climb
+        p.arc(radius: 80, turn: -40 * .pi / 180)             // bend down-left
+        p.line(108)
+        p.arc(radius: 80, turn: 40 * .pi / 180)              // straight down again, over the left inlane
+        let end = p.points[p.points.count - 1]
+        p.line(end.y - 440)                                  // down to y 440, over the inlane's mouth
+        return p
+    }
+    /// The top of the U-turn (heading 180°): plastic up to here, wire after; made 10 pt past it.
+    static var centerApexDistance: CGFloat { centerClimb + centerTurnRadius * .pi / 2 }
     /// Sends harpoon-lane balls on into the left inlane (M2 v3: ends over the wider inlane, 96 pt above the guide's
     /// top); balls from the playfield still reach the left outlane under it.
     static let harpoonDeflector = [CGPoint(x: 20, y: 560), CGPoint(x: 90, y: 500)]

@@ -307,3 +307,7 @@ quickshotGate = ((harpoonX, 720), (harpoonX, 920))
 # ---- Milestone 2 v15: real gravity (-6.0, v14) left the ball let down from the held pier flipper balanced on the
 # block's lower-left corner (503, 547); the corner moves in to (511, 548), still closed on the pivot cap (7.2 pt).
 pierPlastic = [(519, 615), (548, 618), (548, 470), (514, 470), (528, 530), (522, 548), (511, 548), (519, 615)]
+
+# ---- Milestone 2 v16: the right outlane's one-way gate is gone (the real table has only the post, which saves with a
+# nudge); the right lane guide is solid again.
+rightLaneGuideWithGate = [rightLaneGuide]

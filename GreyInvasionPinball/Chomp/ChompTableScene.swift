@@ -196,8 +196,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addWall(points: ChompTableLayout.rightOutlanePostRail)
         addWall(points: ChompTableLayout.rightOutlaneWall)
         addWall(points: ChompTableLayout.rightApron)
-        addWall(points: ChompTableLayout.rightLaneGuideUpper)      // the right lane guide, with the save gate's opening
-        addWall(points: ChompTableLayout.rightLaneGuideLower)
+        addWall(points: ChompTableLayout.rightLaneGuide)           // M2 v16: solid (the save gate is gone, as on the real table)
         addWall(points: ChompTableLayout.pierPlastic)              // M2 v2: the pier flipper hangs from this block
 
         for s in [ChompTableLayout.leftSling, ChompTableLayout.rightSling] {
@@ -338,8 +337,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         }
     }
 
-    /// The right outlane save: a rubber post on the outer wall and the one-way gate in the right lane guide (an edge
-    /// across the guide's opening, category diverter: each ball collides with it only while moving right).
+    /// The right outlane save: a rubber post on the outer wall. M2 v16: the one-way gate in the right lane guide is gone
+    /// (the real table has only the post, which saves a ball with a nudge).
     private func addOutlaneSave() {
         let r = ChompTableLayout.outlaneSavePostRadius
         let post = SKShapeNode(circleOfRadius: r)
@@ -357,23 +356,6 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         post.physicsBody = body
         addChild(post)
 
-        let top = CGPoint(x: ChompTableLayout.saveGateX, y: ChompTableLayout.saveGateTop)
-        let bottom = CGPoint(x: ChompTableLayout.saveGateX, y: ChompTableLayout.saveGateBottom)
-        let gate = SKShapeNode()
-        let path = CGMutablePath()
-        path.move(to: top)
-        path.addLine(to: bottom)
-        gate.path = path
-        gate.strokeColor = Self.oneWayColor
-        gate.lineWidth = 2
-        gate.zPosition = -19
-        let gb = SKPhysicsBody(edgeFrom: top, to: bottom)
-        gb.friction = 0.05
-        gb.restitution = 0.2
-        gb.categoryBitMask = ChompPhysicsCategory.diverter
-        gb.collisionBitMask = ChompPhysicsCategory.ball
-        gate.physicsBody = gb
-        addChild(gate)
     }
 
     /// Milestone 2 v1: the harpoon lane, the left loop and tongue, the spinner, the quickshot gate and rollovers, the
@@ -686,7 +668,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         }
     }
 
-    /// The right outlane's one-way gate: solid for each ball only while it moves right.
+    /// The one-way gates (category diverter; M2 v16: now only the quickshot gate): solid for each ball only while it moves right.
     private func updateSaveGate() {
         for ball in balls {
             ball.setSaveGateSolid((ball.physicsBody?.velocity.dx ?? 0) > 0)
@@ -742,7 +724,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M2 v15")
+        let label = SKLabelNode(text: "T7 M2 v16")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)

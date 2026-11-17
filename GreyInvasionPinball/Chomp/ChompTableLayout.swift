@@ -203,19 +203,11 @@ enum ChompTableLayout {
     static var rightUpPost: CGPoint { mirrored(leftUpPost) }
     static let upPostHoldSeconds: TimeInterval = 1.8
 
-    /// The right outlane save: a small rubber post on the outer wall (27 pt to the lane guide, so the ball still
-    /// passes) and a 32 pt one-way gate cut in the right lane guide: a ball the post turns back can roll through it into
-    /// the inlane; nothing goes out that way (category diverter, solid while the ball moves right).
+    /// The right outlane save: a small rubber post on the outer wall (the ball still passes it). M2 v16: the one-way
+    /// gate that was cut in the right lane guide is gone — the real table has only the post (saves with a nudge).
     static let outlaneSavePost = CGPoint(x: 544.5, y: 400)
     static let outlaneSavePostRadius: CGFloat = 3.5
     static let outlaneSavePostRestitution: CGFloat = 0.6
-    static var saveGateX: CGFloat { mirrorSum - laneGuideX }          // 514
-    static let saveGateTop: CGFloat = 380      // M2 v4: 45 pt opening for the 30 pt ball
-    static let saveGateBottom: CGFloat = 335
-    static var rightLaneGuideUpper: [CGPoint] { [CGPoint(x: saveGateX, y: laneGuideTop), CGPoint(x: saveGateX, y: saveGateTop)] }
-    static var rightLaneGuideLower: [CGPoint] {
-        [CGPoint(x: saveGateX, y: saveGateBottom)] + Array(rightLaneGuide.dropFirst())
-    }
 
     /// The pier mini-flipper. M2 v3 (Aaron: "Do it all"): exactly where the real one is (Jaws Pro drawing, p. 40):
     /// pivot (517, 533), length 51, hanging 64° below horizontal from the notch of a plastic block on the right wall,

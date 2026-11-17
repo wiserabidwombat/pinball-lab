@@ -98,7 +98,7 @@ for name, post, guide, sling in [('left', C.leftUpPost, C.leftLaneGuide, C.leftS
     report(f'{name} up-post to the sling bottom edge', seg_dist(post, sling[1], sling[2]) - C.upPostRadius, 'closed')
 report('left inlane width (guide to sling corner side)', C.leftSling[1][0] - C.laneGuideX, 'lane')
 report('left outlane width', C.laneGuideX - 20, 'lane')
-report('right save gate opening', C.saveGateTop - C.saveGateBottom, 'lane')
+# M2 v16: the right save gate is gone (solid lane guide)
 lt0 = C.flipper_tip(C.leftFlipperPivot, 'left'); rt0 = C.flipper_tip(C.rightFlipperPivot, 'right')
 report('flipper tip gap (centre drain)', math.dist(lt0, rt0) - 2 * C.flipperTipRadius, 'lane')
 report('shooter lane width', C.rightWallX - C.laneWallX, 'closed' if False else 'lane')

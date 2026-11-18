@@ -1185,7 +1185,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let now = gameTime
         if let last = comboLast, last != name, now - comboAt <= Self.comboWindow {
             comboLinks += 1
-            let v = TourPoints.combo << min(comboLinks - 1, 6)
+            let v = TourPoints.combo * min(comboLinks, 4)       // M8 v8: 25k, 50k, 75k, then 100k a link (was doubling)
             game.add(v)
             showBanner("\(comboLinks + 1)-WAY COMBO \(v.formatted())")
             flashers.flash(name == "moon" ? "moon" : name == "saturn" ? "saturn" : name == "leftOrbit" ? "left"
@@ -2045,7 +2045,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v7b")
+        let label = SKLabelNode(text: "T6 M8 v8b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2091,7 +2091,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v7b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v8b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -3008,7 +3008,12 @@ extension TourTableScene: PlayLabHost {
             removeAllBalls()
             nextBallAt = nil
         }
-        return ["countdownLeft": countdownLeft, "rocketLit": rocketStandups.filter { $0.isLit }.count]
+        var x = ["countdownLeft": countdownLeft, "rocketLit": rocketStandups.filter { $0.isLit }.count,
+                 "tourNumber": modes.tourNumber, "planetsVisited": planetsVisitedThisGame]
+        for (k, v) in game.bySource {                       // M8 v8: points by source, for the balance round
+            x["pts_" + (k.split(separator: "(").first.map(String.init) ?? k), default: 0] += v
+        }
+        return x
     }
 
     func playLabStop() {

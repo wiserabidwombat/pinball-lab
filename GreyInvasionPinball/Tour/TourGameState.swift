@@ -33,8 +33,8 @@ enum TourPoints {
     static let moon = 7_500
     static let saturn = 7_500
     // M8 v1: the tour (first guesses; tuned in the balance round)
-    static let modeShot = 10_000
-    static let modeComplete = 100_000     // × the tour number
+    static let modeShot = 25_000          // M8 v8: was 10,000
+    static let modeComplete = 250_000     // × the tour number (M8 v8: was 100,000)
     static let jackpot = 150_000          // M8 v4: Moonshot's first jackpot, +jackpotStep each after
     static let jackpotStep = 50_000
     static let sunJackpot = 250_000       // M8 v6: Sun Slingshot's floor jackpots, × the tour number
@@ -69,13 +69,18 @@ final class TourGameState {
 
     var isGameOver: Bool { ballsLeft == 0 }
 
-    func add(_ points: Int) {
+    /// M8 v8 (balance round): where the points came from, by the scoring function's name (the Play Lab reports it).
+    var bySource: [String: Int] = [:]
+
+    func add(_ points: Int, from source: String = #function) {
         score += points * multiplier
+        bySource[source, default: 0] += points * multiplier
     }
 
     /// M8 v7: points already multiplied (the end-of-ball bonus).
-    func addRaw(_ points: Int) {
+    func addRaw(_ points: Int, from source: String = #function) {
         score += points
+        bySource[source, default: 0] += points
     }
 
     /// Returns true if the multiplier went up (false when it's already at the max).
@@ -100,6 +105,7 @@ final class TourGameState {
 
     func reset() {
         score = 0
+        bySource = [:]
         ballsLeft = Self.ballsPerGame
         ballOnPlunger = false
         multiplier = 1

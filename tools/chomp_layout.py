@@ -373,3 +373,14 @@ boatChannelLength = 42
 boatHalfWidth, boatPostRadius = 32, 5
 boatLip = [(318, 1000), (334, 995), (350, 993), (366, 995), (382, 1000)]
 boatHousing = [(318, 1000), (305, 1000), (305, 1130), (395, 1130), (395, 1000), (382, 1000)]
+
+# ---- Milestone 3 v8 (Aaron: "Let's do option 1 and fix it like the real deal."): the stuck-ball test found four traps
+# where the real table has solid blue plastic (p. 40). (1) The island behind the ramp entrances: from the loop's right
+# wall (x 147) over the wave ramp's low U, the gap between the ramps, the center ramp's low U and up to the boat
+# housing, its top a roof sloping from the loop wall's top (147, 1180) down to the housing (305, 1145); (2) the boat
+# housing's top slopes too, (305, 1145) -> (395, 1115), so a ball rolls off its right end into play; (3) the wedge
+# behind the Fish Phone bank between the harpoon lane wall and the backboard, its top sloping down-right.
+rampIsland = [(147, 1060), (197, 1060), (197, 1000), (228, 1000), (228, 1020), (231, 1080), (282, 1080),
+              (305, 1100), (305, 1145), (147, 1180), (147, 1060)]
+boatHousing = [(318, 1000), (305, 1000), (305, 1145), (395, 1115), (395, 1000), (382, 1000)]
+bankWedge = [(58.8, 599.1), (100.8, 671.9), (100.8, 700), (60, 720), (58.8, 599.1)]

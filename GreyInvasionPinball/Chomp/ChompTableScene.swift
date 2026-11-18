@@ -498,6 +498,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// M3 v4: the boat — its housing and the captive ball in the channel up its middle.
     private func addBoat() {
         addWall(points: ChompTableLayout.boatHousing)
+        addWall(points: ChompTableLayout.rampIsland)       // M3 v8: the real plastics that close the stuck-ball traps
+        addWall(points: ChompTableLayout.bankWedge)
         let b = ChompCaptiveBall(mouth: ChompTableLayout.boatMouth, heading: .pi / 2,
                                  length: ChompTableLayout.boatChannelLength, halfWidth: ChompTableLayout.boatHalfWidth,
                                  postRadius: ChompTableLayout.boatPostRadius, lip: ChompTableLayout.boatLip)
@@ -783,7 +785,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M3 v7")
+        let label = SKLabelNode(text: "T7 M3 v8")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)

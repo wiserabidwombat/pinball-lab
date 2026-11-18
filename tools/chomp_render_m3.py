@@ -25,6 +25,9 @@ if hasattr(C, 'boatMouth'):                                     # M3 v4: the boa
     if hasattr(C, 'boatLip'): poly(C.boatLip, c='#888888', lw=1.5)
     ax.add_patch(plt.Circle((_bx, (min(p[1] for p in C.boatLip) + C.ballRadius) if hasattr(C, 'boatLip') else _by + 10), C.ballRadius, color='#888888', alpha=0.8))
     ax.text(_bx - 14, _by + _bl + 4, 'boat', fontsize=7)
+if hasattr(C, 'rampIsland'):                                   # M3 v8: the real plastics that close the traps
+    for _poly in (C.rampIsland, C.bankWedge):
+        ax.fill([p[0] for p in _poly], [p[1] for p in _poly], color='#3355ff', alpha=0.35); poly(_poly)
 _ap = C.CP.at(C.centerApexDistance)[0]; ax.plot(*_ap, 'o', color='#cc6600'); ax.text(_ap[0]-40, _ap[1]+8, 'center made', fontsize=7)
 ax.set_title('Table 07 CHOMP! M3: the center ramp (orange dashed) over the reference drawing (p.40)', fontsize=9)
 fig.savefig(out, dpi=110, bbox_inches='tight')
@@ -45,4 +48,10 @@ if hasattr(C, 'boatMouth'):
     print('boat: mouth post gap %.1f (the lip holds the captive ball)' % (2 * C.boatHalfWidth - 2 * getattr(C, 'boatPostRadius', 4)))
     print('boat: housing corner (305, 1000) to the center post (300, 1000) r %d: %.1f (closed)' % (C.centerPostRadius, 5 - C.centerPostRadius))
     print('boat: pocket between the center ramp U (x 280) and the housing (x 305): %.1f (closed < 30)' % (305 - 280))
+if hasattr(C, 'rampIsland'):
+    import math as _m
+    _sl = lambda a, b: _m.degrees(_m.atan2(b[1] - a[1], b[0] - a[0]))
+    print('traps: island roof %.1f deg down to the right; housing roof %.1f deg; bank wedge top %.1f deg (all must shed)'
+          % (_sl((147, 1180), (305, 1145)), _sl((305, 1145), (395, 1115)), _sl((60, 720), (100.8, 700))))
+    print('traps: island over the wave U back (y 1060) and the center U back (y 1080): no flat ledge left open')
 print('center: length %.1f, apex s %.1f' % (C.CP.dist[-1], C.centerApexDistance))

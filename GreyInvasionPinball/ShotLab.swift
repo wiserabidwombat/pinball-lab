@@ -86,8 +86,14 @@ final class ShotLab {
         case hold
         /// The hold test with a hot feed: released at 1000 pt/s, like a fast ramp/wire return.
         case holdfast
+        /// The stuck-ball finder: balls dropped at random points all over the table with random velocities, the
+        /// flippers at rest. A ball that sits still 4 s gets one flip of every flipper; still there 2 s later = stuck.
+        /// Outcomes: drain, stuck, moving (still going at 20 s), gone (taken by a scoop or lock). `flipFreed` marks a
+        /// ball that rested until the flip moved it. tools/shotlab_stuck.py groups and maps the spots.
+        case scatter
         var delayRange: ClosedRange<Double> {
             switch self {
+            case .scatter: return 0...0
             case .cradle: return ShotLab.minDelay...ShotLab.maxDelay
             case .inlane, .hold: return 0.30...0.90   // release at the inlane top → the ball reaches the flipper ~0.4–0.6 s later
             case .drop: return 0.10...0.50            // release 160 pt up → on the flipper after ~0.25 s
@@ -115,7 +121,7 @@ final class ShotLab {
     }
 
     struct Trial: Codable {
-        let flipper: String
+        var flipper: String
         let plannedDelay: Double        // seconds from dropping the flipper to flipping
         var physicsStepMs: Double = 0   // table time per physics step (8.3 = a 120 Hz phone, 16.7 = 60 Hz)
         var actualDelay: Double = 0     // what the frame timing allowed
@@ -129,6 +135,9 @@ final class ShotLab {
         var start: String = "cradle"     // round 15: cradle | inlane | drop
         var flipPoint: [Double]?         // round 17: the ball at the flip [x, y]
         var launch: [Double]?            // round 17: first 60 pt off the flipper [x, y, degrees, speed]
+        var drop: [Double]?              // scatter: where the ball was dropped [x, y, vx, vy]
+        var rest: [Double]?              // scatter: where it sat still [x, y] (stuck, or the first rest a flip freed)
+        var flipFreed: Bool?             // scatter: it sat still until the flip test moved it
     }
 
     struct Results: Codable {
@@ -173,7 +182,17 @@ final class ShotLab {
         case settling(until: TimeInterval)
         case dropped(at: TimeInterval)
         case flipped(at: TimeInterval)
+        case scattered(at: TimeInterval)
     }
+
+    /// Scatter: drops per pass (`-shotlab-drops N`, default 150), and its timings (table time).
+    nonisolated static let launchDrops: Int = {
+        guard let s = UserDefaults.standard.string(forKey: "shotlab-drops"), let n = Int(s) else { return 150 }
+        return min(2000, max(1, n))
+    }()
+    static let scatterRest: TimeInterval = 4.0        // still (within 5 pt) this long → the flip test
+    static let scatterFlipWatch: TimeInterval = 2.0   // after the flip test: still within 6 pt → stuck
+    static let scatterTimeout: TimeInterval = 20.0    // still moving → "moving"
 
     /// Round 4b (Play Lab): launched with `-shotlab <table>` (lowercase letters: "lamplight"), the table's view starts
     /// the Shot Lab at once and the app quits when the results are saved. `-shotlab-scenario <name>` picks the
@@ -217,6 +236,11 @@ final class ShotLab {
     private(set) var trials: [Trial] = []
     private var frames = 0
     private var startedAt: CFTimeInterval?          // real time (the lab clock runs slow at times)
+    private var scatterDrops: [(point: CGPoint, velocity: CGVector)] = []   // scatter: one per plan entry
+    private var restSince: TimeInterval?
+    private var restPoint: CGPoint = .zero
+    private var flipTestAt: TimeInterval?
+    private var flipTestReleased = false
 
     /// `only`: flipper names to sweep (nil = all; the launch argument `-shotlab-flippers` when there is one).
     init(host: ShotLabHost, only: [String]? = ShotLab.launchFlippers,
@@ -226,6 +250,20 @@ final class ShotLab {
         probes = host.shotLabProbes
         majorEvents = host.shotLabMajorEvents
         startKind = start
+        if start == .scatter {
+            // Random drops over the whole 600 × 1300 world (every table's), any direction, 0–600 pt/s. A point inside a
+            // wall or outside the table just drains or rests out of reach; the tool checks rests against the Play Lab's
+            // replays to tell real traps from those.
+            for speed in Self.passes {
+                for _ in 0..<Self.launchDrops {
+                    plan.append((0, 0, speed))
+                    let a = CGFloat.random(in: 0..<(2 * .pi)), v = CGFloat.random(in: 0...600)
+                    scatterDrops.append((CGPoint(x: CGFloat.random(in: 15...585), y: CGFloat.random(in: 60...1285)),
+                                         CGVector(dx: cos(a) * v, dy: sin(a) * v)))
+                }
+            }
+            return
+        }
         let range = start == .cradle ? host.shotLabCradleDelays : start.delayRange
         let steps = Int(((range.upperBound - range.lowerBound) / Self.delayStep).rounded())
         var chosen = flippers.indices.filter { i in only.map { $0.contains(flippers[i].name.lowercased()) } ?? true }
@@ -248,7 +286,7 @@ final class ShotLab {
     var physicsSpeed: Double {
         guard index < plan.count else { return 1 }
         switch stage {
-        case .dropped, .flipped: return plan[index].speed
+        case .dropped, .flipped, .scattered: return plan[index].speed
         default: return 1
         }
     }
@@ -261,6 +299,11 @@ final class ShotLab {
 
     /// A shot event from the scene (rightRamp, hangar, fighter, bumper…).
     func event(_ name: String, at now: TimeInterval) {
+        if case .scattered = stage {                     // scatter: what the ball hit last (the newest 12)
+            current?.events.append(name)
+            if let n = current?.events.count, n > 12 { current?.events.removeFirst(n - 12) }
+            return
+        }
         guard case .flipped(let at) = stage, var trial = current else { return }
         trial.events.append(name)
         if trial.outcome.isEmpty, majorEvents.contains(name) {
@@ -284,6 +327,20 @@ final class ShotLab {
             current = Trial(flipper: spec.name, plannedDelay: step.delay)
             current?.start = startKind.rawValue
             leftFlippers = false
+            if startKind == .scatter, index < scatterDrops.count {
+                let d = scatterDrops[index]
+                for f in flippers.indices { host.shotLabSetFlipper(f, pressed: false) }
+                host.shotLabPlaceBall(at: d.point, velocity: d.velocity)
+                current?.flipper = "scatter"
+                current?.drop = [Double(d.point.x).rounded(), Double(d.point.y).rounded(),
+                                 Double(d.velocity.dx).rounded(), Double(d.velocity.dy).rounded()]
+                restSince = nil
+                flipTestAt = nil
+                flipTestReleased = false
+                stage = .scattered(at: now)
+                noteStep(step.speed)
+                break
+            }
             if startKind != .cradle, let starts = spec.starts {
                 // Round 15: a moving start — flippers at rest, the ball released now, the delay counted from here.
                 for f in flippers.indices { host.shotLabSetFlipper(f, pressed: false) }
@@ -379,8 +436,56 @@ final class ShotLab {
             } else if leftFlippers, ball.position.y < Self.returnY, ball.velocity.dy < 0 {
                 finishTrial("none", now: now, seconds: now - at)       // came back without hitting a shot
             }
+
+        case .scattered(let at):
+            updateScatter(at: at, now: now)
         }
         return index < plan.count
+    }
+
+    /// Scatter: drain / gone / moving, or a rest → one flip of every flipper → stuck if it still hasn't moved.
+    private func updateScatter(at: TimeInterval, now: TimeInterval) {
+        guard let ball = host.shotLabBall else { finishTrial("gone", now: now, seconds: now - at); return }
+        let p = ball.position
+        let here = [(Double(p.x) * 10).rounded() / 10, (Double(p.y) * 10).rounded() / 10]
+        if p.y < Self.drainY { finishTrial("drain", now: now, seconds: now - at); return }
+        if now - at > Self.scatterTimeout {
+            current?.rest = here
+            finishTrial("moving", now: now, seconds: now - at)
+            return
+        }
+        if let t = flipTestAt {
+            if !flipTestReleased, now - t >= Self.flipHold {
+                for f in flippers.indices { host.shotLabSetFlipper(f, pressed: false) }
+                flipTestReleased = true
+            }
+            guard now - t >= Self.scatterFlipWatch else { return }
+            flipTestAt = nil
+            if hypot(p.x - restPoint.x, p.y - restPoint.y) < 6 {
+                current?.rest = here
+                current?.flipFreed = false
+                finishTrial("stuck", now: now, seconds: now - at)
+            } else {
+                current?.flipFreed = true                      // the flip moved it; keep watching
+                restSince = nil
+            }
+            return
+        }
+        if let since = restSince, hypot(p.x - restPoint.x, p.y - restPoint.y) < 5 {
+            guard now - since >= Self.scatterRest else { return }
+            if current?.flipFreed == true {                     // freed once, still again: stuck here
+                current?.rest = here
+                finishTrial("stuck", now: now, seconds: now - at)
+                return
+            }
+            if current?.rest == nil { current?.rest = here }
+            flipTestAt = now
+            flipTestReleased = false
+            for f in flippers.indices { host.shotLabSetFlipper(f, pressed: true) }
+        } else {
+            restSince = now
+            restPoint = p
+        }
     }
 
     /// Table time per physics step on this pass: a real frame × the pass speed.

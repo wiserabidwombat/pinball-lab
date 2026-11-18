@@ -7,6 +7,7 @@
 #   tools/shotlab_run.sh lamplight booksdown left,right   # bookshelf down (measures the fireplace), two flippers (~25 min)
 #   SKIP_BUILD=1 tools/shotlab_run.sh lamplight           # reuse the last build
 #   tools/shotlab_run.sh cthulhu "" "" inlane             # plan 2 round 15: start from the inlane (or: drop); or START=inlane
+#   tools/shotlab_run.sh chomp "" "" scatter              # the stuck-ball finder: random drops all over (DROPS=150 per pass)
 #
 # Tables: lamplight, cthulhu, monsoon, greyinvasion. Scenarios (2nd argument): lamplight booksdown, catmantel,
 # catkettle · cthulhu cthulhuup,
@@ -58,6 +59,7 @@ ARGS=(-shotlab "$TABLE")
 [ -n "$SCENARIO" ] && ARGS+=(-shotlab-scenario "$SCENARIO")
 [ -n "$FLIPPERS" ] && ARGS+=(-shotlab-flippers "$FLIPPERS")
 [ -n "$START" ] && ARGS+=(-shotlab-start "$START")
+[ -n "${DROPS:-}" ] && ARGS+=(-shotlab-drops "$DROPS")
 # Plan 2 round 18: OVERRIDE="Mon.ragingPush=2000,Mon.calmBend=0.0009" — what-if tunables (GreyInvasionPinball/LabOverrides.swift).
 [ -n "${OVERRIDE:-}" ] && ARGS+=(-override "$OVERRIDE") && echo "▶ Overrides: $OVERRIDE"
 echo "▶ Launching the Shot Lab: ${ARGS[*]} (the app quits by itself when the results are saved)"
@@ -67,7 +69,10 @@ xcrun simctl launch --console "$UDID" "$BUNDLE" "${ARGS[@]}" | grep -E "SHOT LAB
 AFTER=$(ls -t ShotLab/shotlab-*.json 2>/dev/null | head -1 || true)
 if [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
   echo "▶ Results: $AFTER"
-  python3 tools/shotlab_windows.py "$AFTER"
+  case "$AFTER" in
+    *-scatter-*) python3 tools/shotlab_stuck.py "$AFTER" ;;     # the stuck-ball finder: its own report + map
+    *) python3 tools/shotlab_windows.py "$AFTER" ;;
+  esac
 else
   echo "No new results in ShotLab/ (did the app quit early? check the Simulator)."
 fi

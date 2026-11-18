@@ -40,7 +40,8 @@ enum TourPoints {
     static let sunJackpot = 250_000       // M8 v6: Sun Slingshot's floor jackpots, × the tour number
     static let superJackpot = 1_000_000   // × the tour number
     // M8 v7: combos, the end-of-ball bonus
-    static let combo = 25_000             // a 2-way combo; doubles for each further link
+    static let combo = 10_000             // M8 v8c: a 2-way combo; +10k a link (10k, 20k, 30k) …
+    static let comboMax = 50_000          // … then 50k for every link after
     static let bonusPlanet = 25_000       // each planet visited this game
     static let bonusShot = 1_000          // each ramp / orbit made this ball
 }

@@ -1185,7 +1185,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let now = gameTime
         if let last = comboLast, last != name, now - comboAt <= Self.comboWindow {
             comboLinks += 1
-            let v = TourPoints.combo * min(comboLinks, 4)       // M8 v8: 25k, 50k, 75k, then 100k a link (was doubling)
+            let v = comboLinks >= 4 ? TourPoints.comboMax : TourPoints.combo * comboLinks   // M8 v8c: 10k, 20k, 30k, then 50k
             game.add(v)
             showBanner("\(comboLinks + 1)-WAY COMBO \(v.formatted())")
             flashers.flash(name == "moon" ? "moon" : name == "saturn" ? "saturn" : name == "leftOrbit" ? "left"
@@ -2045,7 +2045,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v8b")
+        let label = SKLabelNode(text: "T6 M8 v8c")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2091,7 +2091,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v8b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v8c \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

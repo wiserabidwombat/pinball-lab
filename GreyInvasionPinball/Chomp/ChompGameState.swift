@@ -23,6 +23,7 @@ enum ChompPoints {
     static let waveRamp = 2_500                 // M2 v5 placeholder (the real rules come with M4)
     static let centerRamp = 2_000               // M3 v1 placeholder
     static let boat = 3_000                     // M3 v4 placeholder
+    static let reelTurn = 500                   // M3 v9 placeholder (each turn of the fishing reel)
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

@@ -384,3 +384,26 @@ rampIsland = [(147, 1060), (197, 1060), (197, 1000), (228, 1000), (228, 1020), (
               (305, 1100), (305, 1145), (147, 1180), (147, 1060)]
 boatHousing = [(318, 1000), (305, 1000), (305, 1145), (395, 1115), (395, 1000), (382, 1000)]
 bankWedge = [(58.8, 599.1), (100.8, 671.9), (100.8, 700), (60, 720), (58.8, 599.1)]
+
+# ---- Milestone 3 v9 (Aaron: "kick off m3"): the fishing reel (p. 40 crop x 380-570, y 940-1190; the manual's
+# "Fishing Reel Spinner Top Assembly"): a keyhole lane right of the boat -- its mouth x 426-500 at y ~980, straight sides
+# to x 433 / 499, a round end centre (466, 1100) r 48 -- under a spinning disc (r 42) that the passing ball turns.
+# The blue plastic either side is solid. To leave no ledge, the island, the boat housing and the reel's blocks now
+# share ONE roof line from the loop wall's top (147, 1185) down to (510, 1150), where a ball rolls off into the open
+# right side (the real mid flipper lane).
+import math as _m
+def roofY(x): return 1185 - 35 * (x - 147) / 363
+reelCentre, reelRadius, reelDiscRadius = (466, 1100), 48, 42
+def _reel_arc(a0, a1, n=16):
+    return [(reelCentre[0] + reelRadius * _m.cos(_m.radians(a0 + (a1 - a0) * i / n)),
+             reelCentre[1] + reelRadius * _m.sin(_m.radians(a0 + (a1 - a0) * i / n))) for i in range(n + 1)]
+_aL = _m.degrees(_m.atan2(1065 - 1100, 433 - 466)) % 360            # 226.7
+_aR = _m.degrees(_m.atan2(1065 - 1100, 499 - 466))                  # -46.7
+rampIsland = [(147, 1060), (197, 1060), (197, 1000), (228, 1000), (228, 1020), (231, 1080), (282, 1080),
+              (305, 1100), (305, roofY(305)), (147, roofY(147)), (147, 1060)]
+boatHousing = [(318, 1000), (305, 1000), (305, roofY(305)), (395, roofY(395)), (395, 1000), (382, 1000)]
+reelLeftBlock = ([(395, 1000), (395, 978), (426, 978), (433, 1043), (433, 1065)] + _reel_arc(_aL, 90)
+                 + [(466, roofY(466)), (395, roofY(395)), (395, 1000)])
+reelRightBlock = (_reel_arc(90, _aR) + [(499, 1043), (500, 983), (510, 983), (510, roofY(510)), (466, roofY(466)),
+                                        (466, 1148)])
+reelSwitch = ((433, 1065), (499, 1065))          # into the round end, going up: the ball reaches the disc

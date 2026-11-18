@@ -407,19 +407,53 @@ enum ChompTableLayout {
     static let boatPostRadius: CGFloat = 5
     static let boatLip = [CGPoint(x: 318, y: 1000), CGPoint(x: 334, y: 995), CGPoint(x: 350, y: 993),
                           CGPoint(x: 366, y: 995), CGPoint(x: 382, y: 1000)]
-    /// M3 v8: its top slopes (305, 1145) → (395, 1115) so a ball landing on it rolls off its right end into play.
-    static let boatHousing = [CGPoint(x: 318, y: 1000), CGPoint(x: 305, y: 1000), CGPoint(x: 305, y: 1145),
-                              CGPoint(x: 395, y: 1115), CGPoint(x: 395, y: 1000), CGPoint(x: 382, y: 1000)]
+    /// M3 v9: its top lies on the shared roof (`roofY`), so a ball landing on it rolls on to the right.
+    static var boatHousing: [CGPoint] {
+        [CGPoint(x: 318, y: 1000), CGPoint(x: 305, y: 1000), CGPoint(x: 305, y: roofY(305)),
+         CGPoint(x: 395, y: roofY(395)), CGPoint(x: 395, y: 1000), CGPoint(x: 382, y: 1000)]
+    }
 
     // MARK: Milestone 3 v8: the real plastics that close the stuck-ball traps
     /// Aaron's stuck-ball test (Shot Lab scatter) found balls resting for good where the real table has solid blue
     /// plastic (p. 40). The island behind the ramp entrances: from the loop's right wall over the wave ramp's low U,
     /// the gap between the ramps (21 of 48 stuck drops), the center ramp's low U and its corner by the boat housing,
     /// its top a roof sloping from the loop wall's top (147, 1180) down to the housing (12.5°), so nothing rests on it.
-    static let rampIsland = [CGPoint(x: 147, y: 1060), CGPoint(x: 197, y: 1060), CGPoint(x: 197, y: 1000),
-                             CGPoint(x: 228, y: 1000), CGPoint(x: 228, y: 1020), CGPoint(x: 231, y: 1080),
-                             CGPoint(x: 282, y: 1080), CGPoint(x: 305, y: 1100), CGPoint(x: 305, y: 1145),
-                             CGPoint(x: 147, y: 1180), CGPoint(x: 147, y: 1060)]
+    static var rampIsland: [CGPoint] {
+        [CGPoint(x: 147, y: 1060), CGPoint(x: 197, y: 1060), CGPoint(x: 197, y: 1000), CGPoint(x: 228, y: 1000),
+         CGPoint(x: 228, y: 1020), CGPoint(x: 231, y: 1080), CGPoint(x: 282, y: 1080), CGPoint(x: 305, y: 1100),
+         CGPoint(x: 305, y: roofY(305)), CGPoint(x: 147, y: roofY(147)), CGPoint(x: 147, y: 1060)]
+    }
+
+    // MARK: Milestone 3 v9: the fishing reel
+    /// One roof over the island, the boat housing and the reel's blocks (M3 v9): from the loop wall's top (147, 1185)
+    /// down to (510, 1150) at 5.5°, where a ball rolls off into the open right side (the real mid flipper lane).
+    static func roofY(_ x: CGFloat) -> CGFloat { 1185 - 35 * (x - 147) / 363 }
+    /// p. 40 (and the manual's "Fishing Reel Spinner Top Assembly"): a keyhole lane right of the boat — mouth x 426–500
+    /// at y ~980, sides to x 433 / 499, a round end centre (466, 1100) r 48 — under a spinning disc (r 42) the passing
+    /// ball turns ("stronger shots to the reel mean more spins"). The blue plastic either side is solid.
+    static let reelCentre = CGPoint(x: 466, y: 1100)
+    static let reelRadius: CGFloat = 48
+    static let reelDiscRadius: CGFloat = 42
+    private static func reelArc(_ a0: CGFloat, _ a1: CGFloat, n: Int = 16) -> [CGPoint] {
+        (0...n).map { i in
+            let a = (a0 + (a1 - a0) * CGFloat(i) / CGFloat(n)) * .pi / 180
+            return CGPoint(x: reelCentre.x + reelRadius * cos(a), y: reelCentre.y + reelRadius * sin(a))
+        }
+    }
+    private static var reelLeftAngle: CGFloat { atan2(1065 - reelCentre.y, 433 - reelCentre.x) * 180 / .pi + 360 }   // 226.7
+    private static var reelRightAngle: CGFloat { atan2(1065 - reelCentre.y, 499 - reelCentre.x) * 180 / .pi }       // −46.7
+    static var reelLeftBlock: [CGPoint] {
+        [CGPoint(x: 395, y: 1000), CGPoint(x: 395, y: 978), CGPoint(x: 426, y: 978), CGPoint(x: 433, y: 1043),
+         CGPoint(x: 433, y: 1065)] + reelArc(reelLeftAngle, 90)
+            + [CGPoint(x: 466, y: roofY(466)), CGPoint(x: 395, y: roofY(395)), CGPoint(x: 395, y: 1000)]
+    }
+    static var reelRightBlock: [CGPoint] {
+        reelArc(90, reelRightAngle) + [CGPoint(x: 499, y: 1043), CGPoint(x: 500, y: 983), CGPoint(x: 510, y: 983),
+                                       CGPoint(x: 510, y: roofY(510)), CGPoint(x: 466, y: roofY(466)),
+                                       CGPoint(x: 466, y: 1148)]
+    }
+    /// Into the round end, going up: the ball reaches the disc.
+    static let reelSwitch = ChompSwitch(a: CGPoint(x: 433, y: 1065), b: CGPoint(x: 499, y: 1065), forward: CGVector(dx: 0, dy: 1))
     /// The plastic behind the Fish Phone bank, between the harpoon lane's inner wall and the bank's backboard
     /// (7 stuck drops in the V), its top sloping down-right (26°).
     static let bankWedge = [CGPoint(x: 58.8, y: 599.1), CGPoint(x: 100.8, y: 671.9), CGPoint(x: 100.8, y: 700),

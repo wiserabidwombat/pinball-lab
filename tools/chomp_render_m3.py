@@ -1,5 +1,6 @@
 """Table 07 M3 render: the M2 render plus the right half's new parts over the reference drawing (p. 40), with checks."""
 import math, sys, os
+import math as _m
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 out = sys.argv[1] if len(sys.argv) > 1 else 'build/chomp_m3.png'
 lims = sys.argv[2] if len(sys.argv) > 2 else '((-20, 640), (380, 1300))'
@@ -26,7 +27,7 @@ if hasattr(C, 'boatMouth'):                                     # M3 v4: the boa
     ax.add_patch(plt.Circle((_bx, (min(p[1] for p in C.boatLip) + C.ballRadius) if hasattr(C, 'boatLip') else _by + 10), C.ballRadius, color='#888888', alpha=0.8))
     ax.text(_bx - 14, _by + _bl + 4, 'boat', fontsize=7)
 if hasattr(C, 'rampIsland'):                                   # M3 v8: the real plastics that close the traps
-    for _poly in (C.rampIsland, C.bankWedge):
+    for _poly in (C.rampIsland, C.bankWedge) + ((C.reelLeftBlock, C.reelRightBlock) if hasattr(C, 'reelLeftBlock') else ()):
         ax.fill([p[0] for p in _poly], [p[1] for p in _poly], color='#3355ff', alpha=0.35); poly(_poly)
 _ap = C.CP.at(C.centerApexDistance)[0]; ax.plot(*_ap, 'o', color='#cc6600'); ax.text(_ap[0]-40, _ap[1]+8, 'center made', fontsize=7)
 ax.set_title('Table 07 CHOMP! M3: the center ramp (orange dashed) over the reference drawing (p.40)', fontsize=9)
@@ -51,7 +52,15 @@ if hasattr(C, 'boatMouth'):
 if hasattr(C, 'rampIsland'):
     import math as _m
     _sl = lambda a, b: _m.degrees(_m.atan2(b[1] - a[1], b[0] - a[0]))
-    print('traps: island roof %.1f deg down to the right; housing roof %.1f deg; bank wedge top %.1f deg (all must shed)'
-          % (_sl((147, 1180), (305, 1145)), _sl((305, 1145), (395, 1115)), _sl((60, 720), (100.8, 700))))
+    _r = C.boatHousing[2], C.boatHousing[3]
+    print('traps: island + housing roof %.1f deg down to the right (one line from the loop wall); bank wedge top %.1f deg'
+          % (_sl(_r[0], _r[1]), _sl((60, 720), (100.8, 700))))
     print('traps: island over the wave U back (y 1060) and the center U back (y 1080): no flat ledge left open')
+if hasattr(C, 'reelCentre'):
+    ax.add_patch(plt.Circle(C.reelCentre, C.reelDiscRadius, color='#2244aa', alpha=0.25)); poly(list(C.reelSwitch), c='#00aaaa', lw=2)
+    print('reel: mouth %.0f wide (x 426-500 at y ~980); channel %.0f; round end r %d -> the ball circles at r %d'
+          % (500 - 426, 499 - 433, C.reelRadius, C.reelRadius - C.ballRadius))
+    print('reel: roof %.1f..%.1f over x 147..510 (%.1f deg); roof above the keyhole top %.1f (closed); roof end (510, %.0f) -> open right side %.0f pt to the arch'
+          % (C.roofY(147), C.roofY(510), _m.degrees(_m.atan2(35, 363)), C.roofY(466) - 1148, C.roofY(510), 566 - 510))
+    print('reel: left block to the boat housing: shared edge x 395 (closed); housing to the boat cradle unchanged')
 print('center: length %.1f, apex s %.1f' % (C.CP.dist[-1], C.centerApexDistance))

@@ -69,6 +69,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private weak var centerRamp: ChompRamp?
     /// M3 v4: the boat's captive ball.
     private var boat: ChompCaptiveBall?
+    /// M3 v9: the fishing reel's disc.
+    private var reel: ChompReel?
     #if DEBUG
     /// M2 v6: the Shot Lab robot (shared ShotLab, Table 06's host pattern) and its own clock.
     fileprivate var shotLab: ShotLab?
@@ -500,11 +502,43 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addWall(points: ChompTableLayout.boatHousing)
         addWall(points: ChompTableLayout.rampIsland)       // M3 v8: the real plastics that close the stuck-ball traps
         addWall(points: ChompTableLayout.bankWedge)
+        addReel()
         let b = ChompCaptiveBall(mouth: ChompTableLayout.boatMouth, heading: .pi / 2,
                                  length: ChompTableLayout.boatChannelLength, halfWidth: ChompTableLayout.boatHalfWidth,
                                  postRadius: ChompTableLayout.boatPostRadius, lip: ChompTableLayout.boatLip)
         addChild(b)
         boat = b
+    }
+
+    /// M3 v9: the fishing reel — the keyhole's blue blocks and the disc over its round end.
+    private func addReel() {
+        addWall(points: ChompTableLayout.reelLeftBlock)
+        addWall(points: ChompTableLayout.reelRightBlock)
+        let r = ChompReel(centre: ChompTableLayout.reelCentre, radius: ChompTableLayout.reelDiscRadius)
+        addChild(r)
+        reel = r
+    }
+
+    /// M3 v9: a floor ball crossing into the keyhole's round end kicks the reel (stronger shots, more turns).
+    private func reelSwitch(_ ball: ChompBall, from p0: CGPoint, to p: CGPoint) {
+        guard ball.isOnFloor, let body = ball.physicsBody,
+              ChompTableLayout.reelSwitch.crossing(from: p0, to: p) == .forward else { return }
+        let v = body.velocity
+        reel?.kick(ballSpeed: hypot(v.dx, v.dy))
+        labEvent("reel")
+    }
+
+    /// M3 v9: turns the reel; each whole turn scores.
+    private func updateReel(_ dt: CGFloat, _ now: TimeInterval) {
+        guard let r = reel, r.isSpinning else { return }
+        let turns = r.update(dt: dt)
+        guard turns > 0 else { return }
+        game.add(ChompPoints.reelTurn * turns)
+        if now - lastSpinSound >= 0.05 {
+            lastSpinSound = now
+            sfx(.spinner)
+        }
+        if !r.isSpinning { showBanner("FISHING REEL \(r.spinsThisRun)") }
     }
 
     /// M3 v4: the captive ball reached the boat target (placeholder scoring until the rules, M4).
@@ -785,7 +819,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M3 v8")
+        let label = SKLabelNode(text: "T7 M3 v9")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -901,6 +935,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         for i in upPosts.indices { upPostRaisePending[i] = false; setUpPost(i, up: false) }
         resetBank()
         boat?.reset()
+        reel?.reset()
         ballSaveUsed = false
         game.reset()
         placeBallOnPlunger()
@@ -1112,6 +1147,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         updateSaveGate()
         updateUpPosts(now)
         updateSpinner(dt, now)
+        updateReel(dt, now)
         updateBoat(now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
 
@@ -1229,6 +1265,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
             if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
             leftSideSwitches(ball, from: p0, to: p)
+            reelSwitch(ball, from: p0, to: p)
             // M2 v6: a ball through the quickshot gate into the harpoon lane (the pier flipper's shot), for the labs.
             let gate = ChompTableLayout.quickshotGate
             if ball.isOnFloor, p0.x >= gate.a.x, p.x < gate.a.x, p.y > gate.a.y, p.y < gate.b.y { labEvent("harpoonGate") }
@@ -1341,7 +1378,7 @@ extension ChompTableScene: ShotLabHost {
     var shotLabTableName: String { "Chomp" }
 
     /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
-    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "boat", "harpoonGate", "fishPhone", "buoy"] }
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "boat", "reel", "harpoonGate", "fishPhone", "buoy"] }
 
     /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
     /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.
@@ -1436,6 +1473,7 @@ extension ChompTableScene: ShotLabHost {
         updateGates()
         updateSaveGate()
         updateSpinner(dt, now)
+        updateReel(dt, now)
         updateBoat(now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
         if lab.update(now: now) {

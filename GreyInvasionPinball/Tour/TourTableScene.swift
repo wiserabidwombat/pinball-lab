@@ -154,7 +154,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     var isGamePaused = false {
         didSet {
-            if isGamePaused { releaseAllControls() } else { padAArmed = false }
+            // M8 v7b (Aaron: a ball held on a flipper was lost after pause → resume): a pause keeps the flipper
+            // fingers that are still down — lifting one while paused still ends its touch — and only lets go of the
+            // plunger and the gamepad.
+            if isGamePaused { releaseNonTouchControls() } else { padAArmed = false }
             isPaused = isGamePaused
             lastRealTime = nil
         }
@@ -508,10 +511,36 @@ final class TourTableScene: SKScene, RendererHostedScene {
         let postArt = SKNode()                      // half the platform's height: the posts span floor to top
         addChild(postArt)
         parallax.add(postArt, anchor: TourTableLayout.moonCenter, height: TourTableLayout.rampTopHeight / 2)
-        for (w, c, z) in [(CGFloat(4.4), SKColor(red: 0.05, green: 0.04, blue: 0.09, alpha: 0.6), CGFloat(19.3)),
-                          (2.4, SKColor(red: 0.80, green: 0.82, blue: 0.87, alpha: 1), 19.31)] {
-            let p = SKShapeNode(path: posts)
-            p.strokeColor = c; p.lineWidth = w; p.lineCap = .round; p.zPosition = z
+        // M8 v7b (Aaron: "what is the white line at the bottom of the moon?"): each post reads as a chrome cylinder —
+        // a dark edge, a steel body, a darker right side and a bright left highlight — standing in a chrome foot on the
+        // floor, with a collar where it meets the platform.
+        let rightSide = CGMutablePath(), highlight = CGMutablePath()
+        for a in [CGFloat(1.15), 2.95, 4.75] {
+            let f = CGPoint(x: TourTableLayout.moonCenter.x + cos(a) * TourTableLayout.moonRadius * 0.78,
+                            y: TourTableLayout.moonCenter.y + sin(a) * TourTableLayout.moonRadius * 0.78)
+            rightSide.move(to: CGPoint(x: f.x + 1.1, y: f.y + 1)); rightSide.addLine(to: CGPoint(x: f.x + 1.1, y: f.y + lift - 1))
+            highlight.move(to: CGPoint(x: f.x - 1.0, y: f.y + 2)); highlight.addLine(to: CGPoint(x: f.x - 1.0, y: f.y + lift - 2))
+            for (rx, ry, fill, stroke, z) in [(CGFloat(6.5), CGFloat(3.0), SKColor(white: 0, alpha: 0.45), SKColor.clear, CGFloat(-17.92)),
+                                             (4.6, 2.2, SKColor(red: 0.55, green: 0.58, blue: 0.64, alpha: 1),
+                                              SKColor(red: 0.90, green: 0.92, blue: 0.96, alpha: 1), -17.91)] {
+                let foot = SKShapeNode(ellipseOf: CGSize(width: rx * 2, height: ry * 2))   // on the floor: no parallax
+                foot.position = CGPoint(x: f.x + (z < -17.915 ? 1.2 : 0), y: f.y - (z < -17.915 ? 0.8 : 0))
+                foot.fillColor = fill; foot.strokeColor = stroke; foot.lineWidth = 0.8; foot.zPosition = z
+                addChild(foot)
+            }
+            let collar = SKShapeNode(ellipseOf: CGSize(width: 7, height: 3))
+            collar.position = CGPoint(x: f.x, y: f.y + lift - 1)
+            collar.fillColor = SKColor(red: 0.62, green: 0.65, blue: 0.71, alpha: 1)
+            collar.strokeColor = SKColor(red: 0.12, green: 0.12, blue: 0.16, alpha: 0.8)
+            collar.lineWidth = 0.6; collar.zPosition = 19.34
+            postArt.addChild(collar)
+        }
+        for (path, w, c, z) in [(posts as CGPath, CGFloat(5.6), SKColor(red: 0.04, green: 0.04, blue: 0.08, alpha: 0.75), CGFloat(19.30)),
+                                (posts, 4.2, SKColor(red: 0.58, green: 0.61, blue: 0.68, alpha: 1), 19.31),
+                                (rightSide, 1.6, SKColor(red: 0.30, green: 0.32, blue: 0.38, alpha: 1), 19.32),
+                                (highlight, 1.1, SKColor(white: 1, alpha: 0.9), 19.33)] {
+            let p = SKShapeNode(path: path)
+            p.strokeColor = c; p.lineWidth = w; p.lineCap = .butt; p.zPosition = z
             postArt.addChild(p)
         }
         moon.zPosition = 19.5                      // over floor balls (z 10), under the ramp's art (20+)
@@ -753,6 +782,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// M8 v6: Sun Slingshot's 3-ball multiball.
     private var sunMultiball = false
     private var anyMultiball: Bool { moonMultiball || sunMultiball }
+    /// M8 v7: combos (a different shot within comboWindow of the last), the end-of-ball bonus, the extra ball.
+    private var comboLast: String?
+    private var comboAt: TimeInterval = -100
+    private var comboLinks = 0
+    private var comboUntil: TimeInterval?
+    private static let comboWindow: TimeInterval = 4
+    private var planetsVisitedThisGame = 0
+    private var ballShots = 0
+    private var extraBallLit = false
+    private var extraBallGiven = false
     private var jackpotValue = TourPoints.jackpot
     private var multiballSaveUntil: TimeInterval = -1
     private static let multiballSaveSeconds: TimeInterval = 10
@@ -831,6 +870,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             flashers.giOut(for: 1.2)
             flashers.flashAll(times: 4)
             labMark(s.planet + "Visited")
+            planetsVisitedThisGame += 1                      // M8 v7
             if s.planet == "sun" {                           // M8 v6: the super jackpot
                 game.add(TourPoints.superJackpot * modes.tourNumber)
                 sun?.flare()
@@ -966,7 +1006,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
             game.status = "\(s.title) · \(modes.stepText) · \(left)s"
         } else {
             let t = modes.tourNumber > 1 ? "TOUR \(modes.tourNumber) · " : ""
-            game.status = "\(t)NEXT STOP: \(modes.nextStop.planet.uppercased())"
+            let eb = extraBallLit ? "EXTRA BALL AT ROVER · " : ""   // M8 v7
+            game.status = "\(t)\(eb)NEXT STOP: \(modes.nextStop.planet.uppercased())"
         }
     }
 
@@ -1132,8 +1173,62 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func shotMade(_ name: String) {
         shotCounts[name, default: 0] += 1
+        if name != "rocket" { ballShots += 1 }               // M8 v7: ramps and orbits count for the bonus
         updateShotArrows()
         modeShot(name)
+        comboShot(name)
+    }
+
+    /// M8 v7: a different shot within 4 s of the last links a combo: 25,000, 50,000, 100,000 … While the window is
+    /// open the blue lamp under every other arrow flashes.
+    private func comboShot(_ name: String) {
+        let now = gameTime
+        if let last = comboLast, last != name, now - comboAt <= Self.comboWindow {
+            comboLinks += 1
+            let v = TourPoints.combo << min(comboLinks - 1, 6)
+            game.add(v)
+            showBanner("\(comboLinks + 1)-WAY COMBO \(v.formatted())")
+            flashers.flash(name == "moon" ? "moon" : name == "saturn" ? "saturn" : name == "leftOrbit" ? "left"
+                           : name == "rightOrbit" ? "right" : "rocket", times: 2)
+            labMark("combo")
+        } else if comboLast != name || now - comboAt > Self.comboWindow {
+            comboLinks = 0
+        }
+        comboLast = name
+        comboAt = now
+        comboUntil = now + Self.comboWindow
+        updateShotArrows()
+    }
+
+    private func updateCombo(_ now: TimeInterval) {
+        guard let until = comboUntil, now >= until else { return }
+        comboUntil = nil
+        comboLinks = 0
+        updateShotArrows()
+    }
+
+    /// M8 v7: the bonus for the ball just lost — planets visited this game and ramps / orbits this ball, × the
+    /// multiplier (added before the drain resets it and before game over records the score).
+    private func awardBonus() {
+        let base = planetsVisitedThisGame * TourPoints.bonusPlanet + ballShots * TourPoints.bonusShot
+        let x = game.multiplier
+        ballShots = 0
+        guard base > 0 else { return }
+        game.addRaw(base * x)
+        game.bonusText = x > 1 ? "BONUS \(base.formatted()) × \(x) = \((base * x).formatted())"
+                               : "BONUS \(base.formatted())"
+        labMark("bonus")
+    }
+
+    private func awardExtraBall() {
+        extraBallLit = false
+        game.ballsLeft += 1
+        showBanner("EXTRA BALL")
+        bigHaptic.impactOccurred()
+        flashers.giOut(for: 1.0)
+        flashers.flashAll(times: 3)
+        labMark("extraBall")
+        updateModeStatus(force: true)
     }
 
     /// M7 v3 (stand-in until the rules milestone, but every lamp tells the truth):
@@ -1154,6 +1249,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 lamp.set(blastDoor.isDown ? .blinkFast : .blink)
             } else {
                 lamp.set(made >= Self.ladder[Self.ladder.count - 1] ? .off : .on)
+            }
+            if comboUntil != nil, name != comboLast, let blue = stackLamps[name]?.last {   // M8 v7: combo window
+                blue.set(.blinkFast)
             }
         }
     }
@@ -1664,6 +1762,15 @@ final class TourTableScene: SKScene, RendererHostedScene {
         game.add(TourPoints.rocketComplete)
         bigHaptic.impactOccurred()
         showBanner(TourTableLayout.rocketLabels.prefix(rocketStandups.count).joined(separator: "-"))
+        if !extraBallGiven {                                 // M8 v7: once a game, the rover lights for an extra ball
+            extraBallGiven = true
+            extraBallLit = true
+            run(.sequence([.wait(forDuration: 1.2), .run { [weak self] in
+                self?.showBanner("EXTRA BALL LIT · SHOOT THE ROVER")
+                self?.flashers.flash("right", times: 4)
+                self?.updateModeStatus(force: true)
+            }]))
+        }
         flashers.giOut(for: 1.0)
         flashers.flashAll(times: 3)
         rocketClearAt = gameTime + 1.0
@@ -1717,6 +1824,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             hitHaptic.impactOccurred(intensity: 0.8)
             Effects.burst(in: self, at: scoop.position, color: Self.wallColor, count: 20, speed: 180, lifetime: 0.5)
             labEvent(scoop === missionScoop ? "missionControl" : "rover")
+            if scoop === roverScoop, extraBallLit { awardExtraBall() }   // M8 v7
             if scoop === missionScoop {
                 shotMade("rocket")
                 game.add(TourPoints.missionControl)
@@ -1937,7 +2045,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v6")
+        let label = SKLabelNode(text: "T6 M8 v7b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1983,7 +2091,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v6 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v7b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2045,6 +2153,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         #endif
         stopSaveUntil = -1
         lockNextHold = false                               // M8 v4
+        comboLast = nil; comboLinks = 0; comboUntil = nil    // M8 v7
+        planetsVisitedThisGame = 0; ballShots = 0
+        extraBallLit = false; extraBallGiven = false
         moonMultiball = false
         sunMultiball = false
         multiballSaveUntil = -1
@@ -2204,6 +2315,18 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    private func releaseNonTouchControls() {
+        for (touch, kind) in activeTouches where kind == .plunger { activeTouches.removeValue(forKey: touch) }
+        padLeft = false
+        padRight = false
+        padPulling = false
+        padPeakPull = 0
+        padPullByA = false
+        plungerPull = 0
+        plunger?.position = TourTableLayout.plungerRestPosition
+        if leftFlipper != nil { updateFlippers() }
+    }
+
     private func releaseAllControls() {
         activeTouches.removeAll()
         padLeft = false
@@ -2314,6 +2437,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         updateSpinners(dt, now)
         updateMoonHolds(now)
         updateMode(now)
+        updateCombo(now)
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil
@@ -2355,9 +2479,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
                     cameraRig.shake(strength: 4, duration: 0.3)
                     sfx(.drain)
                     failMode(drained: true)          // M8 v1: a drained stop restarts at the next Mission Control
+                    awardBonus()                     // M8 v7
                     game.ballDrained()
                     if !game.isGameOver {
-                        nextBallAt = now + 1.0
+                        nextBallAt = now + (game.bonusText == nil ? 1.0 : 2.5)
                         setKickbackLit(true)         // every ball starts with the kickback lit
                     }
                 }
@@ -2366,6 +2491,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
         if let due = nextBallAt, now >= due {
             nextBallAt = nil
+            game.bonusText = nil                     // M8 v7
             placeBallOnPlunger()
         }
 
@@ -2837,6 +2963,9 @@ extension TourTableScene: PlayLabHost {
          PlayObjective(name: "uranusVisited", text: "Finish Uranus Roll"),
          PlayObjective(name: "neptuneVisited", text: "Finish Neptune Deep"),
          PlayObjective(name: "sunVisited", text: "Super jackpot: finish the Grand Tour"),
+         PlayObjective(name: "combo", text: "Make a combo (two different shots within 4 s)"),
+         PlayObjective(name: "extraBall", text: "Collect the extra ball at the rover"),
+         PlayObjective(name: "bonus", text: "Score an end-of-ball bonus"),
          PlayObjective(name: "stopTimedOut", text: "A stop runs out of time"),
          PlayObjective(name: "stopDrained", text: "A stop ends with a drain")]
     }

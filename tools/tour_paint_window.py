@@ -4,6 +4,7 @@ Each image is the window's full circle (92 pt across, 6 px/pt), transparent roun
 Mercury, Venus, Earth (NASA Blue Marble + the table's cloud map, tools/earthsrc/), Mars, Jupiter, Saturn (with its
 rings), Uranus (faint, nearly upright ring) and Neptune. All lit from the upper left like the table, with a soft
 terminator; the gas giants darken toward the limb, the planets with air get a thin glowing rim.
+M8 v9: + Pluto (the hidden bonus stop).
 Usage: python3 tour_paint_window.py earthsrc_dir out_dir"""
 import sys, os, math
 import numpy as np
@@ -292,8 +293,32 @@ def sun():
     save('sun', rgb, a)
 
 
+def pluto():
+    """M8 v9: Pluto, the hidden bonus stop: small and icy, tan and rust plains, the bright smooth heart (Tombaugh Regio)
+    facing us, a dark rust band (Cthulhu) to its left, a faint blue haze at the limb."""
+    R = 12
+    n, p, lat, lon, inside, soft = sphere(R, tilt=0.2, spin=0.0)
+    tex = noise3(p, 1.2, 1) * 0.6 + noise3(p, 2.8, 0) * 0.4
+    # the heart: the classic implicit heart (x² + y² − 1)³ − x²y³ < 0, leaning a little, its edge roughened
+    x = (lon - 0.32) / 0.50
+    y = (lat - 0.02) / 0.48 + 0.12
+    ca, sa = math.cos(0.25), math.sin(0.25)
+    x, y = x * ca - y * sa, x * sa + y * ca
+    f = (x ** 2 + y ** 2 - 1) ** 3 - x ** 2 * y ** 3 + 0.12 * noise3(p, 3.0, 0)
+    heart = np.clip(-f * 6, 0, 1) * (np.abs(lon) < 1.6)
+    h = craters(p, 40, 13, 0.03, 0.16) * (1 - heart)          # the heart is a smooth ice plain
+    gy, gx = np.gradient(h)
+    nn = n + np.dstack([-gx, gy, np.zeros_like(gx)]) * 0.4
+    nn /= np.linalg.norm(nn, axis=2, keepdims=True)
+    base = np.array([0.80, 0.67, 0.52]) * (0.90 + 0.10 * tex)[..., None]
+    band = np.clip(1.2 - np.hypot((lon + 0.85) / 0.70, (lat + 0.15) / 0.24), 0, 1)
+    band = np.clip(band * 1.8 + 0.25 * tex, 0, 1)
+    alb = base * (1 - 0.6 * band[..., None]) + np.array([0.28, 0.12, 0.06]) * (0.6 * band[..., None])
+    alb = alb * (1 - heart[..., None]) + np.array([1.0, 0.98, 0.94]) * heart[..., None]
+    compose('pluto', R, alb, n, inside, soft, light(nn, 0.03, 0.05), air=((0.55, 0.70, 1.0), 0.07, 0.35))
+
 only = sys.argv[3] if len(sys.argv) > 3 else ''
 for name, fn in [('mercury', mercury), ('venus', venus), ('earth', earth), ('mars', mars), ('jupiter', jupiter),
-                 ('saturn', saturn), ('uranus', uranus), ('neptune', neptune), ('moon', moon), ('sun', sun)]:
+                 ('saturn', saturn), ('uranus', uranus), ('neptune', neptune), ('moon', moon), ('sun', sun), ('pluto', pluto)]:
     if not only or only == name:
         fn()

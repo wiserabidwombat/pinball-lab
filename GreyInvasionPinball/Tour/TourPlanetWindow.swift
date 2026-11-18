@@ -18,7 +18,8 @@ final class TourPlanetWindow: SKNode {
     let center: CGPoint
     let radius: CGFloat
     /// M6 v11: the tour's stops. M8 v1: Earth (home), then the ring's order: Mercury out to Neptune, then the Sun.
-    static let stops = ["earth", "mercury", "venus", "mars", "moon", "jupiter", "saturn", "uranus", "neptune", "sun"]
+    static let stops = ["earth", "mercury", "venus", "mars", "moon", "jupiter", "saturn", "uranus", "neptune", "sun",
+                              "pluto"]   // M8 v9: the hidden stop
     private var textures: [SKTexture] = []
     private var planet: SKSpriteNode?
     private let namePlate = SKLabelNode()

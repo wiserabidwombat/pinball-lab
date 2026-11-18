@@ -14,6 +14,8 @@
 //   Uranus Roll (5 lit shots, sides alternating), Neptune Deep (60 spins, then 10 bumpers).
 // v6: Sun Slingshot — a 3-ball multiball; the four floor shots are jackpots; all four drop the blast door and light the
 //   super jackpot at Mission Control, which finishes the tour (tour 2 starts; everything × the tour number).
+// v9: Pluto — a hidden bonus stop. Finishing a tour lights it at the next Mission Control, for that ball only: both
+//   orbits, then Saturn, in 30 s, for a one-off award. It isn't on the ring and doesn't count toward the tour.
 import Foundation
 
 /// One stop on the tour: its planet, its kind of goal and a timer.
@@ -29,6 +31,7 @@ struct TourStop {
         case uranus                 // v5: 5 lit shots, the lit side alternating after each
         case neptune                // v5: 60 spins dive deep, then 10 pop-bumper hits
         case sun                    // v6: 3-ball multiball; 4 jackpots light the super jackpot at Mission Control
+        case pluto                  // v9: both orbits, then Saturn (the hidden stop after a tour)
     }
     let planet: String          // the ring's insert name and the window's picture (tour_window_<planet>)
     let title: String           // the mode's name on the banner
@@ -54,6 +57,11 @@ final class TourModes {
         TourStop(planet: "neptune", title: "NEPTUNE DEEP", kind: .neptune, need: 2, seconds: 50),
         TourStop(planet: "sun", title: "SUN SLINGSHOT", kind: .sun, need: 5, seconds: 60),
     ]
+    /// v9: the hidden stop (not on the ring).
+    static let pluto = TourStop(planet: "pluto", title: "PLUTO", kind: .pluto, need: 3, seconds: 30)
+    /// v9: lit when a tour finishes; the next Mission Control starts Pluto instead of the next ring stop. Lost with
+    /// the ball (`plutoMissed`) or once tried.
+    private(set) var plutoLit = false
 
     /// Which tour this is (1, then 2 after the Sun …) and the stops done on it.
     private(set) var tourNumber = 1
@@ -85,12 +93,17 @@ final class TourModes {
         made = 0
         lit = []
         hidden = []
+        plutoLit = false
     }
+
+    /// v9: the ball with Pluto lit drained before Mission Control.
+    func plutoMissed() { plutoLit = false }
 
     /// Starts the next stop. Returns it (nil if one is already running).
     func start(now: TimeInterval) -> TourStop? {
         guard active == nil else { return nil }
-        let s = nextStop
+        let s = plutoLit ? Self.pluto : nextStop     // v9
+        plutoLit = false
         active = s
         made = 0
         timeLeft = s.seconds
@@ -117,6 +130,8 @@ final class TourModes {
             lit = Bool.random() ? Self.leftShots : Self.rightShots
         case .sun:
             lit = Self.floorShots
+        case .pluto:
+            lit = ["leftOrbit", "rightOrbit"]
         }
         return s
     }
@@ -143,6 +158,9 @@ final class TourModes {
         case .sun:                               // each floor jackpot once, then the super at Mission Control
             lit.remove(name)
             if made + 1 == 4 { lit = ["rocket"] }
+        case .pluto:                             // v9: each orbit once, then Saturn
+            lit.remove(name)
+            if made + 1 == 2 { lit = ["saturn"] }
         case .uranus:                            // the lit side swaps after every make
             let r = step()
             if case .progress = r { lit = Self.leftShots.contains(name) ? Self.rightShots : Self.leftShots }
@@ -193,7 +211,7 @@ final class TourModes {
         guard let s = active else { return .none }
         made += 1
         guard made >= s.need else { return .progress }
-        visited.insert(s.planet)
+        if s.planet != Self.pluto.planet { visited.insert(s.planet) }   // v9: Pluto isn't on the ring
         active = nil
         lit = []
         hidden = []
@@ -213,6 +231,7 @@ final class TourModes {
             return made == 0 ? "SATURN 0/\(s.need)" : "SATURN \(made)/\(s.need) · \(Int(chainLeft.rounded(.up)))s"
         case .uranus: return "\(made)/\(s.need) · \(lit.isSubset(of: Self.leftShots) ? "LEFT" : "RIGHT")"
         case .sun: return made < 4 ? "JACKPOTS \(made)/4" : "SUPER · MISSION CONTROL"
+        case .pluto: return made < 2 ? "ORBITS \(made)/2" : "SATURN"
         case .venus where lit.isEmpty && !hidden.isEmpty: return "\(made)/\(s.need) · HIT R-O-C-K-E-T"
         default: return "\(made)/\(s.need)"
         }
@@ -232,6 +251,7 @@ final class TourModes {
         guard visited.count == Self.tour.count else { return false }
         visited.removeAll()
         tourNumber += 1
+        plutoLit = true                          // v9
         return true
     }
 
@@ -257,6 +277,9 @@ final class TourModes {
 
     #if DEBUG
     /// `-tourStartAt <planet>`: every stop before it counts as visited, so Mission Control starts it.
+    /// v9: `-tourPluto`: Pluto lit from the start.
+    func debugLightPluto() { plutoLit = true }
+
     func debugSkip(to planet: String) {
         for st in Self.tour { if st.planet == planet { break }; visited.insert(st.planet) }
     }

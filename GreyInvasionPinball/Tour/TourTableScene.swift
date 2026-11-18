@@ -819,6 +819,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         case .uranus: showBanner("\(s.title) · LEFT, RIGHT, LEFT…")
         case .neptune: showBanner("\(s.title) · SPIN TO DIVE")
         case .sun: startSunMultiball()
+        case .pluto: showBanner("PLUTO · BOTH ORBITS, THEN SATURN")   // M8 v9
         case .shots: showBanner("\(s.title) · \(s.need) SHOTS")
         }
         flashers.flash(s.planet == "moon" ? "moon" : s.planet == "saturn" ? "saturn" : "rocket", times: 4)
@@ -865,7 +866,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
             updateModeStatus(force: true)
             updateShotArrows()
         case .complete(let s):
-            game.add(TourPoints.modeComplete * modes.tourNumber)
+            let isPluto = s.planet == TourModes.pluto.planet   // M8 v9: the hidden stop's one-off award
+            game.add(isPluto ? TourPoints.plutoAward : TourPoints.modeComplete * modes.tourNumber)
             bigHaptic.impactOccurred()
             flashers.giOut(for: 1.2)
             flashers.flashAll(times: 4)
@@ -880,6 +882,10 @@ final class TourTableScene: SKScene, RendererHostedScene {
             if s.planet == "moon" { showBanner("JACKPOT · MOON VISITED") }
             if modes.finishTourIfDone() {
                 showBanner("SUPER JACKPOT · TOUR \(modes.tourNumber) BEGINS")
+                planetWindow?.show(planet: "pluto")       // M8 v9: a glimpse of the hidden stop, lit for this ball
+            } else if isPluto {
+                showBanner("PLUTO STILL COUNTS · \(TourPoints.plutoAward.formatted())")
+                flashers.giOut(for: 2.0)
                 planetWindow?.show(planet: "earth")
             } else {
                 if s.planet != "moon" { showBanner("\(s.planet.uppercased()) VISITED") }
@@ -965,9 +971,15 @@ final class TourTableScene: SKScene, RendererHostedScene {
     /// The running stop ends unvisited: its time ran out or its ball drained. It starts again at the next Mission Control.
     private func failMode(drained: Bool) {
         lockNextHold = false
+        if drained, modes.plutoLit {                         // M8 v9: Pluto was lit for that ball only
+            modes.plutoMissed()
+            planetWindow?.show(planet: "earth")
+            updateModeStatus(force: true)
+        }
         guard let s = modes.fail() else { return }
         labMark(drained ? "stopDrained" : "stopTimedOut")
         if !drained { showBanner("\(s.planet.uppercased()) LOST · TIME") }
+        if s.planet == TourModes.pluto.planet { planetWindow?.show(planet: "earth") }   // M8 v9: gone till next tour
         endModeLamps()
     }
 
@@ -1007,7 +1019,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         } else {
             let t = modes.tourNumber > 1 ? "TOUR \(modes.tourNumber) · " : ""
             let eb = extraBallLit ? "EXTRA BALL AT ROVER · " : ""   // M8 v7
-            game.status = "\(t)\(eb)NEXT STOP: \(modes.nextStop.planet.uppercased())"
+            let next = modes.plutoLit ? "PLUTO LIT · MISSION CONTROL"      // M8 v9
+                                      : "NEXT STOP: \(modes.nextStop.planet.uppercased())"
+            game.status = "\(t)\(eb)\(next)"
         }
     }
 
@@ -2045,7 +2059,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v8c")
+        let label = SKLabelNode(text: "T6 M8 v9")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2091,7 +2105,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v8c \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M8 v9 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2150,6 +2164,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-tourStartAt"), i + 1 < args.count { modes.debugSkip(to: args[i + 1]) }
+        if args.contains("-tourPluto") { modes.debugLightPluto() }     // M8 v9
         #endif
         stopSaveUntil = -1
         lockNextHold = false                               // M8 v4

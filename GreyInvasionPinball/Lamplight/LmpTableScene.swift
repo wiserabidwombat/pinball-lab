@@ -224,7 +224,7 @@ final class LmpTableScene: SKScene, RendererHostedScene {
 
     var isGamePaused = false {
         didSet {
-            if isGamePaused { releaseAllControls() } else { padAArmed = false }
+            if isGamePaused { releaseNonTouchControls() } else { padAArmed = false }
             sound.holdLoops(isGamePaused)              // T5 M9 v42: the fire and the rain pause with the game
             isPaused = isGamePaused
             lastRealTime = nil
@@ -1447,6 +1447,20 @@ final class LmpTableScene: SKScene, RendererHostedScene {
             showBanner("TILT")
             updateFlippers()                                 // the flippers drop
         }
+    }
+
+    /// 2026-11-17 (Aaron, on Table 06): a pause keeps the flipper fingers still down — lifting one while paused
+    /// still ends its touch — so a ball cradled through pause → resume isn't lost. The plunger and pad let go.
+    private func releaseNonTouchControls() {
+        for (touch, kind) in activeTouches where kind == .plunger { activeTouches.removeValue(forKey: touch) }
+        padLeft = false
+        padRight = false
+        padPulling = false
+        padPeakPull = 0
+        padPullByA = false
+        plungerPull = 0
+        plunger?.position = LmpTableLayout.plungerRestPosition
+        if leftFlipper != nil { updateFlippers() }
     }
 
     private func releaseAllControls() {

@@ -45,7 +45,7 @@ final class OrbitTableScene: SKScene, RendererHostedScene {
     // foreground, so isPaused is pinned to true while the game is paused.
     var isGamePaused = false {
         didSet {
-            if isGamePaused { releaseAllControls() } else { padAArmed = false }
+            if isGamePaused { releaseNonTouchControls() } else { padAArmed = false }
             isPaused = isGamePaused
             lastRealTime = nil   // don't count the paused gap as a frame
         }
@@ -424,6 +424,20 @@ final class OrbitTableScene: SKScene, RendererHostedScene {
     }
 
     /// Drops every held touch: flippers fall, the plunger returns without firing.
+    /// 2026-11-17 (Aaron, on Table 06): a pause keeps the flipper fingers still down — lifting one while paused
+    /// still ends its touch — so a ball cradled through pause → resume isn't lost. The plunger and pad let go.
+    private func releaseNonTouchControls() {
+        for (touch, kind) in activeTouches where kind == .plunger { activeTouches.removeValue(forKey: touch) }
+        padLeft = false
+        padRight = false
+        padPulling = false
+        padPeakPull = 0
+        padPullByA = false
+        plungerPull = 0
+        plunger?.position = OrbitTableLayout.plungerRestPosition
+        if leftFlipper != nil { updateFlippers() }
+    }
+
     private func releaseAllControls() {
         activeTouches.removeAll()
         padLeft = false

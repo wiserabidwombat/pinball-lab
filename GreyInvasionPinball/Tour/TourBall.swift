@@ -130,7 +130,10 @@ final class TourBall: SKNode {
         visual.position = CGPoint(x: sx * cos(a) - sy * sin(a), y: sx * sin(a) + sy * cos(a))
         visual.setScale(1 + 0.15 * drawnHeight / TourTableLayout.rampTopHeight)
         shadow.zRotation = a
-        let so = CGVector(dx: shadowOffset.dx, dy: shadowOffset.dy + drawnHeight * TourTableLayout.oblique)
+        // M9 r1: on a ramp the shadow lies on the ramp's surface, so it slides with the ramp (the ball's share of it).
+        let f = drawnHeight / (drawnHeight + TourTableLayout.ballRadius)
+        let so = CGVector(dx: shadowOffset.dx + parallaxShift.x * f,
+                          dy: shadowOffset.dy + drawnHeight * TourTableLayout.oblique + parallaxShift.y * f)
         shadow.position = CGPoint(x: so.dx * cos(a) - so.dy * sin(a),
                                   y: so.dx * sin(a) + so.dy * cos(a))
         if trail.targetNode == nil { trail.targetNode = scene }

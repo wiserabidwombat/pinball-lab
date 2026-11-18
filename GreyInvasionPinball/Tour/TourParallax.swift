@@ -3,6 +3,7 @@
 // when you move your head: a part `h` points up, `d` points from the camera's centre, draws h × d / depth further out.
 // Pictures only — every physics body stays where it is. Grey-box test: the Moon, Saturn, the rocket, the bumper caps and
 // a ball held in a crater; the ramps' shape outlines can't bend per point, so they wait for the baked art (a warp grid).
+// M9 r1: the baked ramps bend: a warp grid over each ramp picture, every vertex sliding by the ramp's height there.
 import SpriteKit
 import CoreGraphics
 
@@ -15,6 +16,18 @@ final class TourParallax {
         let maxShift: CGFloat
     }
     private var items: [Item] = []
+    /// M9 r1: pictures whose height changes point by point (the baked ramps).
+    private struct Warp {
+        let sprite: SKSpriteNode
+        let size: CGSize
+        let columns: Int
+        let rows: Int
+        let source: [SIMD2<Float>]
+        let points: [CGPoint]      // each vertex in world points
+        let heights: [CGFloat]     // and the height under it
+    }
+    private var warps: [Warp] = []
+    private var warpedFor: (camera: CGPoint, strength: CGFloat)?
     /// 0 = off, 1 = the planned amount, 2 = doubled (DEBUG pause button cycles it to judge the look).
     var strength: CGFloat = 1
 
@@ -24,6 +37,25 @@ final class TourParallax {
     /// the camera's centre and the full slide pushed the planet half out of its glass).
     func add(_ node: SKNode, anchor: CGPoint, height: CGFloat, maxShift: CGFloat = .infinity) {
         items.append(Item(node: node, anchor: anchor, height: height, maxShift: maxShift))
+    }
+
+    /// M9 r1: `sprite` covers `rect` (world points); a grid of vertices about `spacing` apart each slides by
+    /// `heightAt` its own point, so a ramp climbing from the floor to the Moon bends instead of sliding as one piece.
+    func addWarped(_ sprite: SKSpriteNode, rect: CGRect, spacing: CGFloat = 16, heightAt: (CGPoint) -> CGFloat) {
+        let cols = max(1, Int((rect.width / spacing).rounded())), rows = max(1, Int((rect.height / spacing).rounded()))
+        var source: [SIMD2<Float>] = [], points: [CGPoint] = [], heights: [CGFloat] = []
+        for r in 0...rows {                     // row by row from the bottom left, as SKWarpGeometryGrid wants
+            for c in 0...cols {
+                let u = CGFloat(c) / CGFloat(cols), v = CGFloat(r) / CGFloat(rows)
+                source.append(SIMD2(Float(u), Float(v)))
+                let p = CGPoint(x: rect.minX + u * rect.width, y: rect.minY + v * rect.height)
+                points.append(p)
+                heights.append(heightAt(p))
+            }
+        }
+        sprite.subdivisionLevels = 1
+        warps.append(Warp(sprite: sprite, size: rect.size, columns: cols, rows: rows, source: source,
+                          points: points, heights: heights))
     }
 
     /// The offset of something `height` points up at world point `p`, seen from a camera centred on `camera`.
@@ -39,6 +71,18 @@ final class TourParallax {
             let len = hypot(p.x, p.y)
             if len > item.maxShift { p = CGPoint(x: p.x * item.maxShift / len, y: p.y * item.maxShift / len) }
             item.node.position = p
+        }
+        guard !warps.isEmpty else { return }
+        if let w = warpedFor, w.strength == strength, hypot(w.camera.x - camera.x, w.camera.y - camera.y) < 0.25 { return }
+        warpedFor = (camera, strength)
+        for w in warps {
+            var dest = w.source
+            for i in dest.indices where w.heights[i] > 0 {
+                let s = shift(at: w.points[i], height: w.heights[i], camera: camera)
+                dest[i] += SIMD2(Float(s.x / w.size.width), Float(s.y / w.size.height))
+            }
+            w.sprite.warpGeometry = SKWarpGeometryGrid(columns: w.columns, rows: w.rows,
+                                                       sourcePositions: w.source, destinationPositions: dest)
         }
     }
 }

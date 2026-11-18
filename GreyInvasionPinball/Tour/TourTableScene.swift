@@ -475,7 +475,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                             lowLength: TourTableLayout.moonLowLength, artBaked: hasRampArt("moon"))
         addChild(ramp)
         moonRamp = ramp
-        addRampArt("moon")
+        addRampArt("moon", ramp: ramp)
         let lift = TourTableLayout.rampTopHeight * TourTableLayout.oblique
         let moon = SKShapeNode(circleOfRadius: TourTableLayout.moonRadius)
         moon.position = CGPoint(x: TourTableLayout.moonCenter.x, y: TourTableLayout.moonCenter.y + lift)
@@ -587,8 +587,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         UIImage(named: "tour_ramp_" + name) != nil && UIImage(named: "tour_ramp_" + name + "_lo") != nil
     }
 
-    private func addRampArt(_ name: String) {
+    private func addRampArt(_ name: String, ramp: TourRamp) {
         guard hasRampArt(name), let rect = Self.rampArtRects[name] else { return }
+        let heightAt = Self.rampHeightField(ramp)
         for (suffix, z) in [("", CGFloat(20)), ("_lo", CGFloat(-17.95))] {
             let texture = SKTexture(imageNamed: "tour_ramp_" + name + suffix)
             texture.preload { }
@@ -596,6 +597,26 @@ final class TourTableScene: SKScene, RendererHostedScene {
             sprite.position = CGPoint(x: rect.midX, y: rect.midY)
             sprite.zPosition = z
             addChild(sprite)
+            if suffix.isEmpty { parallax.addWarped(sprite, rect: rect, heightAt: heightAt) }   // M9 r1; _lo is floor
+        }
+    }
+
+    /// M9 r1: the ramp's height under a point of its picture. The picture is drawn obliquely (a point h up shows
+    /// h × oblique higher), so the centreline is compared where it is drawn; nearby points are blended so the
+    /// warp stays smooth, and away from the ramp the nearest point's height carries on (only clear pixels there).
+    private static func rampHeightField(_ ramp: TourRamp) -> (CGPoint) -> CGFloat {
+        let pts = ramp.path.points
+        let hs = ramp.path.distances.map { ramp.heightAlong($0) }
+        let drawn = zip(pts, hs).map { CGPoint(x: $0.x, y: $0.y + $1 * TourTableLayout.oblique) }
+        return { q in
+            var wSum: CGFloat = 0, hSum: CGFloat = 0
+            var best = CGFloat.greatestFiniteMagnitude, bestH: CGFloat = 0
+            for (i, d) in drawn.enumerated() {
+                let dd = (d.x - q.x) * (d.x - q.x) + (d.y - q.y) * (d.y - q.y)
+                if dd < best { best = dd; bestH = hs[i] }
+                if dd < 40 * 40 { let w = 1 / (dd + 25); wSum += w; hSum += w * hs[i] }
+            }
+            return wSum > 0 ? hSum / wSum : bestH
         }
     }
 
@@ -618,7 +639,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                             lowLength: TourTableLayout.moonLowLength, artBaked: hasRampArt("saturn"))
         addChild(ramp)
         saturnRamp = ramp
-        addRampArt("saturn")
+        addRampArt("saturn", ramp: ramp)
         let lift = TourTableLayout.rampTopHeight * TourTableLayout.oblique
         let at = CGPoint(x: TourTableLayout.saturnCenter.x, y: TourTableLayout.saturnCenter.y + lift)
         let ring = SKShapeNode(ellipseOf: CGSize(width: TourTableLayout.saturnRadius * 2.7, height: TourTableLayout.saturnRadius * 0.9))
@@ -1963,6 +1984,15 @@ final class TourTableScene: SKScene, RendererHostedScene {
         ball.moonReleaseAt = tableNow + TourTableLayout.moonHold
         ball.physicsBody?.affectedByGravity = false
         ball.physicsBody?.velocity = .zero
+        // M9 r1b (Aaron: the ball didn't sit in Saturn's cup): the made switch catches the ball wherever it crosses —
+        // pressed to the turn's outer wall, a frame past the line — so it settles into the painted cup (the centreline
+        // at the switch, where tools/tour_paint_planets.py put CRATER_MOON / CRATER_SATURN).
+        let apex = saturn ? TourTableLayout.saturnApexDistance : TourTableLayout.moonApexDistance
+        let (cup, _) = ramp.path.sample(at: apex + TourTableLayout.rampMadeAfterApex)
+        #if DEBUG
+        print("TOURCUP \(saturn ? "saturn" : "moon") ball \(ball.position) cup \(cup) off \(hypot(ball.position.x - cup.x, ball.position.y - cup.y))")
+        #endif
+        ball.position = cup
         if lockNextHold, !saturn {                           // M8 v4: Moonshot's first lock
             lockNextHold = false
             ball.lockOnRelease = true
@@ -2059,7 +2089,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M8 v9")
+        let label = SKLabelNode(text: "T6 M9 r1b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2105,7 +2135,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M8 v9 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M9 r1b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2571,12 +2601,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
         guard isBuilt, !isPaused else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: lastStep)
         // M5 v4: parallax. Raised parts slide with the camera; a floor ball by its own height, a ball held in a crater by
-        // the Moon's, a ball riding a ramp not at all (the ramps' outlines don't slide yet). Balls ease so nothing jumps.
+        // the Moon's, a ball riding a ramp by the ramp's height under it (M9 r1: the ramp pictures bend with it).
+        // Balls ease so nothing jumps.
         let cam = cameraRig.node.position
         parallax.update(camera: cam)
         for ball in balls {
             let h: CGFloat = ball.isOnFloor ? TourTableLayout.ballRadius
-                : (ball.moonReleaseAt != nil ? TourTableLayout.ballRadius + TourTableLayout.rampTopHeight : 0)
+                : (ball.moonReleaseAt != nil ? TourTableLayout.ballRadius + TourTableLayout.rampTopHeight
+                                             : TourTableLayout.ballRadius + ball.rampHeight)
             let goal = parallax.shift(at: ball.position, height: h, camera: cam)
             ball.parallaxShift = CGPoint(x: ball.parallaxShift.x + (goal.x - ball.parallaxShift.x) * 0.35,
                                          y: ball.parallaxShift.y + (goal.y - ball.parallaxShift.y) * 0.35)

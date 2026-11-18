@@ -24,6 +24,8 @@ final class TourPlanetWindow: SKNode {
     private var planet: SKSpriteNode?
     private let namePlate = SKLabelNode()
     private(set) var stop = 0
+    /// M9 r2: the cropped inside of the window, for the liftoff's ship.
+    private var inside: SKNode?
 
     init(center: CGPoint, radius: CGFloat) {
         self.center = center
@@ -38,6 +40,7 @@ final class TourPlanetWindow: SKNode {
         mask.position = center
         crop.maskNode = mask
         addChild(crop)
+        inside = crop
 
         let back = SKSpriteNode(color: SKColor(red: 0.004, green: 0.006, blue: 0.018, alpha: 1),
                                 size: CGSize(width: radius * 2 + 4, height: radius * 2 + 4))
@@ -150,6 +153,66 @@ final class TourPlanetWindow: SKNode {
         namePlate.alpha = 0
         namePlate.run(.sequence([.wait(forDuration: 0.4), .fadeIn(withDuration: 0.3)]))
     }
+
+    /// M9 r2: liftoff — a ship lifts off the planet in view and climbs away out of the glass, shrinking into the
+    /// distance, a thin glowing trail left behind it (in the deep, so the window's parallax carries it).
+    func launch(after delay: TimeInterval = 0.7) {
+        guard let layer = inside else { return }
+        let ship = SKSpriteNode(texture: Self.glow, size: CGSize(width: 8, height: 8))
+        ship.blendMode = .add
+        ship.color = SKColor(red: 1.0, green: 0.88, blue: 0.62, alpha: 1)
+        ship.colorBlendFactor = 1
+        let start = CGPoint(x: center.x - radius * 0.10, y: center.y - radius * 0.02)
+        ship.position = start
+        ship.zPosition = 0.05
+        ship.alpha = 0
+        layer.addChild(ship)
+        let trail = SKEmitterNode()
+        trail.particleTexture = Self.glow
+        trail.particleBirthRate = 140
+        trail.particleLifetime = 0.7
+        trail.particleLifetimeRange = 0.2
+        trail.particleSpeed = 0
+        trail.particleSize = CGSize(width: 5, height: 5)
+        trail.particleScaleSpeed = -0.6
+        trail.particleBlendMode = .add
+        trail.particleColorBlendFactor = 1
+        trail.particleColorSequence = SKKeyframeSequence(
+            keyframeValues: [SKColor(red: 1.0, green: 0.75, blue: 0.40, alpha: 1),
+                             SKColor(red: 0.55, green: 0.70, blue: 1.0, alpha: 1)], times: [0, 1])
+        trail.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0.85, 0] as [NSNumber], times: [0, 1])
+        trail.particleBirthRate = 0
+        trail.targetNode = layer
+        trail.particleZPosition = 0.04
+        ship.addChild(trail)
+        let path = CGMutablePath()
+        path.move(to: start)
+        path.addQuadCurve(to: CGPoint(x: center.x + radius * 0.95, y: center.y + radius * 1.35),
+                          control: CGPoint(x: center.x - radius * 0.12, y: center.y + radius * 0.75))
+        let fly = SKAction.follow(path, asOffset: false, orientToPath: false, duration: 1.9)
+        fly.timingMode = .easeIn
+        ship.run(.sequence([
+            .wait(forDuration: delay),
+            .run { trail.particleBirthRate = 140 },
+            .fadeIn(withDuration: 0.15),
+            .group([fly, .scale(to: 0.45, duration: 1.9)]),
+            .run { trail.particleBirthRate = 0 },
+            .wait(forDuration: 0.9),
+            .removeFromParent()]))
+    }
+
+    /// A soft white dot (the ship and its trail).
+    private static let glow: SKTexture = {
+        let size = CGSize(width: 32, height: 32)
+        let image = UIGraphicsImageRenderer(size: size).image { ctx in
+            let colors = [UIColor(white: 1, alpha: 1).cgColor, UIColor(white: 1, alpha: 0.35).cgColor,
+                          UIColor(white: 1, alpha: 0).cgColor] as CFArray
+            let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.3, 1])!
+            ctx.cgContext.drawRadialGradient(g, startCenter: CGPoint(x: 16, y: 16), startRadius: 0,
+                                             endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
+        }
+        return SKTexture(image: image)
+    }()
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) is not supported")

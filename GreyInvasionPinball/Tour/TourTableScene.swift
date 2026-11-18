@@ -1679,6 +1679,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 .fadeOut(withDuration: 0.1), .scaleY(to: 1, duration: 0)]))
         }
         launchSmoke()
+        liftoffJuice()                                     // M9 r2
         // M6 v7b (Aaron: "the launch slower"): a slow, accelerating climb over 3 s, fading in its last second.
         let climb = SKAction.moveBy(x: 0, y: 300, duration: 3.0)
         climb.timingMode = .easeIn
@@ -1752,6 +1753,39 @@ final class TourTableScene: SKScene, RendererHostedScene {
         cloud.zPosition = 8
         addChild(cloud)
         cloud.run(.sequence([.wait(forDuration: 7.5), .removeFromParent()]))
+    }
+
+    /// M9 r2: the launch felt in the hand and seen round the pad — the table rumbles (a long shake that dies away
+    /// and a run of fading haptic taps), the engine's light flickers orange on the darkened table round the pad,
+    /// and in the planet window a ship lifts off and climbs away out of the glass.
+    private func liftoffJuice() {
+        cameraRig.shake(strength: 3.5, duration: 2.4)
+        removeAction(forKey: "liftoffRumble")
+        var taps: [SKAction] = []
+        for i in 0..<16 {
+            let k = CGFloat(i) / 16
+            taps.append(.run { [weak self] in self?.hitHaptic.impactOccurred(intensity: 0.95 - 0.75 * k) })
+            taps.append(.wait(forDuration: 0.09 + 0.05 * k))
+        }
+        run(.sequence(taps), withKey: "liftoffRumble")
+        let glow = SKSpriteNode(texture: Self.smokeTexture, size: CGSize(width: 170, height: 150))
+        glow.blendMode = .add
+        glow.color = SKColor(red: 1.0, green: 0.55, blue: 0.18, alpha: 1)
+        glow.colorBlendFactor = 1
+        glow.position = CGPoint(x: TourTableLayout.rocketToy.x, y: TourTableLayout.rocketToy.y - 14)
+        glow.zPosition = 7                                 // on the darkened table, under the smoke (8) and balls
+        glow.alpha = 0
+        addChild(glow)
+        let life: CGFloat = 2.8
+        glow.run(.sequence([
+            .customAction(withDuration: TimeInterval(life)) { node, t in
+                let rise = min(1, t / 0.15), fall = t > 1.6 ? max(0, (life - t) / (life - 1.6)) : 1
+                let flicker = 0.78 + 0.22 * sin(t * 53) * sin(t * 31 + 1)
+                node.alpha = 0.9 * rise * fall * flicker
+                node.setScale(1 + 0.25 * t / life)
+            },
+            .removeFromParent()]))
+        planetWindow?.launch()
     }
 
     /// A soft round puff for the launch smoke (drawn once).
@@ -2089,7 +2123,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M9 r1b")
+        let label = SKLabelNode(text: "T6 M9 r2")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2135,7 +2169,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M9 r1b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M9 r2 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

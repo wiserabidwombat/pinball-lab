@@ -146,6 +146,7 @@ final class ChompBall: SKNode {
             | ChompPhysicsCategory.rollover | ChompPhysicsCategory.target
         var mask = ChompPhysicsCategory.wall | ChompPhysicsCategory.flipper | ChompPhysicsCategory.slingshot
             | ChompPhysicsCategory.bumper | ChompPhysicsCategory.target | ChompPhysicsCategory.ball
+            | ChompPhysicsCategory.toy                         // M3 v4: the boat's captive ball
         if launchGateSolid { mask |= ChompPhysicsCategory.launchGate }
         if saveGateSolid { mask |= ChompPhysicsCategory.diverter }
         if flipperGhostSteps > 0 { mask &= ~ChompPhysicsCategory.flipper }

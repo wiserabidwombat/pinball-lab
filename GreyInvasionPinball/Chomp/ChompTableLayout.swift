@@ -387,6 +387,28 @@ enum ChompTableLayout {
     }
     /// The top of the U-turn (heading 180°): plastic up to here, wire after; made 10 pt past it.
     static var centerApexDistance: CGFloat { centerClimb + centerTurnRadius * .pi / 2 }
+
+    // MARK: Milestone 3 v4: the boat captive ball
+    /// p. 40: the boat's housing is x ~305–395, from the playfield at y ~985 up to ~1130, open at the bottom; a steel
+    /// captive ball sits in its mouth at ~(350, 1005) under the shark/boat target (the silver cone, tip at y ~1020).
+    /// Ours: Monsoon's captive ball (ChompCaptiveBall) in a 34 pt channel up the middle of the housing — mouth posts
+    /// 26 pt apart, so the captive ball shows through and a player ball can't get in; driven 41 pt up it hits the
+    /// boat target at the top. The housing's outline wraps the channel; its lower-left corner is the center ramp's
+    /// rubber post (300, 1000).
+    static let boatMouth = CGPoint(x: 350, y: 1000)
+    /// M3 v5 (Aaron: "Do option 1"): the target moved down to the real cone's tip — the slot ends 42 pt up, so the
+    /// captive ball (resting 10 pt up) scores after ~13 pt of travel (reachedTop: travel > length − r − 4) and stops
+    /// against the cone, as on the real table, instead of needing 41 pt (glancing hits now count).
+    static let boatChannelLength: CGFloat = 42
+    /// M3 v7 (Aaron: "Widen the mouth to match the real table"): the real cradle — rubber posts r 5 at the mouth's
+    /// corners (x 318 / 382, 54 pt apart inside), a 64 pt cradle up to the cone, and a curved wire lip dipping to
+    /// y 993 that holds the captive ball in (only the captive ball meets it; it rests at ~(350, 1008), as on p. 40).
+    static let boatHalfWidth: CGFloat = 32
+    static let boatPostRadius: CGFloat = 5
+    static let boatLip = [CGPoint(x: 318, y: 1000), CGPoint(x: 334, y: 995), CGPoint(x: 350, y: 993),
+                          CGPoint(x: 366, y: 995), CGPoint(x: 382, y: 1000)]
+    static let boatHousing = [CGPoint(x: 318, y: 1000), CGPoint(x: 305, y: 1000), CGPoint(x: 305, y: 1130),
+                              CGPoint(x: 395, y: 1130), CGPoint(x: 395, y: 1000), CGPoint(x: 382, y: 1000)]
     /// Sends harpoon-lane balls on into the left inlane (M2 v3: ends over the wider inlane, 96 pt above the guide's
     /// top); balls from the playfield still reach the left outlane under it.
     static let harpoonDeflector = [CGPoint(x: 20, y: 560), CGPoint(x: 90, y: 500)]

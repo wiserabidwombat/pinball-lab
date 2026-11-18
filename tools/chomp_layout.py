@@ -356,3 +356,20 @@ def center_path():
     p.line(p.points[-1][1] - 440)
     return p
 CP = center_path()
+
+# ---- Milestone 3 v4: the boat captive ball (p. 40: housing x ~305-395, y ~985-1130, open at the bottom; a steel captive
+# ball at ~(350, 1005) under the shark/boat target). Monsoon's captive ball: a 34 pt channel up the housing's middle,
+# mouth posts r 4 at its ends (26 pt gap < the 30 pt ball), the target 70 pt up.
+boatMouth, boatChannelLength, boatHalfWidth = (350, 1000), 70, 17
+boatHousing = [(333, 1000), (305, 1000), (305, 1130), (395, 1130), (395, 1000), (367, 1000)]
+
+# ---- Milestone 3 v5 (Aaron: "Do option 1"): the boat target down to the real cone tip -- the slot ends 42 pt up, so the
+# captive ball scores after ~13 pt of travel (was 41).
+boatChannelLength = 42
+
+# ---- Milestone 3 v7 (Aaron: "Widen the mouth to match the real table and then commit."): the real cradle -- rubber
+# posts r 5 at x 318 / 382 (54 pt apart inside), a 64 pt cradle up to the cone, a curved wire lip (captive ball only)
+# dipping to y 993, so the captive ball rests at ~(350, 1008).
+boatHalfWidth, boatPostRadius = 32, 5
+boatLip = [(318, 1000), (334, 995), (350, 993), (366, 995), (382, 1000)]
+boatHousing = [(318, 1000), (305, 1000), (305, 1130), (395, 1130), (395, 1000), (382, 1000)]

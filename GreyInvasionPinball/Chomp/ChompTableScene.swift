@@ -67,6 +67,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var ramps: [ChompRamp] = []
     /// M3 v1: the center ramp (rampMade tells the ramps apart).
     private weak var centerRamp: ChompRamp?
+    /// M3 v4: the boat's captive ball.
+    private var boat: ChompCaptiveBall?
     #if DEBUG
     /// M2 v6: the Shot Lab robot (shared ShotLab, Table 06's host pattern) and its own clock.
     fileprivate var shotLab: ShotLab?
@@ -240,6 +242,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addLeftSide()
         addWaveRamp()
         addCenterRamp()
+        addBoat()
         addPlunger()
         addLaunchGate()
     }
@@ -490,6 +493,25 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         body.collisionBitMask = ChompPhysicsCategory.ball
         post.physicsBody = body
         addChild(post)
+    }
+
+    /// M3 v4: the boat — its housing and the captive ball in the channel up its middle.
+    private func addBoat() {
+        addWall(points: ChompTableLayout.boatHousing)
+        let b = ChompCaptiveBall(mouth: ChompTableLayout.boatMouth, heading: .pi / 2,
+                                 length: ChompTableLayout.boatChannelLength, halfWidth: ChompTableLayout.boatHalfWidth,
+                                 postRadius: ChompTableLayout.boatPostRadius, lip: ChompTableLayout.boatLip)
+        addChild(b)
+        boat = b
+    }
+
+    /// M3 v4: the captive ball reached the boat target (placeholder scoring until the rules, M4).
+    private func updateBoat(_ now: TimeInterval) {
+        guard let b = boat, b.reachedTop(at: now, length: ChompTableLayout.boatChannelLength) else { return }
+        labEvent("boat")
+        game.add(ChompPoints.boat)
+        hitHaptic.impactOccurred()
+        showBanner("BOAT")
     }
 
     /// The ramps' switches, from the ball's move this frame (Table 06's updateRampLayer): the entry puts a floor ball on
@@ -761,7 +783,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M3 v3")
+        let label = SKLabelNode(text: "T7 M3 v7")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -876,6 +898,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         upPostsArmed = false
         for i in upPosts.indices { upPostRaisePending[i] = false; setUpPost(i, up: false) }
         resetBank()
+        boat?.reset()
         ballSaveUsed = false
         game.reset()
         placeBallOnPlunger()
@@ -1087,6 +1110,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         updateSaveGate()
         updateUpPosts(now)
         updateSpinner(dt, now)
+        updateBoat(now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
 
         if let due = bannerClearAt, now >= due {
@@ -1315,7 +1339,7 @@ extension ChompTableScene: ShotLabHost {
     var shotLabTableName: String { "Chomp" }
 
     /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
-    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "harpoonGate", "fishPhone", "buoy"] }
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "boat", "harpoonGate", "fishPhone", "buoy"] }
 
     /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
     /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.
@@ -1364,6 +1388,7 @@ extension ChompTableScene: ShotLabHost {
         removeAllBalls()
         nextBallAt = nil
         resetBank()
+        boat?.reset()
         bankRelightPending = false
         setUpPost(0, up: false)
         setUpPost(1, up: false)
@@ -1409,6 +1434,7 @@ extension ChompTableScene: ShotLabHost {
         updateGates()
         updateSaveGate()
         updateSpinner(dt, now)
+        updateBoat(now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
         if lab.update(now: now) {
             game.banner = lab.progressText

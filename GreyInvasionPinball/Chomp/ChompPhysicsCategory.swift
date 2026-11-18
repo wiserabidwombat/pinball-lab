@@ -40,4 +40,7 @@ enum ChompPhysicsCategory {
     /// T7 M2 v9: a floor ball just launched by a flipper's contact launch, for a few steps: everything but the
     /// flippers treats it as a ball (its own mask has them), and the flippers (masked to `ball`) neither hit nor feel it.
     static let ghostBall: UInt32 = 1 << 18
+    /// T7 M3 v7: the boat's wire lip — holds the captive ball in its cradle; player balls pass it (they meet the
+    /// captive ball sitting on it).
+    static let captiveLip: UInt32 = 1 << 19
 }

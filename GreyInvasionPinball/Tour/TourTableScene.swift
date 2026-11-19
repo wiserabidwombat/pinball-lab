@@ -119,6 +119,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
     // Game clock: advances by the clamped frame time only, so pauses and hitches never eat timers.
     private var lastRealTime: TimeInterval?
     private var gameTime: TimeInterval = 0
+    /// M9 r6 (Aaron: the camera chased the ball and he missed the launch): liftoff holds play. `Pending` is set at
+    /// the countdown's last hit and taken up at the next frame (after the physics has resolved that hit), then for
+    /// `liftoffFreezeSeconds` the game clock, the physics and the flippers stand still while the show plays.
+    private var liftoffFreezePending = false
+    private var liftoffFreezeLeft: TimeInterval = 0
+    private var frozenBalls: [(ball: TourBall, velocity: CGVector, spin: CGFloat)] = []
+    private var frozenPhysicsSpeed: CGFloat = 1
+    private let liftoffFocus = SKNode()           // what the camera looks at: between the pad and the window
+    private static let liftoffFreezeSeconds: TimeInterval = 2.8
+    private var liftoffFrozen: Bool { liftoffFreezeLeft > 0 }
     private var nextBallAt: TimeInterval?
     private var bannerClearAt: TimeInterval?
 
@@ -1743,7 +1753,46 @@ final class TourTableScene: SKScene, RendererHostedScene {
         flashers.flash("rocket", times: 10, gap: 0.22)
         blastDoor.drop()
         updateShotArrows()
+        liftoffFreezePending = true                         // M9 r6: hold play to watch it
         playLiftoff()
+    }
+
+    /// M9 r6: every ball stops where it is with its speed and spin saved; the physics stands still.
+    private func beginLiftoffFreeze() {
+        liftoffFreezePending = false
+        #if DEBUG
+        if playLab != nil, !ProcessInfo.processInfo.arguments.contains("-tourLabFreeze") { return }   // the robot isn't held
+        #endif
+        guard !isAttractMode, !game.isGameOver else { return }
+        frozenBalls = balls.compactMap { b in
+            b.physicsBody.map { (ball: b, velocity: $0.velocity, spin: $0.angularVelocity) }
+        }
+        frozenPhysicsSpeed = physicsWorld.speed
+        physicsWorld.speed = 0
+        // r6b (Aaron: "scroll up to the top of the screen so you can see the full launch"): the camera goes all the
+        // way up (the target is clamped to the table's top), so the pad and the rocket's whole climb are in view.
+        liftoffFocus.position = CGPoint(x: TourTableLayout.rocketToy.x, y: TourTableLayout.worldSize.height + 1000)
+        liftoffFreezeLeft = Self.liftoffFreezeSeconds
+        #if DEBUG
+        for f in frozenBalls { print("LIFTOFF FREEZE begin \(f.ball.position) v \(f.velocity)") }
+        #endif
+    }
+
+    /// M9 r6: play carries on exactly as it was; the flippers take whatever is held now.
+    private func endLiftoffFreeze() {
+        liftoffFreezeLeft = 0
+        liftoffFreezePending = false
+        guard !frozenBalls.isEmpty || physicsWorld.speed == 0 else { return }
+        physicsWorld.speed = frozenPhysicsSpeed
+        for f in frozenBalls where balls.contains(where: { $0 === f.ball }) {
+            f.ball.physicsBody?.velocity = f.velocity
+            f.ball.physicsBody?.angularVelocity = f.spin
+        }
+        #if DEBUG
+        for f in frozenBalls { print("LIFTOFF FREEZE end \(f.ball.position) v \(f.ball.physicsBody?.velocity ?? .zero)") }
+        #endif
+        frozenBalls = []
+        if leftFlipper != nil { updateFlippers() }
     }
 
     /// The liftoff show: sparks, flame, smoke and the climb (M6 v7–v7c). DEBUG: `-tourLiftoff` plays it 3 s after
@@ -2211,7 +2260,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M9 r5")
+        let label = SKLabelNode(text: "T6 M9 r6b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2257,7 +2306,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M9 r5 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M9 r6b \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif
@@ -2311,6 +2360,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private var isBallOnPlunger: Bool { plungerBall != nil }
 
     func newGame() {
+        if liftoffFrozen || liftoffFreezePending { endLiftoffFreeze() }   // M9 r6
         planetWindow?.show(0, animated: false)             // M6 v11: every game's tour starts at Earth
         modes.reset()                                      // M8 v1
         #if DEBUG
@@ -2352,6 +2402,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         blastDoor.raise()
         updateShotArrows()
         countdownLeft = TourTableLayout.countdownHits
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-tourLabFreeze") { countdownLeft = 1 }   // M9 r6 test: liftoff soon
+        #endif
         showCountdown()
         lastRocketHit = -1
         sampleBank.forEach { $0.raise() }
@@ -2451,6 +2504,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     private func updateFlippers() {
+        guard !liftoffFrozen else { return }              // M9 r6: presses do nothing; a held flipper stays up
         var left = activeTouches.values.contains(.left) || padLeft || robotLeft
         var right = activeTouches.values.contains(.right) || padRight || robotRight
         if nudge.tilted { left = false; right = false }      // tilted: dead flippers until the next ball
@@ -2461,7 +2515,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     private func applyNudge(_ direction: Nudge.Direction) {
-        guard !isAttractMode, !game.isGameOver else { return }
+        guard !isAttractMode, !game.isGameOver, !liftoffFrozen else { return }   // M9 r6
         let free = balls.filter { !isOnPlunger($0) }
         let outcome = nudge.nudge(direction, at: gameTime, balls: free.compactMap { $0.physicsBody })
         Nudge.haptic(for: outcome)
@@ -2564,6 +2618,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
         if let lab = playLab { step *= Double(lab.physicsSpeed) }   // the Play Lab's pass: 120 Hz or 60 Hz steps
         #endif
         lastRealTime = realTime
+        if liftoffFreezePending { beginLiftoffFreeze() }   // M9 r6
+        if liftoffFrozen {
+            liftoffFreezeLeft -= step
+            lastStep = CGFloat(step)                 // the camera still eases and its shake still dies away
+            if liftoffFreezeLeft <= 0 { endLiftoffFreeze() }
+            return
+        }
         gameTime += step
         let now = gameTime
         #if DEBUG
@@ -2721,7 +2782,8 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     override func didFinishUpdate() {
         guard isBuilt, !isPaused else { return }
-        cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: lastStep)
+        cameraRig.update(viewSize: size, ball: liftoffFrozen ? liftoffFocus : focusBall, mode: effectiveCameraMode,
+                         dt: lastStep)                // M9 r6: the launch, not the ball, while liftoff holds play
         // M5 v4: parallax. Raised parts slide with the camera; a floor ball by its own height, a ball held in a crater by
         // the Moon's, a ball riding a ramp by the ramp's height under it (M9 r1: the ramp pictures bend with it).
         // Balls ease so nothing jumps.

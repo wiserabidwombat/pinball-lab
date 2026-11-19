@@ -67,6 +67,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var ramps: [ChompRamp] = []
     /// M3 v1: the center ramp (rampMade tells the ramps apart).
     private weak var centerRamp: ChompRamp?
+    /// M3 v10: the right ramp.
+    private weak var rightRamp: ChompRamp?
     /// M3 v4: the boat's captive ball.
     private var boat: ChompCaptiveBall?
     /// M3 v9: the fishing reel's disc.
@@ -79,6 +81,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     fileprivate var fanProbe: ChompFanProbe?
     /// M2 v15: the pier probe's clock (nil when it isn't running).
     fileprivate var pierProbeT: Double?
+    fileprivate var dropProbeT: Double?          // M3 v13: the drop probe
     #endif
     private var lastSpinSound: TimeInterval = 0
     private var quickshotLanes: [ChompRollover] = []
@@ -125,7 +128,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     var isGamePaused = false {
         didSet {
-            if isGamePaused { releaseAllControls() } else { padAArmed = false }
+            if isGamePaused { releaseNonTouchControls() } else { padAArmed = false }
             isPaused = isGamePaused
             lastRealTime = nil
         }
@@ -245,6 +248,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addWaveRamp()
         addCenterRamp()
         addBoat()
+        addRightRamp()
         addPlunger()
         addLaunchGate()
     }
@@ -265,8 +269,17 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                          friction: CGFloat = ChompTableLayout.wallFriction,
                          restitution: CGFloat = ChompTableLayout.wallRestitution,
                          z: CGFloat = -19.5) {
+        // M3 v13b: a closed outline (last point = first) is built as an edge LOOP. As an edge chain its closing segment
+        // went missing in physics (the drop probe: a ball rested where the reel block's top edge should be; balls got
+        // inside the pier block and the reel block through their closing edges).
+        let closed = points.count > 2 && points.first == points.last
         let path = CGMutablePath()
-        path.addLines(between: points)
+        if closed {
+            path.addLines(between: Array(points.dropLast()))
+            path.closeSubpath()
+        } else {
+            path.addLines(between: points)
+        }
 
         let node = SKShapeNode(path: path)
         node.strokeColor = Self.wallColor
@@ -275,7 +288,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         node.lineJoin = .round
         node.zPosition = z
 
-        let body = SKPhysicsBody(edgeChainFrom: path)
+        let body = closed ? SKPhysicsBody(edgeLoopFrom: path) : SKPhysicsBody(edgeChainFrom: path)
         body.friction = friction
         body.restitution = restitution
         body.categoryBitMask = ChompPhysicsCategory.wall
@@ -497,6 +510,22 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addChild(post)
     }
 
+    /// M3 v10: the right ramp: up the tight lane right of the reel, round a J-hook to the left and down its wire into
+    /// the right inlane. Its own wire level (hookWire), drawn under the wave ramp where they cross.
+    private func addRightRamp() {
+        let ramp = ChompRamp(path: ChompTableLayout.rightPath, apexDistance: ChompTableLayout.rightApexDistance,
+                             mouthHalfWidth: ChompTableLayout.rightMouthHalfWidth,
+                             halfWidth: ChompTableLayout.rightHalfWidth,
+                             flareLength: ChompTableLayout.rightFlareLength, postLength: 0,
+                             lowLength: ChompTableLayout.rightLowLength,
+                             riseLength: ChompTableLayout.rightApexDistance,     // M3 v12: a short climb to the hook
+                             wallCategory: ChompPhysicsCategory.hookWireWall, ballCategory: ChompPhysicsCategory.hookWireBall,
+                             zShift: -1)
+        addChild(ramp)
+        ramps.append(ramp)
+        rightRamp = ramp
+    }
+
     /// M3 v4: the boat — its housing and the captive ball in the channel up its middle.
     private func addBoat() {
         addWall(points: ChompTableLayout.boatHousing)
@@ -587,12 +616,19 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     /// M2 v5: the wave ramp is made (placeholder scoring until the rules, M4).
     private func rampMade(_ ball: ChompBall, _ ramp: ChompRamp) {
-        let center = ramp === centerRamp                    // M3 v1
-        labEvent(center ? "centerRamp" : "waveRamp")
-        game.add(center ? ChompPoints.centerRamp : ChompPoints.waveRamp)
+        let event: String, points: Int, banner: String
+        if ramp === centerRamp {                            // M3 v1
+            (event, points, banner) = ("centerRamp", ChompPoints.centerRamp, "CENTER RAMP")
+        } else if ramp === rightRamp {                      // M3 v10
+            (event, points, banner) = ("rightRamp", ChompPoints.rightRamp, "RIGHT RAMP")
+        } else {
+            (event, points, banner) = ("waveRamp", ChompPoints.waveRamp, "WAVE RAMP")
+        }
+        labEvent(event)
+        game.add(points)
         hitHaptic.impactOccurred()
         sfx(.ramp)
-        showBanner(center ? "CENTER RAMP" : "WAVE RAMP")
+        showBanner(banner)
     }
 
     /// Turns the spinner; each half-turn scores, with one tick sound per 50 ms.
@@ -653,7 +689,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private func addLaunchGate() {
         let low = ChompTableLayout.gateLow, high = ChompTableLayout.gateHigh
         let node = SKNode()
-        let body = SKPhysicsBody(edgeFrom: low, to: high)
+        let gatePath = CGMutablePath()                          // M3 v14b: the gate is an arc (ChompTableLayout.gateArc)
+        gatePath.addLines(between: ChompTableLayout.gateArc)
+        let body = SKPhysicsBody(edgeChainFrom: gatePath)
         body.friction = 0.05
         body.restitution = 0.2
         body.categoryBitMask = ChompPhysicsCategory.launchGate
@@ -684,14 +722,17 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     /// The launch gate, per ball: solid for a ball above it moving down; a ball crossing it going up swings it.
     private func updateGates() {
-        let low = ChompTableLayout.gateLow, high = ChompTableLayout.gateHigh
-        let gx = high.x - low.x, gy = high.y - low.y
+        // M3 v14: the gate sits at the top of the reel lane: solid for a ball whose centre is on the reel-lane side of it
+        // (the turn centre's side), so the plunge passes inward and nothing goes back out into the plunger lane.
         for ball in balls {
-            let v = ball.physicsBody?.velocity ?? .zero
-            let p = ball.position
-            let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
-            ball.setLaunchGateSolid(above && v.dy < 0)
+            ball.setLaunchGateSolid(isOnReelLaneSideOfGate(ball.position))
         }
+    }
+
+    /// M3 v14: which side of the gate's line a point is on (true = the reel lane's side, where the turn centre is).
+    private func isOnReelLaneSideOfGate(_ p: CGPoint) -> Bool {
+        let c = ChompTableLayout.turnCentre                     // M3 v14b: the gate lies on r 80, so inside = past it
+        return hypot(p.x - c.x, p.y - c.y) < ChompTableLayout.turnInnerR
     }
 
     private func swingLaunchGate() {
@@ -819,7 +860,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M3 v9")
+        let label = SKLabelNode(text: "T7 M3 v14d")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1060,6 +1101,20 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         if leftFlipper != nil { updateFlippers() }
     }
 
+    /// Pausing (Table 06's fix, b6af018): like releaseAllControls, but a flipper finger still down stays held, so a
+    /// ball cradled on a flipper is still cradled after resume. The plunger pull and the gamepad let go as before.
+    private func releaseNonTouchControls() {
+        for (touch, kind) in activeTouches where kind == .plunger { activeTouches.removeValue(forKey: touch) }
+        padLeft = false
+        padRight = false
+        padPulling = false
+        padPeakPull = 0
+        padPullByA = false
+        plungerPull = 0
+        plunger?.position = ChompTableLayout.plungerRestPosition
+        if leftFlipper != nil { updateFlippers() }
+    }
+
     private func releasePlunger() {
         let maxPull = ChompTableLayout.plungerMaxPull
         let power = plungerPull < 4 ? ChompTableLayout.tapLaunchPower : plungerPull / maxPull
@@ -1124,6 +1179,11 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         }
         if fanProbe != nil {                       // M2 v8: the flipper fan probe
             updateFanProbe(CGFloat(step))
+            return
+        }
+        if dropProbeT != nil {                     // M3 v13: the drop probe
+            physicsWorld.speed = 0.5
+            updateDropProbe(CGFloat(step) * 0.5)
             return
         }
         if pierProbeT != nil {                     // M2 v15: the pier probe
@@ -1226,6 +1286,47 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    /// M3 v13: the solid plastics (closed outlines). The stuck test found balls INSIDE the pier block (after the pier
+    /// flipper swung) and the reel's right block: a floor ball whose centre ends up inside one is put back just outside
+    /// its nearest edge, with any velocity into that edge removed.
+    private lazy var solidBlocks: [[CGPoint]] = [ChompTableLayout.pierPlastic, ChompTableLayout.reelLeftBlock,
+                                                  ChompTableLayout.reelRightBlock, ChompTableLayout.rampIsland,
+                                                  ChompTableLayout.bankWedge, ChompTableLayout.waveRightBlock]
+
+    private func keepOutOfSolids(_ ball: ChompBall) {
+        let p = ball.position
+        for poly in solidBlocks where poly.count > 2 {
+            var inside = false
+            var j = poly.count - 1
+            for i in 0..<poly.count {
+                let a = poly[i], b = poly[j]
+                if (a.y > p.y) != (b.y > p.y), p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x { inside.toggle() }
+                j = i
+            }
+            guard inside else { continue }
+            var best = CGFloat.greatestFiniteMagnitude
+            var q = p
+            for i in 0..<poly.count {
+                let a = poly[i], b = poly[(i + 1) % poly.count]
+                let dx = b.x - a.x, dy = b.y - a.y
+                let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / max(dx * dx + dy * dy, 0.001)))
+                let c = CGPoint(x: a.x + t * dx, y: a.y + t * dy)
+                let d = hypot(p.x - c.x, p.y - c.y)
+                if d < best { best = d; q = c }
+            }
+            let len = max(best, 0.001)
+            let n = CGVector(dx: (q.x - p.x) / len, dy: (q.y - p.y) / len)      // outward (inside → the edge)
+            let r = ChompTableLayout.ballRadius + 0.5
+            ball.position = CGPoint(x: q.x + n.dx * r, y: q.y + n.dy * r)
+            if let body = ball.physicsBody {
+                let v = body.velocity
+                let vn = v.dx * n.dx + v.dy * n.dy
+                if vn < 0 { body.velocity = CGVector(dx: v.dx - vn * n.dx, dy: v.dy - vn * n.dy) }
+            }
+            return
+        }
+    }
+
     override func didSimulatePhysics() {
         for ball in balls {
             guard let body = ball.physicsBody else { continue }
@@ -1240,6 +1341,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                     rightFlipper.solveSwing(ball, ballRadius: r)
                     miniFlipper.solveSwing(ball, ballRadius: r)
                 }
+                if ball.isOnFloor { keepOutOfSolids(ball) }          // M3 v13
             } else if ChompTableLayout.flipperCarry {
                 if ball.isOnFloor {
                     leftFlipper.contactLaunch(ball, ballRadius: r)
@@ -1258,12 +1360,12 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 body.velocity = CGVector(dx: v.dx * scale, dy: v.dy * scale)
             }
             // A plunge crossing the launch gate going up swings the flap (read before previousPosition moves on).
-            let low = ChompTableLayout.gateLow, high = ChompTableLayout.gateHigh
-            let gx = high.x - low.x, gy = high.y - low.y
+            // M3 v14: a plunge crossing into the turn through the gate (between the divider's end and the spiral's end).
             let p0 = ball.previousPosition, p = ball.position
-            let wasAbove = gx * (p0.y - low.y) - gy * (p0.x - low.x) > 0
-            let above = gx * (p.y - low.y) - gy * (p.x - low.x) > 0
-            if !wasAbove, above, body.velocity.dy > 0, p.x > low.x, p.x < high.x { swingLaunchGate() }
+            if !isOnReelLaneSideOfGate(p0), isOnReelLaneSideOfGate(p),
+               p.x > ChompTableLayout.gateHigh.x - 5, p.x < ChompTableLayout.gateLow.x + 5, p.y > ChompTableLayout.gateLow.y - 5 {
+                swingLaunchGate()
+            }
             leftSideSwitches(ball, from: p0, to: p)
             reelSwitch(ball, from: p0, to: p)
             // M2 v6: a ball through the quickshot gate into the harpoon lane (the pier flipper's shot), for the labs.
@@ -1378,7 +1480,7 @@ extension ChompTableScene: ShotLabHost {
     var shotLabTableName: String { "Chomp" }
 
     /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
-    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "boat", "reel", "harpoonGate", "fishPhone", "buoy"] }
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "harpoonGate", "fishPhone", "buoy"] }
 
     /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
     /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.
@@ -1623,6 +1725,40 @@ extension ChompTableScene {
                          Double(miniFlipper.zRotation * 180 / .pi)))
         }
         if t > 3.0 { print("PIER done"); pierProbeT = nil; ShotLab.quitIfLaunchedForLab() }
+    }
+
+    // MARK: M3 v13: the drop probe (`-shotlab chomp -shotlab-scenario dropprobe`): replays stuck-test drops that ended
+    // at (505.7, 1150.5) and prints `DROP i t x y vx vy layer` every 0.1 s, 8 s each.
+    private static let probeDrops: [(CGPoint, CGVector)] = [
+        (CGPoint(x: 528, y: 983), CGVector(dx: 1022, dy: 2575)), (CGPoint(x: 533, y: 983), CGVector(dx: 1022, dy: 2575)),
+        (CGPoint(x: 522, y: 983), CGVector(dx: 1022, dy: 2575)), (CGPoint(x: 528, y: 983), CGVector(dx: 700, dy: 2600)),
+        (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 1500)), (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 1800)),
+        (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 2200))]
+
+    func debugDropProbe() {
+        isAttractMode = false
+        removeAllBalls()
+        dropProbeT = 0
+        print("DROP start")
+    }
+
+    fileprivate func updateDropProbe(_ dt: CGFloat) {
+        guard let t0 = dropProbeT else { return }
+        let t = t0 + Double(dt)
+        dropProbeT = t
+        let i = Int(t / 2), i0 = Int(t0 / 2)
+        updateGates()                              // (the gate is per ball; update() is skipped while probing)
+        if i >= Self.probeDrops.count { print("DROP done"); dropProbeT = nil; ShotLab.quitIfLaunchedForLab(); return }
+        if i != i0 || t0 == 0 {
+            removeAllBalls()
+            shotLabPlaceBall(at: Self.probeDrops[i].0, velocity: Self.probeDrops[i].1)
+        }
+        if Int(t0 / 0.01) != Int(t / 0.01), let b = balls.first {
+            let v = b.physicsBody?.velocity ?? .zero
+            print(String(format: "DROP %d %.2f %.1f %.1f %.0f %.0f %@ cat %u mask %u", i, t.truncatingRemainder(dividingBy: 2),
+                         Double(b.position.x), Double(b.position.y), Double(v.dx), Double(v.dy), "\(b.layer)",
+                         b.physicsBody?.categoryBitMask ?? 0, b.physicsBody?.collisionBitMask ?? 0))
+        }
     }
 }
 #endif

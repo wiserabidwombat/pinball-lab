@@ -69,7 +69,7 @@ struct ChompTableView: View {
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
-                    if ShotLab.launchScenario == "fanprobe" { scene.debugFanProbe() } else if ShotLab.launchScenario == "pierprobe" { scene.debugPierProbe() } else { scene.debugStartShotLab() }
+                    if ShotLab.launchScenario == "fanprobe" { scene.debugFanProbe() } else if ShotLab.launchScenario == "pierprobe" { scene.debugPierProbe() } else if ShotLab.launchScenario == "dropprobe" { scene.debugDropProbe() } else { scene.debugStartShotLab() }
                 }
             }
             #endif

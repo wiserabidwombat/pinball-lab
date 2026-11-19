@@ -43,4 +43,7 @@ enum ChompPhysicsCategory {
     /// T7 M3 v7: the boat's wire lip — holds the captive ball in its cradle; player balls pass it (they meet the
     /// captive ball sitting on it).
     static let captiveLip: UInt32 = 1 << 19
+    /// T7 M3 v10: the right ramp's J-hook and wire, a third wire level (it crosses under the wave ramp's wire).
+    static let hookWireWall: UInt32 = 1 << 20
+    static let hookWireBall: UInt32 = 1 << 21
 }

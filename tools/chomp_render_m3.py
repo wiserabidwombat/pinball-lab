@@ -64,3 +64,29 @@ if hasattr(C, 'reelCentre'):
           % (C.roofY(147), C.roofY(510), _m.degrees(_m.atan2(35, 363)), C.roofY(466) - 1148, C.roofY(510), 566 - 510))
     print('reel: left block to the boat housing: shared edge x 395 (closed); housing to the boat cradle unchanged')
 print('center: length %.1f, apex s %.1f' % (C.CP.dist[-1], C.centerApexDistance))
+if hasattr(C, 'RP'):                                            # M3 v10 / v12: the right ramp
+    _rw = lambda s: C.rightMouthHalfWidth + (C.rightHalfWidth - C.rightMouthHalfWidth) * min(s / C.rightFlareLength, 1)
+    RL, RR = C.RP.rails(_rw)
+    poly(RL, c='#00aa44', lw=1.6, ls='--'); poly(RR, c='#00aa44', lw=1.6, ls='--')
+    for _b in (C.reelRightBlock,):
+        ax.fill([p[0] for p in _b], [p[1] for p in _b], color='#3355ff', alpha=0.35); poly(_b)
+    _rp = C.RP.at(C.rightApexDistance)[0]; ax.plot(*_rp, 'o', color='#00aa44'); ax.text(_rp[0]-30, _rp[1]-14, 'right made', fontsize=7)
+    if hasattr(C, 'outerArcCentre'):
+        poly([(548, C.laneWallTop), (584, C.laneWallTop + 28)], c='#ff9900', lw=2.4)
+    fig.savefig(out, dpi=110, bbox_inches='tight')
+    up = [i for i, d in enumerate(C.RP.dist) if d <= C.rightApexDistance - 20]
+    down = [i for i, d in enumerate(C.RP.dist) if d >= C.rightApexDistance + 60]
+    gap = min(math.hypot(a[0]-b[0], a[1]-b[1]) for a in [RL[i] for i in up] + [RR[i] for i in up]
+              for b in [RL[i] for i in down] + [RR[i] for i in down])
+    print('right: climb rails to the return wire rails, closest %.1f (same level: must not touch)' % gap)
+    print('right: rails top y %.1f (world top 1300)' % max(p[1] for p in RL + RR))
+    e = C.RP.points[-1]; print('right: wire end (%.1f, %.1f) = mirror of the center end (%.1f); length %.1f, apex s %.1f'
+                                % (e[0], e[1], 568 - C.CP.points[-1][0], C.RP.dist[-1], C.rightApexDistance))
+    if hasattr(C, 'outerArcCentre'):
+        cx, cy = C.outerArcCentre; R = C.outerArcRadius
+        print('v12: reel lane x 510..548 = %d wide; plunger lane 548..584 = %d' % (548 - 510, 584 - 548))
+        print('v12: lane post top (548, %d) to the top wall: %.1f (the plunge passes)' % (C.laneWallTop, R - math.hypot(548 - cx, C.laneWallTop - cy)))
+        print('v12: reel block corner (510, 1150) to the top wall: %.1f' % (R - math.hypot(510 - cx, 1150 - cy)))
+        print('v12: mouth rails y %.0f..%.0f; top wall y %d (upper rail on it: %.1f)' % (C.rightMouth[1] - C.rightMouthHalfWidth, C.rightMouth[1] + C.rightMouthHalfWidth, C.outerTopY, C.outerTopY - C.rightMouth[1] - C.rightMouthHalfWidth))
+        print('v12: a ball on the roof at x 470 tops at %.1f vs the mouth lower rail %.0f -> clear %.1f' % (C.roofY(470) + 30, C.rightMouth[1] - C.rightMouthHalfWidth, C.rightMouth[1] - C.rightMouthHalfWidth - C.roofY(470) - 30))
+        print('v12: hole x 442..490 under the mouth: roof balls drain into the reel')

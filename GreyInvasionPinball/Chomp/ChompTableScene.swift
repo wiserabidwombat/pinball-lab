@@ -74,6 +74,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// M3 v9: the fishing reel's disc.
     private var reel: ChompReel?
     private var fin: ChompFin?
+    private var chumBucket: SKNode?
+    private var chumLastHit: TimeInterval = -10
     private var finHitPending = false
     #if DEBUG
     /// M2 v6: the Shot Lab robot (shared ShotLab, Table 06's host pattern) and its own clock.
@@ -535,6 +537,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addWall(points: ChompTableLayout.bankWedge)
         addReel()
         addFin()
+        addChumBucket()
         let b = ChompCaptiveBall(mouth: ChompTableLayout.boatMouth, heading: .pi / 2,
                                  length: ChompTableLayout.boatChannelLength, halfWidth: ChompTableLayout.boatHalfWidth,
                                  postRadius: ChompTableLayout.boatPostRadius, lip: ChompTableLayout.boatLip)
@@ -549,6 +552,42 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         let r = ChompReel(centre: ChompTableLayout.reelCentre, radius: ChompTableLayout.reelDiscRadius)
         addChild(r)
         reel = r
+    }
+
+    /// M3 v16: the chum bucket — on the Pro, a bucket hung over the rounded nose of the plastic between the ramps on a
+    /// leaf switch (manual 5.27 / 5.28, switch 46 "Chum Bucket Tgt"). Ours: a round target over the block's nose, 1 pt
+    /// proud of it so the ball meets the target first; it swings when hit.
+    private func addChumBucket() {
+        let r = ChompTableLayout.chumBucketRadius
+        let node = SKNode()
+        node.position = ChompTableLayout.chumBucketCentre
+        node.zPosition = 2
+        let bucket = SKShapeNode(circleOfRadius: r)
+        bucket.fillColor = SKColor(red: 0.62, green: 0.64, blue: 0.68, alpha: 1)         // galvanised pail
+        bucket.strokeColor = SKColor(red: 0.05, green: 0.04, blue: 0.09, alpha: 0.8)
+        bucket.lineWidth = 1.5
+        node.addChild(bucket)
+        let inside = SKShapeNode(circleOfRadius: r - 4)
+        inside.fillColor = SKColor(red: 0.55, green: 0.12, blue: 0.10, alpha: 1)          // chum
+        inside.strokeColor = SKColor(white: 0.9, alpha: 0.7)
+        inside.lineWidth = 1
+        node.addChild(inside)
+        let handle = CGMutablePath()
+        handle.addArc(center: .zero, radius: r + 2, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: false)
+        let h = SKShapeNode(path: handle)
+        h.strokeColor = SKColor(white: 0.85, alpha: 0.9)
+        h.lineWidth = 1.5
+        node.addChild(h)
+        let body = SKPhysicsBody(circleOfRadius: r)
+        body.isDynamic = false
+        body.restitution = 0.3
+        body.friction = 0.2
+        body.categoryBitMask = ChompPhysicsCategory.target
+        body.collisionBitMask = ChompPhysicsCategory.ball
+        body.contactTestBitMask = ChompPhysicsCategory.ball
+        node.physicsBody = body
+        addChild(node)
+        chumBucket = node
     }
 
     /// M3 v15: the fin — its slot in the floor and the blade that roams along it.
@@ -892,7 +931,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M3 v15b")
+        let label = SKLabelNode(text: "T7 M3 v16")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -1470,6 +1509,17 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 }
                 break
             }
+            // M3 v16: the chum bucket (placeholder scoring until the rules).
+            if node === chumBucket {
+                guard gameTime - chumLastHit > 0.15 else { break }
+                chumLastHit = gameTime
+                labEvent("chumBucket")
+                game.add(ChompPoints.chumBucket)
+                sfx(.standup)
+                node.removeAction(forKey: "swing")
+                node.run(.sequence([.scale(to: 1.12, duration: 0.05), .scale(to: 1.0, duration: 0.12)]), withKey: "swing")
+                break
+            }
             // M3 v15: the fin drops (in update, not here).
             if node === fin { finHitPending = true; break }
             // The buoy: two hits inside the window light the inner tube.
@@ -1517,7 +1567,7 @@ extension ChompTableScene: ShotLabHost {
     var shotLabTableName: String { "Chomp" }
 
     /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
-    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "harpoonGate", "fishPhone", "buoy"] }
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "chumBucket", "harpoonGate", "fishPhone", "buoy"] }
 
     /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
     /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.

@@ -668,3 +668,11 @@ extension ChompTableLayout {
     static let finRoamSpeed: CGFloat = 35
     static let finRelightTime: TimeInterval = 6
 }
+
+// MARK: - Milestone 3 v16: the chum bucket
+extension ChompTableLayout {
+    /// Over the rounded nose of the block between the wave and center ramps (the Pro's hanging bucket target, p. 40's
+    /// ring at ~(213, 963)); 1 pt wider than the nose so a ball meets the target, not the wall under it.
+    static let chumBucketCentre = waveEndCentre
+    static let chumBucketRadius: CGFloat = waveEndRadius + 1
+}

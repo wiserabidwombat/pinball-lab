@@ -875,6 +875,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 let v = TourPoints.sunJackpot * modes.tourNumber
                 game.add(v)
                 showBanner(modes.made < 4 ? "SUN JACKPOT \(v.formatted())" : "SUPER JACKPOT LIT · MISSION CONTROL")
+                solarWind(waves: modes.made < 4 ? 1 : 2)        // M9 r5
                 flashers.flashAll(times: 2)
                 if modes.made == 4 {
                     blastDoor.drop()
@@ -906,6 +907,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
                 sun?.flare()
                 flashers.giOut(for: 2.5)
                 flashers.flashAll(times: 6)
+                grandFinale()                                // M9 r5
             }
             if s.planet == "moon" { showBanner("JACKPOT · MOON VISITED") }
             if modes.finishTourIfDone() {
@@ -955,6 +957,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         sunMultiball = true
         multiballSaveUntil = gameTime + 15
         showBanner("SUN SLINGSHOT · 3-BALL MULTIBALL")
+        solarWind(waves: 2)                                 // M9 r5
         bigHaptic.impactOccurred()
         sun?.flare()
         flashers.giOut(for: 2.0)
@@ -1117,6 +1120,79 @@ final class TourTableScene: SKScene, RendererHostedScene {
     }
 
     /// Back to the game: every lamp shows its real state again.
+    // MARK: - M9 r5: the finale's light show
+
+    private let finaleDriver = SKNode()
+
+    /// Solar wind: waves of light rolling down the table from the Sun — every lamp lights as the wave passes, top to
+    /// bottom in 0.6 s, the flashers popping behind it; when the last wave has passed the lamps go back to the truth.
+    private func solarWind(waves: Int) {
+        let lamps = allLamps
+        guard !lamps.isEmpty, !isAttractMode else { return }
+        if finaleDriver.parent == nil { addChild(finaleDriver) }
+        finaleDriver.removeAllActions()
+        let ys = lamps.map(\.position.y)
+        let (y0, y1) = (ys.min() ?? 0, ys.max() ?? 1)
+        let sweep: CGFloat = 0.6, lit: CGFloat = 0.16, gap: CGFloat = 0.85
+        let total = TimeInterval(CGFloat(waves) * gap + sweep + lit)
+        for w in 0..<waves {
+            finaleDriver.run(.sequence([.wait(forDuration: TimeInterval(CGFloat(w) * gap)),
+                                        .run { [weak self] in self?.flashers.flash("rocket", times: 1) }]))
+        }
+        finaleDriver.run(.sequence([
+            .customAction(withDuration: total) { _, t in
+                for lamp in lamps {
+                    let d = (y1 - lamp.position.y) / max(y1 - y0, 1) * sweep
+                    var on = false
+                    for w in 0..<waves {
+                        let k = t - CGFloat(w) * gap - d
+                        if k >= 0, k < lit { on = true; break }
+                    }
+                    lamp.set(on ? .on : .off)
+                }
+            },
+            .run { [weak self] in self?.restoreLamps() }]))
+    }
+
+    /// Every lamp back to what the game says (after a show).
+    private func restoreLamps() {
+        showCountdown()
+        for lane in rollovers + starLanes { lane.lamp?.isOn = lane.isLit }
+        kickbackLamp?.isOn = kickbackLit
+        planetLamps.values.forEach { $0.set(.off) }
+        updatePlanetArc()
+        arrowLamps.values.forEach { $0.set(.off) }
+        stackLamps.values.flatMap { $0 }.forEach { $0.set(.off) }
+        updateShotArrows()
+    }
+
+    /// The super jackpot: the Grand Tour is complete. The whole table flashes white-gold, rumbles, gold sparks fly
+    /// out of Mission Control and off the Sun, and three waves of solar wind roll down; the window celebrates.
+    private func grandFinale() {
+        let flash = SKSpriteNode(color: SKColor(red: 1.0, green: 0.88, blue: 0.62, alpha: 1),
+                                 size: CGSize(width: 4000, height: 4000))
+        flash.position = cameraRig.node.position
+        flash.blendMode = .add
+        flash.alpha = 0
+        flash.zPosition = 60
+        addChild(flash)
+        flash.run(.sequence([.fadeAlpha(to: 0.75, duration: 0.06), .fadeAlpha(to: 0.2, duration: 0.25),
+                             .fadeAlpha(to: 0.55, duration: 0.08), .fadeOut(withDuration: 1.2), .removeFromParent()]))
+        cameraRig.shake(strength: 6, duration: 1.2)
+        let gold = SKColor(red: 1.0, green: 0.8, blue: 0.3, alpha: 1)
+        if let mc = missionScoop?.position {
+            Effects.burst(in: self, at: mc, color: gold, count: 60, speed: 420, lifetime: 1.1)
+        }
+        if let s = sun?.position {
+            Effects.burst(in: self, at: s, color: SKColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 1), count: 50,
+                          speed: 360, lifetime: 1.2)
+        }
+        for k in 0..<3 {
+            run(.sequence([.wait(forDuration: 0.35 * Double(k)), .run { [weak self] in self?.bigHaptic.impactOccurred() }]))
+        }
+        solarWind(waves: 3)
+    }
+
     private func stopAttractShow() {
         attractDriver.removeAllActions()
         guard !allLamps.isEmpty else { return }
@@ -2135,7 +2211,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M9 r4")
+        let label = SKLabelNode(text: "T6 M9 r5")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2181,7 +2257,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M9 r4 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M9 r5 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

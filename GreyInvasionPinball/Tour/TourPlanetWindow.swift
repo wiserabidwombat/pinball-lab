@@ -238,6 +238,9 @@ final class TourPlanetWindow: SKNode {
         case "uranus": glint(angle: 1.35, color: SKColor(red: 0.6, green: 1.0, blue: 0.95, alpha: 1))
         case "neptune":
             ring(SKColor(red: 0.35, green: 0.6, blue: 1.0, alpha: 1))
+        case "sun":                                    // M9 r5: a sun jackpot — a flare off the limb
+            ring(SKColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 1))
+            glint(angle: CGFloat.random(in: 0..<(.pi)), color: SKColor(red: 1.0, green: 0.85, blue: 0.5, alpha: 1))
         default: break
         }
     }
@@ -292,6 +295,31 @@ final class TourPlanetWindow: SKNode {
         sweep.timingMode = .easeInEaseOut
         g.run(.sequence([.group([sweep, .sequence([.fadeAlpha(to: 1, duration: 0.12), .wait(forDuration: 0.25),
                                                    .fadeOut(withDuration: 0.18)])]), .removeFromParent()]))
+    }
+
+    /// M9 r5: Sun Slingshot — the corona blazes and breathes on the glass while the finale runs.
+    private func sunCorona() {
+        let glow = SKSpriteNode(texture: Self.glow, size: CGSize(width: radius * 3.4, height: radius * 3.4))
+        glow.position = center
+        glow.blendMode = .add
+        glow.color = SKColor(red: 1.0, green: 0.62, blue: 0.22, alpha: 1)
+        glow.colorBlendFactor = 1
+        glow.alpha = 0
+        glow.zPosition = 0.2
+        fx.addChild(glow)
+        let breathe = SKAction.sequence([.fadeAlpha(to: 0.7, duration: 0.5), .fadeAlpha(to: 0.4, duration: 0.5)])
+        breathe.timingMode = .easeInEaseOut
+        glow.run(.sequence([.wait(forDuration: 0.5), .repeatForever(breathe)]))
+        let rays = SKSpriteNode(texture: Self.spiral, size: CGSize(width: radius * 2.2, height: radius * 2.2))
+        rays.position = center
+        rays.blendMode = .add
+        rays.color = SKColor(red: 1.0, green: 0.78, blue: 0.4, alpha: 1)
+        rays.colorBlendFactor = 1
+        rays.alpha = 0
+        rays.zPosition = 0.21
+        fx.addChild(rays)
+        rays.run(.sequence([.wait(forDuration: 0.5), .fadeAlpha(to: 0.35, duration: 0.6)]))
+        rays.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 9)))
     }
 
     /// Uranus Roll: a cold cyan glow breathing on the glass.
@@ -366,6 +394,7 @@ final class TourPlanetWindow: SKNode {
         case "jupiter": jupiterStorm()                 // M9 r4
         case "uranus": uranusCold()
         case "neptune": neptuneDeep()
+        case "sun": sunCorona()                         // M9 r5
         default: break
         }
     }

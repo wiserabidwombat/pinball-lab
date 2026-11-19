@@ -826,6 +826,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         lastModeTick = gameTime
         labMark("stopStarted")
         planetWindow?.show(planet: s.planet)
+        planetWindow?.startEffect(for: s.planet)           // M9 r3
         switch s.kind {                                     // M8 v2: each stop says what it wants
         case .mercury: showBanner("\(s.title) · HIT BOTH LIT SHOTS")
         case .venus: showBanner("\(s.title) · HIT R-O-C-K-E-T TO SEE")
@@ -879,6 +880,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             if case .moonshot? = modes.active?.kind {        // M8 v4
                 if modes.made == 1 {
                     lockNextHold = true
+                    planetWindow?.ring(SKColor(white: 0.9, alpha: 1))   // M9 r3: moon dust
                     showBanner("BALL LOCKED · LOCK 2")
                 } else if modes.made == 2 {
                     startMoonMultiball()
@@ -887,6 +889,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             updateModeStatus(force: true)
             updateShotArrows()
         case .complete(let s):
+            planetWindow?.celebrate()                        // M9 r3
             let isPluto = s.planet == TourModes.pluto.planet   // M8 v9: the hidden stop's one-off award
             game.add(isPluto ? TourPoints.plutoAward : TourPoints.modeComplete * modes.tourNumber)
             bigHaptic.impactOccurred()
@@ -923,6 +926,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         jackpotValue = TourPoints.jackpot
         multiballSaveUntil = gameTime + Self.multiballSaveSeconds
         showBanner("MOONSHOT MULTIBALL")
+        planetWindow?.ring(SKColor(white: 0.95, alpha: 1))     // M9 r3
         bigHaptic.impactOccurred()
         flashers.giOut(for: 1.5)
         flashers.flash("moon", times: 6, gap: 0.15)
@@ -975,12 +979,14 @@ final class TourTableScene: SKScene, RendererHostedScene {
         multiballSaveUntil = -1
         if wasSun, case .sun? = modes.active?.kind {         // M8 v6: the finale ended without its super
             _ = modes.fail()
+            planetWindow?.stopEffect()                       // M9 r3
             labMark("stopDrained")
             showBanner("SUN SLINGSHOT LOST")
             if blastDoor.isDown, countdownResetAt == nil { blastDoor.raise() }
             endModeLamps()
         } else if case .moonshot? = modes.active?.kind {
             _ = modes.fail()
+            planetWindow?.stopEffect()                       // M9 r3
             labMark("stopDrained")
             showBanner("MOONSHOT LOST")
             endModeLamps()
@@ -998,6 +1004,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             updateModeStatus(force: true)
         }
         guard let s = modes.fail() else { return }
+        planetWindow?.stopEffect()                           // M9 r3
         labMark(drained ? "stopDrained" : "stopTimedOut")
         if !drained { showBanner("\(s.planet.uppercased()) LOST · TIME") }
         if s.planet == TourModes.pluto.planet { planetWindow?.show(planet: "earth") }   // M8 v9: gone till next tour
@@ -1816,6 +1823,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
         hitHaptic.impactOccurred(intensity: 0.5)
         if modes.reveal() != nil {                         // M8 v2: Venus — the clouds part over one shot
             showBanner("VENUS VEIL · SHOT REVEALED")
+            planetWindow?.venusReveal()                    // M9 r3
             flashers.flash("left", times: 1)
             updateShotArrows()
             updateModeStatus(force: true)
@@ -2123,7 +2131,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M9 r2")
+        let label = SKLabelNode(text: "T6 M9 r3")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2169,7 +2177,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M9 r2 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M9 r3 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

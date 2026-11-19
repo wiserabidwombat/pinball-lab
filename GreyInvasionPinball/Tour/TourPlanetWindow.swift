@@ -58,6 +58,8 @@ final class TourPlanetWindow: SKNode {
 
         planetLayer.zPosition = 0.02
         crop.addChild(planetLayer)
+        fx.zPosition = 0.03                   // M9 r3: effects on the glass, over the planet
+        crop.addChild(fx)
         textures = Self.stops.compactMap { UIImage(named: "tour_window_" + $0).map { SKTexture(image: $0) } }
         if textures.count == Self.stops.count {
             SKTexture.preload(textures) { }
@@ -200,6 +202,245 @@ final class TourPlanetWindow: SKNode {
             .wait(forDuration: 0.9),
             .removeFromParent()]))
     }
+
+    // MARK: - M9 r3: planet effects (the inner leg and Pluto; the outer leg is r4)
+
+    /// What runs over the planet while its stop is on: Mercury's glare and shimmer, Venus's clouds, Mars's dust, Pluto's
+    /// frost. Glass effects (glare, frost, flashes) sit on `fx`, over the planet; clouds and dust ride the planet layer.
+    private let fx = SKNode()
+    private var venusClouds: [SKSpriteNode] = []
+    private var venusPerReveal = 3
+
+    /// Starts the stop's own effect (call after `show(planet:)`; it waits for the planet to arrive).
+    func startEffect(for name: String) {
+        stopEffect(animated: false)
+        switch name {
+        case "mercury": mercuryHeat()
+        case "venus": venusVeil()
+        case "mars": marsDust()
+        case "pluto": plutoFrost()
+        default: break
+        }
+    }
+
+    /// The stop ended (lost, or finished — `celebrate` calls this): its effect fades away.
+    func stopEffect(animated: Bool = true) {
+        if let p = planet, p.action(forKey: "shimmer") != nil {
+            p.removeAction(forKey: "shimmer")
+            p.run(.scale(to: 1, duration: 0.2))
+        }
+        venusClouds = []
+        let nodes = fx.children + planetLayer.children.filter { $0.name == "fx" }
+        for n in nodes {
+            n.name = nil
+            (n as? SKEmitterNode)?.particleBirthRate = 0
+            n.removeAllActions()
+            if animated {
+                n.run(.sequence([.fadeOut(withDuration: 0.6), .wait(forDuration: 1.5), .removeFromParent()]))
+            } else {
+                n.removeFromParent()
+            }
+        }
+    }
+
+    /// A stop is visited: its effect clears and the glass flashes warm white with a ring running out to the rim.
+    func celebrate() {
+        stopEffect()
+        let flash = SKSpriteNode(texture: Self.glow, size: CGSize(width: radius * 3.2, height: radius * 3.2))
+        flash.position = center
+        flash.blendMode = .add
+        flash.color = SKColor(red: 1.0, green: 0.92, blue: 0.75, alpha: 1)
+        flash.colorBlendFactor = 1
+        flash.alpha = 0
+        flash.zPosition = 0.3
+        fx.addChild(flash)
+        flash.run(.sequence([.fadeAlpha(to: 0.9, duration: 0.08), .fadeOut(withDuration: 0.6), .removeFromParent()]))
+        ring(SKColor(red: 1.0, green: 0.85, blue: 0.55, alpha: 1))
+    }
+
+    /// A ring of light running out from the planet to the rim (a Moon lock, a visit).
+    func ring(_ color: SKColor) {
+        let r0: CGFloat = 8
+        let ring = SKShapeNode(circleOfRadius: r0)
+        ring.position = center
+        ring.strokeColor = color
+        ring.lineWidth = 2.5
+        ring.glowWidth = 3
+        ring.fillColor = .clear
+        ring.blendMode = .add
+        ring.zPosition = 0.25
+        fx.addChild(ring)
+        let grow = SKAction.scale(to: radius * 1.1 / r0, duration: 0.7)
+        grow.timingMode = .easeOut
+        ring.run(.sequence([.group([grow, .sequence([.wait(forDuration: 0.25), .fadeOut(withDuration: 0.45)])]),
+                            .removeFromParent()]))
+    }
+
+    /// Mercury Dash: the Sun's glare on the glass, pulsing, and the planet shimmering in the heat.
+    private func mercuryHeat() {
+        let glare = SKSpriteNode(texture: Self.glow, size: CGSize(width: radius * 2.4, height: radius * 2.4))
+        glare.position = CGPoint(x: center.x - radius * 0.65, y: center.y + radius * 0.6)
+        glare.blendMode = .add
+        glare.color = SKColor(red: 1.0, green: 0.80, blue: 0.48, alpha: 1)
+        glare.colorBlendFactor = 1
+        glare.alpha = 0
+        glare.zPosition = 0.2
+        fx.addChild(glare)
+        let pulse = SKAction.sequence([.fadeAlpha(to: 0.62, duration: 0.6), .fadeAlpha(to: 0.38, duration: 0.6)])
+        pulse.timingMode = .easeInEaseOut
+        glare.run(.sequence([.wait(forDuration: 0.6), .repeatForever(pulse)]))
+        let wash = SKSpriteNode(color: SKColor(red: 1.0, green: 0.55, blue: 0.2, alpha: 1),
+                                size: CGSize(width: radius * 2, height: radius * 2))
+        wash.position = center
+        wash.blendMode = .add
+        wash.alpha = 0
+        wash.zPosition = 0.19
+        fx.addChild(wash)
+        wash.run(.sequence([.wait(forDuration: 0.6), .fadeAlpha(to: 0.10, duration: 0.5)]))
+        planet?.run(.sequence([.wait(forDuration: 0.75), .repeatForever(.customAction(withDuration: 2.0) { n, t in
+            n.xScale = 1 + 0.014 * sin(t * .pi * 6)
+            n.yScale = 1 + 0.014 * sin(t * .pi * 4.6 + 1)
+        })]), withKey: "shimmer")
+    }
+
+    /// Venus Veil: thick yellow-white clouds cover the planet; each reveal (a R-O-C-K-E-T hit) blows a third away.
+    private func venusVeil() {
+        var seq = Seq(s: 77)
+        let count = 9
+        venusPerReveal = 3
+        for i in 0..<count {
+            let a = CGFloat(i) / CGFloat(count) * .pi * 2 + seq.next() * 0.6
+            let d = (i == 0 ? 0 : radius * (0.18 + 0.30 * seq.next()))
+            let size = radius * (0.85 + 0.45 * seq.next())
+            let puff = SKSpriteNode(texture: Self.cloud, size: CGSize(width: size * 1.3, height: size))
+            puff.position = i == 0 ? center : CGPoint(x: center.x + cos(a) * d, y: center.y + sin(a) * d)
+            puff.color = SKColor(red: 0.96, green: 0.90, blue: 0.72, alpha: 1)
+            puff.colorBlendFactor = 1
+            puff.alpha = 0
+            puff.zPosition = 0.5
+            puff.name = "fx"
+            planetLayer.addChild(puff)
+            let drift = SKAction.moveBy(x: 3 + 3 * seq.next(), y: 0, duration: 3 + 2 * seq.next())
+            drift.timingMode = .easeInEaseOut
+            puff.run(.sequence([.wait(forDuration: 0.6 + 0.05 * Double(i)), .fadeAlpha(to: 0.92, duration: 0.5),
+                                .repeatForever(.sequence([drift, drift.reversed()]))]))
+            venusClouds.append(puff)
+        }
+        venusClouds.shuffle()
+    }
+
+    /// Venus: a shot revealed — a third of the clouds blow away.
+    func venusReveal() {
+        for _ in 0..<min(venusPerReveal, venusClouds.count) {
+            let puff = venusClouds.removeLast()
+            puff.name = nil
+            let away = SKAction.moveBy(x: (puff.position.x - center.x) * 1.6 + 6, y: (puff.position.y - center.y) * 1.6,
+                                       duration: 0.7)
+            away.timingMode = .easeIn
+            puff.run(.sequence([.group([away, .fadeOut(withDuration: 0.7), .scale(to: 1.4, duration: 0.7)]),
+                                .removeFromParent()]))
+        }
+    }
+
+    /// Mars Recon: a dust storm blowing across the planet, gusting.
+    private func marsDust() {
+        let dust = SKEmitterNode()
+        dust.particleTexture = Self.cloud
+        dust.particleBirthRate = 0
+        dust.particleLifetime = 2.6
+        dust.particleLifetimeRange = 0.6
+        dust.emissionAngle = 0.12
+        dust.emissionAngleRange = 0.35
+        dust.particleSpeed = 48
+        dust.particleSpeedRange = 18
+        dust.particlePositionRange = CGVector(dx: 6, dy: radius * 2)
+        dust.particleSize = CGSize(width: 18, height: 12)
+        dust.particleScaleRange = 0.5
+        dust.particleScaleSpeed = 0.25
+        dust.particleColor = SKColor(red: 0.86, green: 0.48, blue: 0.24, alpha: 1)
+        dust.particleColorBlendFactor = 1
+        dust.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0, 0.5, 0.35, 0] as [NSNumber],
+                                                        times: [0, 0.2, 0.7, 1])
+        dust.position = CGPoint(x: center.x - radius - 8, y: center.y)
+        dust.zPosition = 0.5
+        dust.particleZPosition = 0.5
+        dust.name = "fx"
+        planetLayer.addChild(dust)
+        dust.advanceSimulationTime(0)
+        dust.run(.sequence([.wait(forDuration: 0.6), .repeatForever(.sequence([
+            .run { dust.particleBirthRate = 26 }, .wait(forDuration: 1.6),
+            .run { dust.particleBirthRate = 60 }, .wait(forDuration: 1.1)]))]))
+    }
+
+    /// Pluto: frost creeps in from the rim of the glass over the stop's 30 s, glittering.
+    private func plutoFrost() {
+        let frost = SKSpriteNode(texture: Self.frost, size: CGSize(width: radius * 2, height: radius * 2))
+        frost.position = center
+        frost.color = SKColor(red: 0.82, green: 0.92, blue: 1.0, alpha: 1)
+        frost.colorBlendFactor = 1
+        frost.blendMode = .add
+        frost.alpha = 0
+        frost.setScale(1.45)
+        frost.zPosition = 0.2
+        fx.addChild(frost)
+        let creep = SKAction.group([.scale(to: 1.0, duration: 30), .fadeAlpha(to: 0.8, duration: 8)])
+        creep.timingMode = .easeOut
+        frost.run(.sequence([.wait(forDuration: 0.6), creep]))
+        let glitter = SKEmitterNode()
+        glitter.particleTexture = Self.glow
+        glitter.particleBirthRate = 7
+        glitter.particleLifetime = 0.9
+        glitter.particleLifetimeRange = 0.4
+        glitter.particleSpeed = 0
+        glitter.particlePositionRange = CGVector(dx: radius * 1.9, dy: radius * 1.9)
+        glitter.particleSize = CGSize(width: 4, height: 4)
+        glitter.particleBlendMode = .add
+        glitter.particleColor = SKColor(red: 0.85, green: 0.95, blue: 1.0, alpha: 1)
+        glitter.particleColorBlendFactor = 1
+        glitter.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0, 1, 0] as [NSNumber], times: [0, 0.4, 1])
+        glitter.position = center
+        glitter.zPosition = 0.21
+        glitter.particleZPosition = 0.21
+        fx.addChild(glitter)
+    }
+
+    /// A soft flat-topped puff (clouds, dust).
+    private static let cloud: SKTexture = {
+        let size = CGSize(width: 64, height: 64)
+        let image = UIGraphicsImageRenderer(size: size).image { ctx in
+            let colors = [UIColor(white: 1, alpha: 1).cgColor, UIColor(white: 1, alpha: 0.85).cgColor,
+                          UIColor(white: 1, alpha: 0).cgColor] as CFArray
+            let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.45, 1])!
+            ctx.cgContext.drawRadialGradient(g, startCenter: CGPoint(x: 32, y: 32), startRadius: 0,
+                                             endCenter: CGPoint(x: 32, y: 32), endRadius: 32, options: [])
+        }
+        return SKTexture(image: image)
+    }()
+
+    /// Frost on the glass: clear in the middle, white toward the rim, ragged.
+    private static let frost: SKTexture = {
+        let side = 128
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
+            let c = CGFloat(side) / 2
+            let colors = [UIColor(white: 1, alpha: 0).cgColor, UIColor(white: 1, alpha: 0).cgColor,
+                          UIColor(white: 1, alpha: 0.75).cgColor, UIColor(white: 1, alpha: 1).cgColor] as CFArray
+            let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.55, 0.85, 1])!
+            ctx.cgContext.drawRadialGradient(g, startCenter: CGPoint(x: c, y: c), startRadius: 0,
+                                             endCenter: CGPoint(x: c, y: c), endRadius: c, options: [])
+            var seq = Seq(s: 5)                              // frost fingers reaching in from the rim
+            ctx.cgContext.setStrokeColor(UIColor(white: 1, alpha: 0.55).cgColor)
+            for _ in 0..<40 {
+                let a = seq.next() * .pi * 2
+                let r0 = c * 0.98, r1 = c * (0.55 + 0.3 * seq.next())
+                ctx.cgContext.setLineWidth(0.6 + 1.4 * seq.next())
+                ctx.cgContext.move(to: CGPoint(x: c + cos(a) * r0, y: c + sin(a) * r0))
+                let b = a + (seq.next() - 0.5) * 0.25
+                ctx.cgContext.addLine(to: CGPoint(x: c + cos(b) * r1, y: c + sin(b) * r1))
+                ctx.cgContext.strokePath()
+            }
+        }
+        return SKTexture(image: image)
+    }()
 
     /// A soft white dot (the ship and its trail).
     private static let glow: SKTexture = {

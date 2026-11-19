@@ -863,9 +863,13 @@ final class TourTableScene: SKScene, RendererHostedScene {
         case .none:
             return
         case .counting:                                      // M8 v5: a spin / bumper toward a step
+            if let s = modes.active {                        // M9 r4
+                planetWindow?.effectProgress(s.planet, made: modes.made, count: modes.count)
+            }
             updateModeStatus(force: true)
         case .progress:
             game.add(TourPoints.modeShot)
+            if let s = modes.active { planetWindow?.effectStep(s.planet, made: modes.made) }   // M9 r4
             if let s = modes.active { showBanner("\(s.title) · \(modes.stepText)") }
             if case .sun? = modes.active?.kind {             // M8 v6: a floor jackpot, then the super
                 let v = TourPoints.sunJackpot * modes.tourNumber
@@ -2131,7 +2135,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M9 r3")
+        let label = SKLabelNode(text: "T6 M9 r4")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2177,7 +2181,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M9 r3 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M9 r4 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

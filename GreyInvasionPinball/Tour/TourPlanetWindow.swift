@@ -203,6 +203,150 @@ final class TourPlanetWindow: SKNode {
             .removeFromParent()]))
     }
 
+    // MARK: - M9 r4: the outer leg's effects
+
+    private var swirl: SKSpriteNode?
+    private var deepTint: SKSpriteNode?
+    private var planetSunk = false
+
+    /// A spin or bumper counted toward the running stop's step (`made` steps done, `count` toward the next).
+    func effectProgress(_ name: String, made: Int, count: Int) {
+        switch name {
+        case "jupiter" where made == 0:              // the storm spins up with the spinners
+            let p = min(1, CGFloat(count) / CGFloat(TourModes.jupiterSpins))
+            swirl?.alpha = 0.18 + 0.62 * p
+            swirl?.speed = 0.4 + 2.6 * p
+        case "neptune" where made == 0:              // diving: the planet sinks and the blue deepens
+            let p = min(1, CGFloat(count) / CGFloat(TourModes.neptuneSpins))
+            planet?.setScale(1 - 0.2 * p)
+            planetSunk = true
+            deepTint?.alpha = 0.45 * p
+        case "neptune":                              // the bumpers: a pulse of cold light each
+            ring(SKColor(red: 0.35, green: 0.6, blue: 1.0, alpha: 1), to: 0.6)
+        default: break
+        }
+    }
+
+    /// A step of the running stop was made.
+    func effectStep(_ name: String, made: Int) {
+        switch name {
+        case "jupiter":                              // the storm breaks: lightning
+            swirl?.alpha = 0.9
+            swirl?.speed = 3
+            lightning()
+        case "saturn": glint(angle: -0.32, color: SKColor(red: 1.0, green: 0.93, blue: 0.75, alpha: 1))
+        case "uranus": glint(angle: 1.35, color: SKColor(red: 0.6, green: 1.0, blue: 0.95, alpha: 1))
+        case "neptune":
+            ring(SKColor(red: 0.35, green: 0.6, blue: 1.0, alpha: 1))
+        default: break
+        }
+    }
+
+    /// Jupiter Storm: a spiral storm over the planet, faint and slow until the spinners wind it up.
+    private func jupiterStorm() {
+        let s = SKSpriteNode(texture: Self.spiral, size: CGSize(width: radius * 1.5, height: radius * 1.5))
+        s.position = CGPoint(x: center.x + radius * 0.08, y: center.y - radius * 0.06)
+        s.blendMode = .add
+        s.color = SKColor(red: 1.0, green: 0.78, blue: 0.55, alpha: 1)
+        s.colorBlendFactor = 1
+        s.alpha = 0
+        s.zPosition = 0.5
+        s.name = "fx"
+        s.yScale = 0.8                              // seen a little edge-on, like the bands
+        planetLayer.addChild(s)
+        s.speed = 0.4
+        s.run(.sequence([.wait(forDuration: 0.6), .fadeAlpha(to: 0.18, duration: 0.4)]))
+        s.run(.repeatForever(.rotate(byAngle: -.pi * 2, duration: 4)))
+        swirl = s
+    }
+
+    private func lightning() {
+        for k in 0..<3 {
+            let bolt = SKSpriteNode(texture: Self.glow, size: CGSize(width: radius * 0.9, height: radius * 0.9))
+            bolt.position = CGPoint(x: center.x + CGFloat(k - 1) * radius * 0.3, y: center.y + CGFloat(k % 2) * 6 - 3)
+            bolt.blendMode = .add
+            bolt.color = SKColor(red: 0.8, green: 0.85, blue: 1.0, alpha: 1)
+            bolt.colorBlendFactor = 1
+            bolt.alpha = 0
+            bolt.zPosition = 0.3
+            fx.addChild(bolt)
+            bolt.run(.sequence([.wait(forDuration: 0.12 * Double(k)), .fadeAlpha(to: 1, duration: 0.03),
+                                .fadeAlpha(to: 0.2, duration: 0.06), .fadeAlpha(to: 0.9, duration: 0.03),
+                                .fadeOut(withDuration: 0.3), .removeFromParent()]))
+        }
+    }
+
+    /// A streak of light sweeping across the planet along `angle` (Saturn's rings, Uranus's).
+    private func glint(angle: CGFloat, color: SKColor) {
+        let g = SKSpriteNode(texture: Self.glow, size: CGSize(width: radius * 0.7, height: 5))
+        g.blendMode = .add
+        g.color = color
+        g.colorBlendFactor = 1
+        g.zRotation = angle
+        g.zPosition = 0.3
+        let dx = cos(angle) * radius * 1.1, dy = sin(angle) * radius * 1.1
+        g.position = CGPoint(x: center.x - dx, y: center.y - dy)
+        g.alpha = 0
+        fx.addChild(g)
+        let sweep = SKAction.move(to: CGPoint(x: center.x + dx, y: center.y + dy), duration: 0.55)
+        sweep.timingMode = .easeInEaseOut
+        g.run(.sequence([.group([sweep, .sequence([.fadeAlpha(to: 1, duration: 0.12), .wait(forDuration: 0.25),
+                                                   .fadeOut(withDuration: 0.18)])]), .removeFromParent()]))
+    }
+
+    /// Uranus Roll: a cold cyan glow breathing on the glass.
+    private func uranusCold() {
+        let wash = SKSpriteNode(texture: Self.glow, size: CGSize(width: radius * 3, height: radius * 3))
+        wash.position = center
+        wash.blendMode = .add
+        wash.color = SKColor(red: 0.4, green: 0.95, blue: 0.9, alpha: 1)
+        wash.colorBlendFactor = 1
+        wash.alpha = 0
+        wash.zPosition = 0.2
+        fx.addChild(wash)
+        let breathe = SKAction.sequence([.fadeAlpha(to: 0.32, duration: 1.4), .fadeAlpha(to: 0.16, duration: 1.4)])
+        breathe.timingMode = .easeInEaseOut
+        wash.run(.sequence([.wait(forDuration: 0.6), .repeatForever(breathe)]))
+    }
+
+    /// Neptune Deep: the blue that deepens as the planet sinks (driven by `effectProgress`).
+    private func neptuneDeep() {
+        let tint = SKSpriteNode(color: SKColor(red: 0.02, green: 0.08, blue: 0.35, alpha: 1),
+                                size: CGSize(width: radius * 2, height: radius * 2))
+        tint.position = center
+        tint.alpha = 0
+        tint.zPosition = 0.6
+        tint.name = "fx"
+        planetLayer.addChild(tint)
+        deepTint = tint
+    }
+
+    /// A loose three-armed spiral (Jupiter's storm), drawn once.
+    private static let spiral: SKTexture = {
+        let side: CGFloat = 128
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
+            let g = ctx.cgContext
+            let c = side / 2
+            g.setLineCap(.round)
+            for arm in 0..<3 {
+                var prev: CGPoint?
+                for i in 0...60 {
+                    let t = CGFloat(i) / 60
+                    let a = CGFloat(arm) * .pi * 2 / 3 + t * .pi * 2.2
+                    let r = c * (0.08 + 0.86 * t)
+                    let p = CGPoint(x: c + cos(a) * r, y: c + sin(a) * r)
+                    if let q = prev {
+                        g.setStrokeColor(UIColor(white: 1, alpha: 0.85 * (1 - t) + 0.1).cgColor)
+                        g.setLineWidth(2 + 7 * (1 - t))
+                        g.move(to: q); g.addLine(to: p); g.strokePath()
+                    }
+                    prev = p
+                }
+            }
+        }
+        return SKTexture(image: image)
+    }()
+
     // MARK: - M9 r3: planet effects (the inner leg and Pluto; the outer leg is r4)
 
     /// What runs over the planet while its stop is on: Mercury's glare and shimmer, Venus's clouds, Mars's dust, Pluto's
@@ -219,6 +363,9 @@ final class TourPlanetWindow: SKNode {
         case "venus": venusVeil()
         case "mars": marsDust()
         case "pluto": plutoFrost()
+        case "jupiter": jupiterStorm()                 // M9 r4
+        case "uranus": uranusCold()
+        case "neptune": neptuneDeep()
         default: break
         }
     }
@@ -230,6 +377,8 @@ final class TourPlanetWindow: SKNode {
             p.run(.scale(to: 1, duration: 0.2))
         }
         venusClouds = []
+        swirl = nil; deepTint = nil                       // M9 r4
+        if planetSunk { planetSunk = false; planet?.run(.scale(to: 1, duration: 0.4)) }
         let nodes = fx.children + planetLayer.children.filter { $0.name == "fx" }
         for n in nodes {
             n.name = nil
@@ -259,7 +408,7 @@ final class TourPlanetWindow: SKNode {
     }
 
     /// A ring of light running out from the planet to the rim (a Moon lock, a visit).
-    func ring(_ color: SKColor) {
+    func ring(_ color: SKColor, to reach: CGFloat = 1.1) {
         let r0: CGFloat = 8
         let ring = SKShapeNode(circleOfRadius: r0)
         ring.position = center
@@ -270,7 +419,7 @@ final class TourPlanetWindow: SKNode {
         ring.blendMode = .add
         ring.zPosition = 0.25
         fx.addChild(ring)
-        let grow = SKAction.scale(to: radius * 1.1 / r0, duration: 0.7)
+        let grow = SKAction.scale(to: radius * reach / r0, duration: 0.7)
         grow.timingMode = .easeOut
         ring.run(.sequence([.group([grow, .sequence([.wait(forDuration: 0.25), .fadeOut(withDuration: 0.45)])]),
                             .removeFromParent()]))

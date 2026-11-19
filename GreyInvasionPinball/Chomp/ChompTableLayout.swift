@@ -646,3 +646,25 @@ enum ChompTableLayout {
         }
     }
 }
+
+// MARK: - Milestone 3 v15: the fin
+extension ChompTableLayout {
+    /// The fin's slot, traced off p. 40 (the white slot in the cyan kidney right of centre): from its upper-left end
+    /// over the top and down to its lower-right end above the bumper.
+    static let finSlot: [CGPoint] = [
+        CGPoint(x: 313, y: 841), CGPoint(x: 329, y: 848), CGPoint(x: 349.5, y: 854.6), CGPoint(x: 369.7, y: 858.7),
+        CGPoint(x: 394, y: 860), CGPoint(x: 407.6, y: 857), CGPoint(x: 421, y: 853), CGPoint(x: 445, y: 843.7),
+        CGPoint(x: 459, y: 833), CGPoint(x: 472, y: 818), CGPoint(x: 483, y: 802), CGPoint(x: 490, y: 785),
+        CGPoint(x: 494.6, y: 769),
+    ]
+    /// The fin's centre travels s 15…215 of the slot's 229.5 (tools/fin_geom.py: the blade stays ≥ 53 off the bumper's
+    /// rubber and ≥ 46 off the plunger lane's wall, so a ball passes it everywhere).
+    static let finMinS: CGFloat = 15
+    static let finMaxS: CGFloat = 215
+    /// The blade (top view), along the slot: about the real carriage's size.
+    static let finLength: CGFloat = 40
+    static let finThickness: CGFloat = 10
+    /// Placeholders until the rules (M4): roams 35 pt/s (~6 s end to end); a hit drops it, up again after 6 s.
+    static let finRoamSpeed: CGFloat = 35
+    static let finRelightTime: TimeInterval = 6
+}

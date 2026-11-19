@@ -73,6 +73,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var boat: ChompCaptiveBall?
     /// M3 v9: the fishing reel's disc.
     private var reel: ChompReel?
+    private var fin: ChompFin?
+    private var finHitPending = false
     #if DEBUG
     /// M2 v6: the Shot Lab robot (shared ShotLab, Table 06's host pattern) and its own clock.
     fileprivate var shotLab: ShotLab?
@@ -532,6 +534,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addWall(points: ChompTableLayout.rampIsland)       // M3 v8: the real plastics that close the stuck-ball traps
         addWall(points: ChompTableLayout.bankWedge)
         addReel()
+        addFin()
         let b = ChompCaptiveBall(mouth: ChompTableLayout.boatMouth, heading: .pi / 2,
                                  length: ChompTableLayout.boatChannelLength, halfWidth: ChompTableLayout.boatHalfWidth,
                                  postRadius: ChompTableLayout.boatPostRadius, lip: ChompTableLayout.boatLip)
@@ -546,6 +549,35 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         let r = ChompReel(centre: ChompTableLayout.reelCentre, radius: ChompTableLayout.reelDiscRadius)
         addChild(r)
         reel = r
+    }
+
+    /// M3 v15: the fin — its slot in the floor and the blade that roams along it.
+    private func addFin() {
+        let f = ChompFin(slot: ChompTableLayout.finSlot, minS: ChompTableLayout.finMinS, maxS: ChompTableLayout.finMaxS,
+                         length: ChompTableLayout.finLength, thickness: ChompTableLayout.finThickness)
+        addChild(f.slotNode())
+        addChild(f)
+        fin = f
+    }
+
+    /// M3 v15: a hit drops the fin (placeholder: up again after finRelightTime, if no ball is over it); while up it roams.
+    private func updateFin(_ dt: CGFloat, _ now: TimeInterval) {
+        guard let f = fin else { return }
+        if finHitPending {
+            finHitPending = false
+            if f.isUp {
+                f.drop(at: now)
+                labEvent("fin")
+                game.add(ChompPoints.fin)
+                hitHaptic.impactOccurred(intensity: 0.8)
+                sfx(.standup)
+                showBanner("FIN")
+            }
+        }
+        if !f.isUp, now - f.droppedAt >= ChompTableLayout.finRelightTime {
+            f.raise(clearOf: balls.filter { $0.isOnFloor }.map { $0.position }, ballRadius: ChompTableLayout.ballRadius)
+        }
+        f.update(dt: dt, speed: ChompTableLayout.finRoamSpeed)
     }
 
     /// M3 v9: a floor ball crossing into the keyhole's round end kicks the reel (stronger shots, more turns).
@@ -860,7 +892,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M3 v14d")
+        let label = SKLabelNode(text: "T7 M3 v15b")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -977,6 +1009,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         resetBank()
         boat?.reset()
         reel?.reset()
+        fin?.reset()
+        finHitPending = false
         ballSaveUsed = false
         game.reset()
         placeBallOnPlunger()
@@ -1209,6 +1243,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         updateSpinner(dt, now)
         updateReel(dt, now)
         updateBoat(now)
+        updateFin(dt, now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
 
         if let due = bannerClearAt, now >= due {
@@ -1435,6 +1470,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 }
                 break
             }
+            // M3 v15: the fin drops (in update, not here).
+            if node === fin { finHitPending = true; break }
             // The buoy: two hits inside the window light the inner tube.
             if node === buoy {
                 let since = gameTime - buoyLastHit
@@ -1530,6 +1567,8 @@ extension ChompTableScene: ShotLabHost {
         nextBallAt = nil
         resetBank()
         boat?.reset()
+        fin?.reset()
+        finHitPending = false
         bankRelightPending = false
         setUpPost(0, up: false)
         setUpPost(1, up: false)
@@ -1577,6 +1616,7 @@ extension ChompTableScene: ShotLabHost {
         updateSpinner(dt, now)
         updateReel(dt, now)
         updateBoat(now)
+        updateFin(dt, now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
         if lab.update(now: now) {
             game.banner = lab.progressText

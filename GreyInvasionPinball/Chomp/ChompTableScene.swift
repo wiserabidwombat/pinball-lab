@@ -28,6 +28,17 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var fpsShown = 0
     private var fpsWorstShown = 0
     private var fpsLow = 0
+    /// M3 v19b (Aaron: "lows 102 fps, 13 ms; the ball doesn't move super smooth, very subtle steps"): what the frames
+    /// look like — jitter (the spread of frame-to-frame gaps), missed frames (a gap over 10.8 ms) and our CPU time per
+    /// frame (update → physics → didSimulatePhysics → camera; render encoding is not included), each over 0.5 s.
+    private var fpsGapSum: Double = 0
+    private var fpsGapSq: Double = 0
+    private var fpsMisses = 0
+    private var cpuStart: CFTimeInterval = 0
+    private var cpuSum: Double = 0
+    private var cpuWorst: Double = 0
+    private var cpuFrames = 0
+    private var frameStatsShown = ""
     private var lastStep: CGFloat = 0
 
     private var balls: [ChompBall] = []
@@ -153,7 +164,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M3 v19"
+    static let buildTagText = "T7 M3 v19c"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -260,6 +271,35 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addRightRamp()
         addPlunger()
         addLaunchGate()
+        if ChompTableLayout.flattenStaticArt { flattenStaticArt() }
+    }
+
+    /// M3 v19c: paints the shapes that never change into two sprites (ChompFlatten): the floor level — the floor, the
+    /// walls (wall-category edge bodies) and the ramps' floor-level parts (shadows, feet, plastic edges) — under
+    /// everything that moves or lights, and the ramps' raised parts (plastics, wires, ties, posts) at z 15: over floor
+    /// balls (10), targets and the bumper, under the ramp labels (20–21), the reel (22) and ramp balls (29–30), as before.
+    private func flattenStaticArt() {
+        var low: [SKShapeNode] = []
+        var high: [SKShapeNode] = []
+        for case let n as SKShapeNode in children where n !== plunger {
+            if n.zPosition == -20 { low.append(n); continue }          // the floor
+            if let body = n.physicsBody, body.categoryBitMask == ChompPhysicsCategory.wall,
+               !upPosts.contains(where: { $0 === n }), n.zPosition <= -5 {
+                low.append(n)
+            }
+        }
+        for ramp in ramps {
+            ramp.enumerateChildNodes(withName: ".//*") { node, _ in
+                guard let shape = node as? SKShapeNode else { return }
+                var z = shape.zPosition
+                var p = shape.parent
+                while let cur = p, cur !== self { z += cur.zPosition; p = cur.parent }
+                if z <= -5 { low.append(shape) } else if z >= 11 { high.append(shape) }
+            }
+        }
+        let pixels = min(max(UITraitCollection.current.displayScale, 2), 3)
+        ChompFlatten.flatten(low, in: self, spriteZ: -19.5, pixelsPerPoint: pixels)
+        ChompFlatten.flatten(high, in: self, spriteZ: 15, pixelsPerPoint: pixels)
     }
 
     /// The playfield floor inside the outer wall.
@@ -996,15 +1036,25 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         fpsLastFrame = t
         if gap > 0.5 {
             fpsWindowStart = t; fpsFrames = 0; fpsWorstGap = 0
+            fpsGapSum = 0; fpsGapSq = 0; fpsMisses = 0; cpuSum = 0; cpuWorst = 0; cpuFrames = 0
         } else {
             fpsFrames += 1
             fpsWorstGap = max(fpsWorstGap, gap)
+            fpsGapSum += gap; fpsGapSq += gap * gap
+            if gap > 0.0108 { fpsMisses += 1 }
             let window = t - fpsWindowStart
             if window >= 0.5 {
                 fpsShown = Int((Double(fpsFrames) / window).rounded())
                 fpsWorstShown = Int((fpsWorstGap * 1000).rounded())
                 if fpsLow == 0 || fpsShown < fpsLow { fpsLow = fpsShown }
+                let n = Double(max(fpsFrames, 1))
+                let mean = fpsGapSum / n
+                let jitter = sqrt(max(0, fpsGapSq / n - mean * mean)) * 1000
+                let cpuAvg = cpuFrames > 0 ? cpuSum / Double(cpuFrames) * 1000 : 0
+                frameStatsShown = String(format: "jitter %.2f ms · missed %d · cpu %.1f / %.1f ms\n",
+                                         jitter, fpsMisses, cpuAvg, cpuWorst * 1000)
                 fpsWindowStart = t; fpsFrames = 0; fpsWorstGap = 0
+                fpsGapSum = 0; fpsGapSq = 0; fpsMisses = 0; cpuSum = 0; cpuWorst = 0; cpuFrames = 0
             }
         }
         guard gameTime - buildTagAt >= 0.25 else { return }
@@ -1014,7 +1064,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)\(Self.buildTagText) \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)\(frameStatsShown)\(Self.buildTagText) \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1279,6 +1329,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     // MARK: - Game loop
 
     override func update(_ realTime: TimeInterval) {
+        cpuStart = CACurrentMediaTime()
         let step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
         lastRealTime = realTime
         gameTime += step
@@ -1496,6 +1547,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     override func didFinishUpdate() {
         guard isBuilt, !isPaused else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: lastStep)
+        if cpuStart > 0 {
+            let cpu = CACurrentMediaTime() - cpuStart
+            cpuSum += cpu; cpuWorst = max(cpuWorst, cpu); cpuFrames += 1
+        }
         placeBuildTag()
     }
 

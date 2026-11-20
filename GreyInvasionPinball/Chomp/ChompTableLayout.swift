@@ -722,3 +722,9 @@ extension ChompTableLayout {
          CGPoint(x: 483, y: 935)],
     ]
 }
+
+// MARK: - M3 v19c: frame smoothness
+extension ChompTableLayout {
+    /// Paint the static shapes into sprites at load (ChompFlatten); false = draw every SKShapeNode live, as before.
+    static let flattenStaticArt = true
+}

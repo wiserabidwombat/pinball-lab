@@ -119,6 +119,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
     // Game clock: advances by the clamped frame time only, so pauses and hitches never eat timers.
     private var lastRealTime: TimeInterval?
     private var gameTime: TimeInterval = 0
+    private var cleanShotPrinted = -1                 // M10 r2 (DEBUG)
     /// M9 r6 (Aaron: the camera chased the ball and he missed the launch): liftoff holds play. `Pending` is set at
     /// the countdown's last hit and taken up at the next frame (after the physics has resolved that hit), then for
     /// `liftoffFreezeSeconds` the game clock, the physics and the flippers stand still while the show plays.
@@ -464,6 +465,46 @@ final class TourTableScene: SKScene, RendererHostedScene {
         }
         #endif
     }
+
+    #if DEBUG
+    /// M10 r3: `-playlab grandtour -tourCleanShot -tourPose <name>` (TourTableView) — the table posed for a How to Play
+    /// goal picture (tools/tour_howto_goals.py): no ball, the rules' lamps for that goal, then the scene pauses 1.8 s
+    /// later so effects have settled. Prints `TOURPOSE <name> lit <shots>` for the script's shot paths.
+    func debugPose(_ name: String) {
+        for b in balls { removeBall(b) }
+        switch name {
+        case "liftoff": break
+        case "mission":
+            countdownLeft = 0
+            blastDoor.drop()
+            showCountdown()
+            updateShotArrows()
+        case "saves":
+            setRocketPost(up: true)
+            setKickbackLit(true)
+        case "lanes":
+            for (i, l) in rollovers.enumerated() { l.isLit = i != 1; l.lamp?.isOn = l.isLit }
+            for (i, l) in starLanes.enumerated() { l.isLit = i != 2; l.lamp?.isOn = l.isLit }
+            sun?.setLevel(3)
+        case "pluto":
+            modes.debugLightPluto()
+            startNextStop()
+        default:
+            modes.debugSkip(to: name)
+            startNextStop()
+            switch name {
+            case "venus": if let r = rocketStandups.first { hitStandup(r) }
+            case "jupiter": modeEvent("spin", amount: 30)
+            case "neptune": modeEvent("spin", amount: 40)
+            case "sun":
+                for shot in modes.lit.sorted().prefix(2) { modeShot(shot) }
+            default: break
+            }
+        }
+        print("TOURPOSE \(name) lit \(modes.lit.sorted().joined(separator: ","))")
+        run(.sequence([.wait(forDuration: 1.8), .run { [weak self] in self?.isPaused = true }]))
+    }
+    #endif
 
     /// M3 v11: K-E-T, the second half of R-O-C-K-E-T (rocketStandups 3–5), on its backboard right of the rocket.
     private func addKET() {
@@ -2261,7 +2302,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M10 r1")
+        let label = SKLabelNode(text: "T6 M10 r3")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2284,6 +2325,16 @@ final class TourTableScene: SKScene, RendererHostedScene {
     private func placeBuildTag() {
         guard let buildTag else { return }
         buildTag.position = CGPoint(x: -size.width / 2 + 10, y: -size.height / 2 + 10)
+        #if DEBUG
+        if TourTableView.cleanShot {                        // M10 r2: How to Play pictures — no tag; the camera's mapping
+            buildTag.isHidden = true
+            let c = cameraRig.node.position
+            if Int(gameTime * 2) != cleanShotPrinted {
+                cleanShotPrinted = Int(gameTime * 2)
+                print("TOURMAP cam \(c.x) \(c.y) scale \(cameraRig.node.xScale) view \(size.width) \(size.height)")
+            }
+        }
+        #endif
         let t = CACurrentMediaTime()
         let gap = t - fpsLastFrame
         fpsLastFrame = t
@@ -2310,7 +2361,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M10 r1 \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M10 r3 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

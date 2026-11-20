@@ -13,6 +13,7 @@ struct TourTableView: View {
     @State private var scene: TourTableScene
     @State private var screen: Screen = .menu
     @State private var isPaused = false
+    @State private var showHowTo = false         // M10 r2: How to Play (menu and pause)
     #if DEBUG
     @State private var parallaxLabel = "Parallax: ×1"     // M5 v4
     @State private var lightingLabel = TourTableScene.lightingLabel     // M5 v6
@@ -34,12 +35,19 @@ struct TourTableView: View {
         _scene = State(initialValue: scene)
     }
 
+    /// M10 r2: DEBUG `-tourCleanShot` (with `-playlab grandtour`): no HUD and no build tag, for How to Play pictures.
+    #if DEBUG
+    static let cleanShot = ProcessInfo.processInfo.arguments.contains("-tourCleanShot")
+    #else
+    static let cleanShot = false
+    #endif
+
     var body: some View {
         ZStack {
             TableSKView(scene: scene, preferredFramesPerSecond: DisplayRate.max)   // 120 or the screen's 60; SKRenderer on devices (iPad pacing)
                 .ignoresSafeArea()
 
-            if screen == .playing {
+            if screen == .playing, !Self.cleanShot {          // M10 r2: DEBUG `-tourCleanShot` hides the HUD
                 playingOverlay
             }
 
@@ -52,6 +60,10 @@ struct TourTableView: View {
                 gameOverOverlay
             default:
                 EmptyView()
+            }
+
+            if showHowTo {                                  // M10 r2
+                TourHowToPlayView { showHowTo = false }
             }
         }
         .onPreferenceChange(TourHUDBottomKey.self) { bottom in
@@ -71,13 +83,22 @@ struct TourTableView: View {
             // unattended (tools/shotlab_run.sh grandtour), as on the other tables.
             // M4 v1: `-playlab grandtour` (tools/playlab_run.sh grandtour): the Play Lab unattended (quits when done).
             // M7 v5: `-playlab grandtour -tourAttract` opens the table and stays on its menu (the attract show).
+            // M10 r2: add `-tourHowTo` to open How to Play over that menu.
+            if ProcessInfo.processInfo.arguments.contains("-tourHowTo") { showHowTo = true }
             if PlayLab.launchTable == "grandtour", !ProcessInfo.processInfo.arguments.contains("-tourAttract") {
                 Task { @MainActor in
                     while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
-                    scene.debugStartPlayLab()
+                    let args = ProcessInfo.processInfo.arguments
+                    if let i = args.firstIndex(of: "-tourPose"), i + 1 < args.count {   // M10 r3: a How to Play pose
+                        scene.newGame()
+                        try? await Task.sleep(for: .milliseconds(800))
+                        scene.debugPose(args[i + 1])
+                    } else {
+                        scene.debugStartPlayLab()
+                    }
                 }
             }
             if PlayLab.launchTable == nil, ShotLab.launchTable == "grandtour" {
@@ -115,6 +136,7 @@ struct TourTableView: View {
     }
 
     private func gamepadA() {
+        guard !showHowTo else { showHowTo = false; return }   // M10 r2: A closes How to Play
         switch screen {
         case .menu:
             startGame()
@@ -124,7 +146,7 @@ struct TourTableView: View {
     }
 
     private func gamepadMenu() {
-        guard screen == .playing, !game.isGameOver else { return }
+        guard !showHowTo, screen == .playing, !game.isGameOver else { return }
         setPaused(!isPaused)
     }
 
@@ -265,6 +287,7 @@ struct TourTableView: View {
                 Spacer()
 
                 overlayButton("Play", prominent: true, action: startGame)
+                overlayButton("How to Play") { showHowTo = true }     // M10 r2
                 cameraButton
 
                 Text("Touch left or right to flip · pull down to launch")
@@ -304,6 +327,7 @@ struct TourTableView: View {
                 .foregroundStyle(.white.opacity(0.75))
             overlayButton("Resume", prominent: true) { setPaused(false) }
                 .padding(.top, 8)
+            overlayButton("How to Play") { showHowTo = true }         // M10 r2
             cameraButton
             volumeRow
             overlayButton("Restart", action: startGame)

@@ -60,6 +60,8 @@ final class TourPlanetWindow: SKNode {
         crop.addChild(planetLayer)
         fx.zPosition = 0.03                   // M9 r3: effects on the glass, over the planet
         crop.addChild(fx)
+        // M10 r1: draw the effects' textures now, not on their first use mid-game (a hitch when a stop starts)
+        SKTexture.preload([Self.glow, Self.cloud, Self.frost, Self.spiral]) { }
         textures = Self.stops.compactMap { UIImage(named: "tour_window_" + $0).map { SKTexture(image: $0) } }
         if textures.count == Self.stops.count {
             SKTexture.preload(textures) { }

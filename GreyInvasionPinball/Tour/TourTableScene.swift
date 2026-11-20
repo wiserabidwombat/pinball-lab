@@ -1390,6 +1390,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     /// M5 v5: the planet window (TourPlanetWindow): stars and a planet deep under the glass, each its own parallax layer.
     private func addPlanetWindow() {
+        SKTexture.preload([Self.smokeTexture]) { }         // M10 r1: the liftoff's smoke, drawn while the table builds
         let w = TourPlanetWindow(center: TourTableLayout.planetWindowCenter, radius: TourTableLayout.planetWindowRadius)
         addChild(w)
         planetWindow = w
@@ -2260,7 +2261,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T6 M9 r6b")
+        let label = SKLabelNode(text: "T6 M10 r1")
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -2291,6 +2292,9 @@ final class TourTableScene: SKScene, RendererHostedScene {
         } else {
             fpsFrames += 1
             fpsWorstGap = max(fpsWorstGap, gap)
+            #if DEBUG
+            if gap > 0.035 { print("HITCH \(Int(gap * 1000)) ms · \(game.banner ?? "-") · \(game.status)") }   // M10 r1
+            #endif
             let window = t - fpsWindowStart
             if window >= 0.5 {
                 fpsShown = Int((Double(fpsFrames) / window).rounded())
@@ -2306,7 +2310,7 @@ final class TourTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        var text = "\(fps)T6 M9 r6b \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)T6 M10 r1 \(effectiveCameraMode.tag) · \(speed)"
         #if DEBUG
         if let lab = playLab { text += "\n" + lab.progressText }
         #endif

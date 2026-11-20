@@ -298,20 +298,31 @@ enum ChompTableLayout {
     /// v13b (Shot Lab run 9: 150° shots hit the wall's top at 760): down to 720, the gate 720–920.
     static var harpoonInner: [CGPoint] { [CGPoint(x: harpoonX, y: 580), CGPoint(x: harpoonX, y: 720)] }
     /// One-way (category diverter, solid while the ball moves right, like the outlane save gate): in from the right only.
-    static var quickshotGate: (a: CGPoint, b: CGPoint) { (CGPoint(x: harpoonX, y: 720), CGPoint(x: harpoonX, y: 920)) }
+    static var quickshotGate: (a: CGPoint, b: CGPoint) { (CGPoint(x: harpoonX, y: 720), CGPoint(x: harpoonX, y: tongueBottomY)) }   // v18b: up to the tongue
     /// The tongue between the harpoon lane and the loop: a closed outline with a round top (centre (80, 1040), r 20;
     /// M2 v4 lowered it 40 pt so the harpoon lane beside it stays ≥ 37 wide under the arch for the 30 pt ball).
     /// M2 v7 (Shot Lab run 1: loop shots, 106–108° and drifting left, clipped the tongue's bottom-right corner at
     /// (100, 920)): the tongue is narrower, x 60–88, so the loop channel is 59 wide.
-    static let tongueRightX: CGFloat = 88
+    /// M3 v18 (re-traced from p. 40: the real tongue is a thin strip, ~7 pt): x 60–70, round top r 5. Its top stays at
+    /// 1040 so the harpoon lane beside it keeps 38 pt under our arch (the real U-turn is higher, under a higher top).
+    static let tongueRightX: CGFloat = 70
+    /// v18c (p. 40 close-up, p40_loopMouth.png: the real strip ends at y ~924): the rounded bottom's centre, r 5 below it.
+    static let tongueBottomY: CGFloat = 929
     static var tongue: [CGPoint] {
         let r = (tongueRightX - harpoonX) / 2, cx = harpoonX + r
-        var pts = [CGPoint(x: harpoonX, y: 920), CGPoint(x: harpoonX, y: 1040)]
+        // M3 v18b/c: a rounded bottom (centre (65, tongueBottomY)) instead of a square corner, so a loop shot that meets it
+        // glances off (Shot Lab run 35: 108° loop shots hit the square corner at (70, 920) head-on).
+        var pts = [CGPoint(x: harpoonX, y: tongueBottomY), CGPoint(x: harpoonX, y: 1040)]
         for i in 1...11 {
             let a = CGFloat.pi - CGFloat.pi * CGFloat(i) / 12
             pts.append(CGPoint(x: cx + r * cos(a), y: 1040 + r * sin(a)))
         }
-        pts += [CGPoint(x: tongueRightX, y: 1040), CGPoint(x: tongueRightX, y: 920), CGPoint(x: harpoonX, y: 920)]
+        pts += [CGPoint(x: tongueRightX, y: 1040), CGPoint(x: tongueRightX, y: tongueBottomY)]
+        for i in 1...11 {
+            let a = -CGFloat.pi * CGFloat(i) / 12
+            pts.append(CGPoint(x: cx + r * cos(a), y: tongueBottomY + r * sin(a)))
+        }
+        pts.append(CGPoint(x: harpoonX, y: tongueBottomY))
         return pts
     }
     /// The point of the outer wall's top-left arch at x (the arch is x = 20 + 280 t², y = 1000 + 270 (1 − (1 − t)²)).
@@ -321,8 +332,25 @@ enum ChompTableLayout {
     }
     /// The loop's right wall: up x 147, closing on the arch at x 157. M2 v5: its mouth flare is gone; its bottom end at
     /// (147, 885) is the post shared with the wave ramp's mouth beside it (as on the real table).
+    /// M3 v18 (re-traced from p. 40, p40_loopL / m3v18_loop.png): the real post between the loop and the wave lane is a
+    /// blue strip whose left side leans up-left from a tip at ~(141, 876) to x ~106 by y 1060, then straight up to the
+    /// outer wall. It is now a closed solid (left side traced, right side our x 147 wall), so the loop runs x 70 → the
+    /// post (52 pt at its mouth, 36 from y 1060 up) and loop shots pass left of the shark target below the tip.
+    static let loopPostEdge: [CGPoint] = [CGPoint(x: 141, y: 876), CGPoint(x: 128, y: 900), CGPoint(x: 114, y: 945),
+                                          CGPoint(x: 108, y: 1000), CGPoint(x: 106, y: 1060)]
+    /// The post's left side at height y (straight up at x 106 above the traced points).
+    static func loopPostLeftX(atY y: CGFloat) -> CGFloat {
+        let e = loopPostEdge
+        if y <= e[0].y { return e[0].x }
+        for (a, b) in zip(e, e.dropFirst()) where y <= b.y {
+            return a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y)
+        }
+        return e[e.count - 1].x
+    }
     static var loopRight: [CGPoint] {
-        [CGPoint(x: 147, y: 885), CGPoint(x: 147, y: 1180), archPoint(atX: 157)]
+        let topLeft = archPoint(atX: 106)
+        return [CGPoint(x: 147, y: 885), CGPoint(x: 147, y: 1180), archPoint(atX: 157), topLeft]
+            + loopPostEdge.reversed() + [CGPoint(x: 147, y: 885)]
     }
 
     // MARK: Milestone 2 v5: the wave ramp (the real table's Left Metal Ramp)
@@ -545,9 +573,9 @@ enum ChompTableLayout {
     /// Sends harpoon-lane balls on into the left inlane (M2 v3: ends over the wider inlane, 96 pt above the guide's
     /// top); balls from the playfield still reach the left outlane under it.
     static let harpoonDeflector = [CGPoint(x: 20, y: 560), CGPoint(x: 90, y: 500)]
-    static let spinnerLine = (a: CGPoint(x: tongueRightX, y: 960), b: CGPoint(x: 147, y: 960))
+    static let spinnerLine = (a: CGPoint(x: tongueRightX, y: 960), b: CGPoint(x: loopPostLeftX(atY: 960), y: 960))
     static let spinnerSwitch = ChompSwitch(a: spinnerLine.a, b: spinnerLine.b, forward: CGVector(dx: 0, dy: 1))
-    static let loopEntranceSwitch = ChompSwitch(a: CGPoint(x: tongueRightX, y: 1020), b: CGPoint(x: 147, y: 1020),
+    static let loopEntranceSwitch = ChompSwitch(a: CGPoint(x: tongueRightX, y: 1020), b: CGPoint(x: loopPostLeftX(atY: 1020), y: 1020),
                                                 forward: CGVector(dx: 0, dy: 1))
     /// The quickshot rollovers in the harpoon lane: top, mid, bottom.
     static let quickshotSwitches = [CGPoint(x: 40, y: 1000), CGPoint(x: 40, y: 870), CGPoint(x: 40, y: 600)]
@@ -675,4 +703,20 @@ extension ChompTableLayout {
     /// ring at ~(213, 963)); 1 pt wider than the nose so a ball meets the target, not the wall under it.
     static let chumBucketCentre = waveEndCentre
     static let chumBucketRadius: CGFloat = waveEndRadius + 1
+}
+
+// MARK: - Milestone 3 v17: the shark tower standups
+extension ChompTableLayout {
+    /// Switches 45 / 47 / 48 ("Tgt 1–3") from p. 17's switch map, placed on p. 40's yellow target faces: one below the
+    /// post between the loop and the wave ramp, two either side of the reel's keyhole mouth. Faces point down the table.
+    static let sharkTargetCentres = [CGPoint(x: 153, y: 816), CGPoint(x: 414, y: 931), CGPoint(x: 494, y: 931)]
+    static let sharkTargetSize = CGSize(width: 22, height: 8)
+    /// Closed backings from each target's back to the plastic behind it, sides steep so a ball rolls off (no ledge).
+    static let sharkBacks: [[CGPoint]] = [
+        [CGPoint(x: 142, y: 820), CGPoint(x: 164, y: 820), CGPoint(x: 151, y: 870), CGPoint(x: 142, y: 820)],
+        [CGPoint(x: 403, y: 935), CGPoint(x: 425, y: 935), CGPoint(x: 426, y: 978), CGPoint(x: 395, y: 978),
+         CGPoint(x: 403, y: 935)],
+        [CGPoint(x: 483, y: 935), CGPoint(x: 505, y: 935), CGPoint(x: 505, y: 983), CGPoint(x: 500, y: 983),
+         CGPoint(x: 483, y: 935)],
+    ]
 }

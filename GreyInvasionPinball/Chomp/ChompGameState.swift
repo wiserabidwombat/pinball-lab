@@ -27,6 +27,8 @@ enum ChompPoints {
     static let reelTurn = 500                   // M3 v9 placeholder (each turn of the fishing reel)
     static let fin = 1_000                      // M3 v15 placeholder (the fin dropped)
     static let chumBucket = 750                 // M3 v16 placeholder (the chum bucket target)
+    static let sharkTarget = 500                // M3 v17 placeholder (each shark tower standup)
+    static let sharkTowerComplete = 5_000       // M3 v17 placeholder (all three)
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

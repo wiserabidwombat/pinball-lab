@@ -75,6 +75,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var reel: ChompReel?
     private var fin: ChompFin?
     private var chumBucket: SKNode?
+    private var sharkTargets: [SKShapeNode] = []
+    private var sharkDown = [false, false, false]
+    private var sharkRelightPending = false
     private var chumLastHit: TimeInterval = -10
     private var finHitPending = false
     #if DEBUG
@@ -149,6 +152,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     static let floorColor = SKColor(red: 0.05, green: 0.07, blue: 0.14, alpha: 1)
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
+    /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
+    static let buildTagText = "T7 M3 v18c"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -538,6 +543,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addReel()
         addFin()
         addChumBucket()
+        addSharkTower()
         let b = ChompCaptiveBall(mouth: ChompTableLayout.boatMouth, heading: .pi / 2,
                                  length: ChompTableLayout.boatChannelLength, halfWidth: ChompTableLayout.boatHalfWidth,
                                  postRadius: ChompTableLayout.boatPostRadius, lip: ChompTableLayout.boatLip)
@@ -552,6 +558,37 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         let r = ChompReel(centre: ChompTableLayout.reelCentre, radius: ChompTableLayout.reelDiscRadius)
         addChild(r)
         reel = r
+    }
+
+    /// M3 v17: the shark tower standups (switches 45 / 47 / 48, "Tgt 1–3"): one in front of the loop / wave ramp post,
+    /// two either side of the reel's keyhole mouth, each on a closed backing that slopes off (no ledge to rest on).
+    private func addSharkTower() {
+        for back in ChompTableLayout.sharkBacks { addWall(points: back) }
+        let size = ChompTableLayout.sharkTargetSize
+        for c in ChompTableLayout.sharkTargetCentres {
+            let node = SKShapeNode(rectOf: size, cornerRadius: 2)
+            node.position = c
+            node.strokeColor = SKColor(white: 1, alpha: 0.6)
+            node.lineWidth = 1
+            node.zPosition = 1
+            let body = SKPhysicsBody(rectangleOf: size)
+            body.isDynamic = false
+            body.restitution = 0.2
+            body.friction = 0.2
+            body.categoryBitMask = ChompPhysicsCategory.target
+            body.collisionBitMask = ChompPhysicsCategory.ball
+            body.contactTestBitMask = ChompPhysicsCategory.ball
+            node.physicsBody = body
+            addChild(node)
+            sharkTargets.append(node)
+        }
+        resetSharkTower()
+    }
+
+    /// Lit = still to hit, dark = hit (placeholder until the rules: all three → SHARK TOWER, then they relight).
+    private func resetSharkTower() {
+        sharkDown = [false, false, false]
+        for t in sharkTargets { t.fillColor = Self.bankLitColor }
     }
 
     /// M3 v16: the chum bucket — on the Pro, a bucket hung over the rounded nose of the plastic between the ramps on a
@@ -931,7 +968,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private func addBuildTag() {
         #if DEBUG
-        let label = SKLabelNode(text: "T7 M3 v16")
+        let label = SKLabelNode(text: Self.buildTagText)
         label.fontName = "Menlo-Bold"
         label.fontSize = 12
         label.fontColor = SKColor(white: 1, alpha: 0.85)
@@ -977,7 +1014,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)T7 M2 v15 \(effectiveCameraMode.tag) · \(speed)"
+        let text = "\(fps)\(Self.buildTagText) \(effectiveCameraMode.tag) · \(speed)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1046,6 +1083,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         upPostsArmed = false
         for i in upPosts.indices { upPostRaisePending[i] = false; setUpPost(i, up: false) }
         resetBank()
+        resetSharkTower()
         boat?.reset()
         reel?.reset()
         fin?.reset()
@@ -1284,6 +1322,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         updateBoat(now)
         updateFin(dt, now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
+        if sharkRelightPending { sharkRelightPending = false; resetSharkTower() }
 
         if let due = bannerClearAt, now >= due {
             bannerClearAt = nil
@@ -1366,6 +1405,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private lazy var solidBlocks: [[CGPoint]] = [ChompTableLayout.pierPlastic, ChompTableLayout.reelLeftBlock,
                                                   ChompTableLayout.reelRightBlock, ChompTableLayout.rampIsland,
                                                   ChompTableLayout.bankWedge, ChompTableLayout.waveRightBlock]
+                                                  + ChompTableLayout.sharkBacks + [ChompTableLayout.loopRight]
 
     private func keepOutOfSolids(_ ball: ChompBall) {
         let p = ball.position
@@ -1509,6 +1549,22 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 }
                 break
             }
+            // M3 v17: the shark tower standups.
+            if let i = sharkTargets.firstIndex(where: { $0 === node }) {
+                labEvent("sharkTower")
+                if !sharkDown[i] {
+                    sharkDown[i] = true
+                    sharkTargets[i].fillColor = Self.bankDarkColor
+                    game.add(ChompPoints.sharkTarget)
+                    sfx(.standup)
+                    if !sharkDown.contains(false) {
+                        game.add(ChompPoints.sharkTowerComplete)
+                        showBanner("SHARK TOWER")
+                        sharkRelightPending = true             // relit in update(), not in the contact callback
+                    }
+                }
+                break
+            }
             // M3 v16: the chum bucket (placeholder scoring until the rules).
             if node === chumBucket {
                 guard gameTime - chumLastHit > 0.15 else { break }
@@ -1567,7 +1623,7 @@ extension ChompTableScene: ShotLabHost {
     var shotLabTableName: String { "Chomp" }
 
     /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
-    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "chumBucket", "harpoonGate", "fishPhone", "buoy"] }
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "chumBucket", "sharkTower", "harpoonGate", "fishPhone", "buoy"] }
 
     /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
     /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.
@@ -1616,6 +1672,8 @@ extension ChompTableScene: ShotLabHost {
         removeAllBalls()
         nextBallAt = nil
         resetBank()
+        resetSharkTower()
+        sharkRelightPending = false
         boat?.reset()
         fin?.reset()
         finHitPending = false
@@ -1668,6 +1726,7 @@ extension ChompTableScene: ShotLabHost {
         updateBoat(now)
         updateFin(dt, now)
         if bankRelightPending { bankRelightPending = false; resetBank() }
+        if sharkRelightPending { sharkRelightPending = false; resetSharkTower() }
         if lab.update(now: now) {
             game.banner = lab.progressText
         } else {

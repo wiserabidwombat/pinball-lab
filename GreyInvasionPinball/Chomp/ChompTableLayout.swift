@@ -267,8 +267,10 @@ enum ChompTableLayout {
     static let pierPlastic = [CGPoint(x: 519, y: 615), CGPoint(x: laneWallX, y: 618), CGPoint(x: laneWallX, y: 470),
                               CGPoint(x: 514, y: 470), CGPoint(x: 528, y: 530), CGPoint(x: 522, y: 548),
                               CGPoint(x: 511, y: 548), CGPoint(x: 519, y: 615)]
-    /// The mini-lane switch on the way down the block's left edge (skill shot 2, fish finder and quickshots later).
-    static let miniLaneSwitch = CGPoint(x: 508, y: 590)
+    /// The mini-lane switch (skill shot 2, fish finder and quickshots later). M3 v19: at the real spot — switch 32 "Mid
+    /// Flipper Lane" (rollover), p. 17's switch map: in the lane right of the pop bumper (x 512–548), just above the
+    /// bumper's height (was (508, 590) on the block's left edge, from M2 before the bumper moved).
+    static let miniLaneSwitch = CGPoint(x: 530, y: 650)
     /// The beach-ball bumper and the buoy target above the pocket.
     /// M3 v11 (Aaron: "Yep, let's move it"): toward the real spots (p. 40: the bumper disc ~(511, 687), the buoy — a round
     /// cyan target — ~(545, 646) below-right of it). Our right wall is x 548 (the real playfield runs to ~575 here), so

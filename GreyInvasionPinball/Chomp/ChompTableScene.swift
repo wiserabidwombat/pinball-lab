@@ -153,7 +153,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M3 v18c"
+    static let buildTagText = "T7 M3 v19"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)

@@ -89,16 +89,16 @@ extension LabTable {
                 LabStat(label: "Testing", value: "Shot Lab robot and the Play Lab, robots that play whole evenings"),
             ]
         case .grandTour:
-            // T6 M1: a grey box so far; the numbers fill in as it's built.
+            // T6 M10 r4: the table as it stands before sound (its own sounds come after Table 07).
             return [
-                LabStat(label: "Table size", value: "600 × 1300 points, with raised Saturn and Moon playfields to come"),
-                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down"),
-                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones"),
-                LabStat(label: "Goal", value: "Tour the nine planets, from Mercury out to Pluto"),
-                LabStat(label: "Art", value: "Coming next: a real-table look with about 110 lamps"),
+                LabStat(label: "Table size", value: "600 × 1300 points, with a raised Moon and Saturn at the top of the ramps"),
+                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down; liftoff pans up to watch the launch"),
+                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones; holds 117 or better in the finale"),
+                LabStat(label: "Goal", value: "Fly the Grand Tour: Mercury out to Neptune, the Sun Slingshot, then Pluto"),
+                LabStat(label: "Art", value: "Rendered in 3D: about 110 glass lamps, a window down into space, parts with depth"),
                 LabStat(label: "Sounds", value: "Monsoon's for now; its own come later"),
-                LabStat(label: "Code", value: "Milestone 1 of 10"),
-                LabStat(label: "Testing", value: "Shot Lab and Play Lab once the shots are in"),
+                LabStat(label: "Code", value: "About 8,400 lines in 24 files"),
+                LabStat(label: "Testing", value: "Shot Lab robot and the Play Lab, robots that play whole tours"),
             ]
         case .chomp:
             // T7 M1: a grey box so far.
@@ -169,6 +169,11 @@ extension LabTable {
                 LabNote(title: "Four rollover lanes", detail: "O-R-B-T in both inlanes and both outlanes. The flippers move the lit letters, and all four raise the multiplier."),
                 LabNote(title: "A rocket post", detail: "Spell ORBT and a post pops up between the flippers to save one ball."),
                 LabNote(title: "A kickback", detail: "The left outlane fires a draining ball back into play, once every ball."),
+                LabNote(title: "Liftoff", detail: "Count down on the blast door and the rocket launches. Play holds and the camera pans up so you can watch it go."),
+                LabNote(title: "A window into space", detail: "A round window in the floor looks down at the planet you're visiting, with its own weather: Venus's clouds, Jupiter's storm, Pluto's frost."),
+                LabNote(title: "A tour of timed modes", detail: "Nine stops, each a different short challenge with its own clock, from Mercury Dash to the Sun Slingshot."),
+                LabNote(title: "Ramps with height", detail: "The ramps, the Moon and Saturn shift against the floor as the camera moves, so the raised parts read as raised."),
+                LabNote(title: "A hidden planet", detail: "Finish a tour and Pluto lights for that one ball."),
             ]
         case .chomp:
             return [
@@ -223,6 +228,11 @@ extension LabTable {
         case .grandTour:
             return [
                 LabNote(title: "Start from what works", detail: "The walls, flippers and slings are the proven ones from Monsoon, so the new work goes into what sits around them."),
+                LabNote(title: "Aim where the ball really goes", detail: "Shots curve under gravity. The K-E-T targets were placed from the Shot Lab's measured hits, not a straight line, after the K proved nearly unhittable."),
+                LabNote(title: "Let robots find the traps", detail: "The Play Lab caught balls stuck inside a target bank in a quarter of its games; a solid block in place of thin walls fixed it."),
+                LabNote(title: "Count where points come from", detail: "Combos first made half of every score. Tracking each award's share brought them down to about a fifth, so the tour matters most."),
+                LabNote(title: "Stop the game for the show", detail: "The camera followed the ball and missed the launch. Now play freezes, keeps the ball's speed and carries on after."),
+                LabNote(title: "Picture it from the game", detail: "The How to Play pictures are the game itself, posed in each goal, with the shots drawn on."),
             ]
         case .chomp:
             return [

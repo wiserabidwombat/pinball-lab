@@ -59,7 +59,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .lamplight:
             return "A cozy bookshop-café on a rainy evening. Nothing to beat: every game fills the shelves, furnishes the shop and brings back the regulars."
         case .grandTour:
-            return "Orbit grown up: a rocket tour of the planets on a table packed with targets and lamps. Being built now, one milestone at a time."
+            return "Orbit grown up: count down to liftoff and fly a rocket tour of the planets, a timed mode at every stop, then slingshot round the Sun."
         case .chomp:
             return "A shark with an ego terrorizes Calamity Island, and the mayor won't close the beach. A summer-movie spoof, being built now."
         }
@@ -73,7 +73,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .cthulhu: return ["Spinner", "Magnet", "Moving toy", "Up-kicker", "Real-table art"]
         case .monsoon: return ["Color as progress", "Habitrails", "Captive ball", "Dust devil", "Watercolor"]
         case .lamplight: return ["Cozy", "Collections", "The loft", "A cat", "Seasons"]
-        case .grandTour: return ["Rocket post", "Kickback", "Lane change", "In progress"]
+        case .grandTour: return ["Liftoff", "Planet window", "Timed tour", "Parallax ramps", "Pluto"]
         case .chomp: return ["Four flippers", "Up-posts", "Action button", "In progress"]
         }
     }
@@ -98,7 +98,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .cthulhu: return "cth_lab_thumb"       // the rendered table with Cthulhu risen (art round 5b)
         case .monsoon: return "mon_lab_thumb"       // the finished table, half pencil, half watercolor (tools/mon_lab_thumb_table.py)
         case .lamplight: return "lmp_lab_thumb"     // the shop on a festival evening (tools/lmp_howto.py)
-        case .grandTour: return nil                 // art comes in milestone 2
+        case .grandTour: return "tour_lab_thumb"    // T6 M10 r4: the table mid-tour (Jupiter Storm), a posed TOP capture
         case .chomp: return nil                     // grey box until the art milestone
         }
     }

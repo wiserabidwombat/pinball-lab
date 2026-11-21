@@ -161,10 +161,12 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     // Grey-box colours: cool steel-blue lines on deep-space navy.
     static let wallColor = SKColor(red: 0.62, green: 0.71, blue: 1.0, alpha: 1)
     static let floorColor = SKColor(red: 0.05, green: 0.07, blue: 0.14, alpha: 1)
+    /// M3 v20: the plastic between the play area and the playfield's edge (dark blue, as the real plastics are blue).
+    static let plasticColor = SKColor(red: 0.09, green: 0.13, blue: 0.30, alpha: 1)
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M3 v19c"
+    static let buildTagText = "T7 M3 v21"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -282,7 +284,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         var low: [SKShapeNode] = []
         var high: [SKShapeNode] = []
         for case let n as SKShapeNode in children where n !== plunger {
-            if n.zPosition == -20 { low.append(n); continue }          // the floor
+            if n.zPosition <= -20 { low.append(n); continue }          // the outline (M3 v20) and the floor
             if let body = n.physicsBody, body.categoryBitMask == ChompPhysicsCategory.wall,
                !upPosts.contains(where: { $0 === n }), n.zPosition <= -5 {
                 low.append(n)
@@ -304,6 +306,13 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     /// The playfield floor inside the outer wall.
     private func addFloor() {
+        // M3 v20: the real playfield's outline (square top at y 1305); outside our play area it reads as plastic.
+        let outline = SKShapeNode(rect: ChompTableLayout.playfieldRect)
+        outline.fillColor = Self.plasticColor
+        outline.strokeColor = Self.wallColor
+        outline.lineWidth = 3
+        outline.zPosition = -20.5
+        addChild(outline)
         let path = CGMutablePath()
         path.addLines(between: ChompTableLayout.outerWall)
         path.closeSubpath()

@@ -15,7 +15,9 @@ import Foundation
 /// All Table 06 geometry in world points. SpriteKit's origin is bottom-left.
 /// Same 600 x 1300 world, radius-9 ball and physics as Tables 02–05 (every value proven on device there).
 enum ChompTableLayout {
-    static let worldSize = CGSize(width: 600, height: 1300)
+    /// M3 v20 (Aaron: "Raising the top edge"): 1300 → 1360 — the real playfield's straight top edge at y 1305
+    /// (p. 40) plus headroom for the ramps (their rails reach y ~1297); the camera frames this.
+    static let worldSize = CGSize(width: 600, height: 1360)
 
     // MARK: Physics
     /// M2 v14 (Aaron: "If the ball is falling too fast but it's makeable on a real table, is the gravity too high?" →
@@ -135,7 +137,9 @@ enum ChompTableLayout {
     // MARK: Launch lane gate (Table 03's one-way flap)
     /// M3 v12: the real plunger lane runs up the right side to the top (was 955); the gate sits at its top, where the
     /// curved top wall turns the plunge left toward the right ramp's entrance.
-    static let laneWallTop: CGFloat = 1150
+    /// M3 v21 (Aaron: "Let's move the turn and loop up now"): 1150 → 1200 with the turn (the real lane turns ~50 pt
+    /// higher, p. 40: its curve reaches y ~1290–1300 under the 1305 top edge).
+    static let laneWallTop: CGFloat = 1200
     /// M3 v13 (Aaron: "Fix the lane from the drawing"): on p. 40 the lane right of the reel leans right going up (its
     /// left edge x ~505 at y 1000 → ~536 at y 1200), and the plunger lane with it. Ours bends at y 900 from x 548–584 to
     /// 562–598 at its top (y 1150); its inner wall is the reel lane's right wall.
@@ -147,14 +151,14 @@ enum ChompTableLayout {
     /// ball riding the reel lane's right wall follows it round into the ramp mouth; the plunger lane curves round
     /// outside it (r 116), then spirals in (r 116 → 80 between 50° and 80°) through a one-way gate — the chord from
     /// the divider's end to the spiral's end — into the top of the reel lane, just before the mouth.
-    static let turnCentre = CGPoint(x: 482, y: 1150)
+    static let turnCentre = CGPoint(x: 482, y: 1200)      // M3 v21: was 1150 (turn top 1230 → 1280)
     static let turnInnerR: CGFloat = 80
     static let turnOuterR: CGFloat = 116
     private static func turnPoint(_ r: CGFloat, _ deg: CGFloat) -> CGPoint {
         CGPoint(x: turnCentre.x + r * cos(deg * .pi / 180), y: turnCentre.y + r * sin(deg * .pi / 180))
     }
     /// The divider's curve, 0° → 50° (it starts at the lane's top (562, 1150)).
-    static var dividerArc: [CGPoint] { stride(from: 0, through: 50, by: 5).map { turnPoint(turnInnerR, CGFloat($0)) } }
+    static var dividerArc: [CGPoint] { stride(from: 0, through: 45, by: 5).map { turnPoint(turnInnerR, CGFloat($0)) } }   // M3 v21: to 45° (was 50): a plunge riding r ~100 met the divider's end at 50° nearly head-on
     /// The plunger lane's outer curve, 0° → 50° at r 116, then the spiral in to r ~81 at 80°.
     static var plungerOuterArc: [CGPoint] {
         stride(from: 0, through: 50, by: 5).map { turnPoint(turnOuterR, CGFloat($0)) }
@@ -165,7 +169,7 @@ enum ChompTableLayout {
     /// M3 v14b: the one-way gate is an arc along r 80 from the divider's end (50°) to 80°, so a ball riding the turn
     /// keeps curving (a straight gate left it heading ~140° into the mouth's top corner); a short r 80 piece of the
     /// outer wall finishes the turn at 90° (482, 1230), where the ramp mouth starts heading west.
-    static var gateArc: [CGPoint] { stride(from: 50, through: 80, by: 5).map { turnPoint(turnInnerR, CGFloat($0)) } }
+    static var gateArc: [CGPoint] { stride(from: 45, through: 80, by: 5).map { turnPoint(turnInnerR, CGFloat($0)) } }    // M3 v21: from 45° (was 50)
     static var turnEnd: [CGPoint] { [turnPoint(turnInnerR, 90), turnPoint(turnInnerR, 85)] }
     static var gateLow: CGPoint { gateArc[0] }
     static var gateHigh: CGPoint { gateArc[gateArc.count - 1] }
@@ -469,7 +473,7 @@ enum ChompTableLayout {
     static let outerArcCentre = CGPoint(x: 518, y: 1150)     // M3 v13: moved right with the leaning lanes (was 504)
     static let outerArcRadius: CGFloat = 80
     static let outerTopY: CGFloat = 1230
-    static let rightMouth = CGPoint(x: 480, y: 1211)     // M3 v14b: at the turn's end (was 494); upper rail y 1230
+    static let rightMouth = CGPoint(x: 480, y: 1261)     // M3 v21: +50 with the turn (was 1211)     // M3 v14b: at the turn's end (was 494); upper rail y 1230
     static let rightMouthHalfWidth: CGFloat = 19
     static let rightHalfWidth: CGFloat = 19
     static let rightFlareLength: CGFloat = 40
@@ -564,7 +568,8 @@ enum ChompTableLayout {
     static var reelRightBlock: [CGPoint] {
         let arc = reelArc(60, reelRightAngle)
         return arc + [CGPoint(x: 499, y: 1043), CGPoint(x: 500, y: 983), CGPoint(x: 505, y: 983),
-                      CGPoint(x: 522, y: 1150), arc[0]]       // M3 v13: the lane's left wall leans (x 505 → 522)      // M3 v12: the reel lane is open again (x 510–548)
+                      CGPoint(x: 522, y: 1200), arc[0]]     // M3 v21: the lane top raised to 1200, same 40 pt width (x 522–562); continuing the lean to 526 put the corner in the lane shots' path (drop probe)
+                             // M3 v13: the lane's left wall leans (x 505 → 522)      // M3 v12: the reel lane is open again (x 510–548)
     }
     /// Into the round end, going up: the ball reaches the disc.
     static let reelSwitch = ChompSwitch(a: CGPoint(x: 433, y: 1065), b: CGPoint(x: 499, y: 1065), forward: CGVector(dx: 0, dy: 1))
@@ -635,18 +640,8 @@ enum ChompTableLayout {
                             to: CGPoint(x: midX, y: topY))
         // M3 v12: the arch's right half is cut where it crosses y 1230; a straight top wall and a curve (centre
         // outerArcCentre, r 80) turn the plunger lane and the reel lane left into the right ramp's entrance.
-        let rightArch = quadCurve(from: CGPoint(x: midX, y: topY), control: CGPoint(x: rightWallX, y: topY),
-                                  to: CGPoint(x: rightWallX, y: archStartY), segments: 64)
-        var previous = CGPoint(x: midX, y: topY)
-        for p in rightArch {
-            if p.y < outerTopY {
-                let t = (previous.y - outerTopY) / (previous.y - p.y)
-                points.append(CGPoint(x: previous.x + t * (p.x - previous.x), y: outerTopY))
-                break
-            }
-            points.append(p)
-            previous = p
-        }
+        // M3 v21: with the turn raised to y 1280 (above the arch's top, 1270), the top wall runs straight from the
+        // arch's top to the turn's end (it rises 10 pt), as the real top-right plastic does.
         points += turnEnd                                        // M3 v14b: the turn's end, 90° → 85°
         points += plungerOuterArc.reversed()                    // M3 v14: the spiral, then the plunger lane's curve
         points.append(CGPoint(x: rightWallX, y: laneBendY))   // M3 v13: the plunger lane's outer wall leans out to x 598
@@ -727,4 +722,18 @@ extension ChompTableLayout {
 extension ChompTableLayout {
     /// Paint the static shapes into sprites at load (ChompFlatten); false = draw every SKShapeNode live, as before.
     static let flattenStaticArt = true
+}
+
+// MARK: - M3 v20: the real outline (the top edge)
+extension ChompTableLayout {
+    /// The real playfield's top edge (p. 40: a straight edge, square corners; everything behind the shots up there is
+    /// plastic). Our play area keeps its arch and lanes (they bound where the ball can go); the area between them and
+    /// this edge is drawn as plastic.
+    static let topEdgeY: CGFloat = 1305
+    /// The playfield's outline: the left wall to the plunger lane's outer wall at its top, the bottom of the outer wall
+    /// to the top edge.
+    static var playfieldRect: CGRect {
+        let minY = outerWall.map(\.y).min() ?? 0
+        return CGRect(x: leftWallX, y: minY, width: laneTopOuterX - leftWallX, height: topEdgeY - minY)
+    }
 }

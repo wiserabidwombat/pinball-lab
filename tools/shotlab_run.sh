@@ -18,7 +18,7 @@ TABLE=${1:?table (lamplight)}
 SCENARIO=${2:-}
 FLIPPERS=${3:-}
 START=${4:-${START:-}}
-DEVICE=${DEVICE:-iPhone 17 Pro Max}
+DEVICE=${DEVICE:-iPhone 18 Pro Max}
 BUNDLE=com.aarontilley.pinballlab
 PROJECT=GreyInvasionPinball.xcodeproj
 SCHEME=GreyInvasionPinball
@@ -60,8 +60,12 @@ ARGS=(-shotlab "$TABLE")
 [ -n "$FLIPPERS" ] && ARGS+=(-shotlab-flippers "$FLIPPERS")
 [ -n "$START" ] && ARGS+=(-shotlab-start "$START")
 [ -n "${DROPS:-}" ] && ARGS+=(-shotlab-drops "$DROPS")
+# 2026-11-21: 120 Hz only by default; HZ=60 or HZ=both for the old 60 Hz pass.
+[ -n "${HZ:-}" ] && ARGS+=(-shotlab-hz "$HZ")
 # Plan 2 round 18: OVERRIDE="Mon.ragingPush=2000,Mon.calmBend=0.0009" — what-if tunables (GreyInvasionPinball/LabOverrides.swift).
 [ -n "${OVERRIDE:-}" ] && ARGS+=(-override "$OVERRIDE") && echo "▶ Overrides: $OVERRIDE"
+# Lab fast-forward: FAST=8 → 8 fixed 1/120 s updates per drawn frame (4× real time; no screenshots in this mode).
+[ -n "${FAST:-}" ] && ARGS+=(-lab-fast "$FAST") && echo "▶ Fast-forward: $FAST steps per frame"
 echo "▶ Launching the Shot Lab: ${ARGS[*]} (the app quits by itself when the results are saved)"
 BEFORE=$(ls -t ShotLab/shotlab-*.json 2>/dev/null | head -1 || true)
 xcrun simctl launch --console "$UDID" "$BUNDLE" "${ARGS[@]}" | grep -E "SHOT LAB" || true

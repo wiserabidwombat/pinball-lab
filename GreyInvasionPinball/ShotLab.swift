@@ -166,7 +166,17 @@ final class ShotLab {
     /// physicsWorld.speed, the flipper steps and the lab clock at this fraction of real time. In the
     /// 60 fps Simulator, 0.5 gives 8.3 ms steps (a 120 Hz iPhone, like Aaron's) and 1.0 gives 16.7 ms
     /// steps (a 60 Hz iPhone).
-    static let passes: [Double] = [0.5, 1.0]
+    /// 2026-11-21: 120 Hz only by default — since 2026-11-03 every device steps physics at 1/120 s or finer (two steps a
+    /// frame on a 60 Hz screen), so the 60 Hz pass only models old devices. `-shotlab-hz 60|both` brings it back.
+    nonisolated static let passes: [Double] = {
+        // Lab fast-forward (-lab-fast N): the host steps at exactly 1/120 s, so the one pass runs at full speed.
+        if LabFast.isOn { return [1.0] }
+        switch UserDefaults.standard.string(forKey: "shotlab-hz") {
+        case "60": return [1.0]
+        case "both": return [0.5, 1.0]
+        default: return [0.5]
+        }
+    }()
     static let raiseTime: TimeInterval = 0.3     // hold the flipper up this long before dropping the ball
     static let settleTime: TimeInterval = 1.2    // cradle the ball this long first
     static let flipHold: TimeInterval = 0.35     // hold the flip this long
@@ -292,7 +302,7 @@ final class ShotLab {
     }
 
     var progressText: String {
-        let pass = index < plan.count ? (plan[index].speed == 1 ? " · 60 Hz PASS" : " · 120 Hz PASS") : ""
+        let pass = index < plan.count ? (plan[index].speed == 1 && !LabFast.isOn ? " · 60 Hz PASS" : " · 120 Hz PASS") : ""
         let kind = startKind == .cradle ? "" : " · \(startKind.rawValue.uppercased())"
         return "SHOT LAB \(min(index + 1, plan.count))/\(plan.count)\(pass)\(kind)"
     }
@@ -490,6 +500,7 @@ final class ShotLab {
 
     /// Table time per physics step on this pass: a real frame × the pass speed.
     private func noteStep(_ speed: Double) {
+        if LabFast.isOn { current?.physicsStepMs = 8.3; return }      // fixed 1/120 s steps
         let frame = startedAt.map { frames > 1 ? (CACurrentMediaTime() - $0) / Double(frames) : 1.0 / 60 } ?? 1.0 / 60
         current?.physicsStepMs = (frame * speed * 10_000).rounded() / 10
     }

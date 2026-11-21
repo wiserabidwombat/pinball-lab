@@ -51,9 +51,19 @@ screen.
 Two robot labs live in Debug builds (Release builds don't include them). The **Shot Lab** fires one flipper at a ball
 again and again, at every flip delay, and records what each delay makes — the timing window of every shot. The **Play
 Lab** has robot players at four skills (beginner, intermediate, advanced, expert) play whole games with each table's
-real rules, at 120 Hz and 60 Hz physics steps, and records everything they do. Both write JSON reports to `ShotLab/`
+real rules, at 120 Hz physics steps, and records everything they do. Both write JSON reports to `ShotLab/`
 (on the Mac when run in the Simulator; shared from the phone when run there), and the Python tools in `tools/` turn
 them into pages.
+
+Both labs run **120 Hz only** by default. Since November 2026 every device steps the physics at 1/120 s or finer (a
+60 Hz screen takes two steps a frame), so the old 60 Hz pass only shows how older builds behaved; ask for it with
+`HZ=60` or `HZ=both` (Shot Lab runner), the `60` / `both` argument (Play Lab runner and sweep), or `-shotlab-hz` /
+`-playlab-hz`.
+
+**Fast-forward (Simulator only):** put `FAST=8` in front of any runner line to run 8 physics steps of exactly 1/120 s
+per drawn frame — about 4× real time, 8× the normal lab speed (`FAST=8 tools/playlab_sweep.sh`). Tested on Grey
+Invasion: shot windows and robot results match a normal run within run-to-run noise. It takes no screenshots, so run at
+normal speed when you want new hall-of-fame pictures, and spot-check against a normal run now and then.
 
 ### On the pause card
 
@@ -62,7 +72,7 @@ them into pages.
 | **Shot Lab** | Runs the Shot Lab on this table (~15–40 min; best in the Simulator). |
 | **Lab: …** | The Shot Lab with the table set up a special way: GI *bank down*; Cthulhu *Cthulhu up*, *sigils down*, *ritual*; Monsoon *devil raging*; Lamplight *books down*, *cat on mantel*, *cat by kettle*. |
 | **Sling Lab** (Cthulhu) | Measures the slingshots. |
-| **Play Lab** | All four skills, both rates (~1 h in the Simulator). |
+| **Play Lab** | All four skills at 120 Hz (~30 min in the Simulator). |
 | **Play Lab · quick** | One expert game at the device's own rate, 3-minute cap; the report is shared when done. |
 | **Watch the robots** | The robots play at real speed with sound and camera, skill after skill; nothing is saved. Menu stops it. |
 | **Record me** | You play one game while the lab watches; the report is shared at the end. Feeds `playlab_calibrate.py`. |
@@ -79,7 +89,7 @@ the lab, waits for the app to quit and prints the results. Table names: `greyinv
 **Shot Lab** — `tools/shotlab_run.sh TABLE [SCENARIO] [FLIPPERS] [START]`
 
 ```
-tools/shotlab_run.sh monsoon                          # the whole sweep, every flipper, both rates
+tools/shotlab_run.sh monsoon                          # the whole sweep, every flipper
 tools/shotlab_run.sh lamplight booksdown left,right   # a scenario, two flippers
 tools/shotlab_run.sh cthulhu "" "" inlane             # balls fed down the inlane instead of cradled
 tools/shotlab_run.sh chomp "" "" scatter              # the stuck-ball finder (below)
@@ -91,7 +101,7 @@ tools/shotlab_run.sh chomp "" "" scatter              # the stuck-ball finder (b
   falling onto the flipper), `hold` and `holdfast` (the flipper raised and held, to measure catches; `holdfast` feeds
   at 1,000 pt/s), `scatter` (the stuck-ball finder).
 - **The stuck-ball finder** (`scatter`): balls dropped at random points all over the table with random speeds and
-  directions, flippers at rest (`DROPS=150` per rate). A ball that sits still 4 s gets one flip of every flipper; if
+  directions, flippers at rest (`DROPS=150`). A ball that sits still 4 s gets one flip of every flipper; if
   it still hasn't moved 2 s later it's **stuck**. Afterwards `tools/shotlab_stuck.py` (run for you) groups the stuck
   spots, says whether real balls in the table's Play Lab replays ever go there (a trap in play vs. a drop inside a wall),
   lists rests that only a flip freed, and draws a map over the table (an `.svg` beside the results).
@@ -99,23 +109,23 @@ tools/shotlab_run.sh chomp "" "" scatter              # the stuck-ball finder (b
 **Play Lab** — `tools/playlab_run.sh TABLE [GAMES] [HZ] [SKILLS]`
 
 ```
-tools/playlab_run.sh lamplight                        # 2 games per skill, both rates (~1 h)
+tools/playlab_run.sh lamplight                        # 2 games per skill (~30 min)
 tools/playlab_run.sh greyinvasion 12 120 expert       # one skill, one rate
 tools/playlab_run.sh monsoon plunge                   # the plunge sweep (no flipping, every plunger power)
 ```
 
-- `GAMES` per skill and rate (default 2); `HZ` = `120`, `60` or `both`; `SKILLS` = a comma list
+- `GAMES` per skill and rate (default 2); `HZ` = `120` (default), `60` or `both`; `SKILLS` = a comma list
   (`beginner,intermediate,advanced,expert`, or `custom`).
-- Environment: `SKIP_BUILD=1` reuse the last build · `BUILD_ONLY=1` build and stop · `DEVICE="iPhone 17 Pro Max"`
+- Environment: `SKIP_BUILD=1` reuse the last build · `BUILD_ONLY=1` build and stop · `DEVICE="iPhone 18 Pro Max"`
   which Simulator · `CAP=480` seconds before a game is closed · `IDLE_MIN=25` minutes without a write before a stalled
   run is stopped · `FRESH_BOOT=0` don't reboot the Simulator first · `OVERRIDE="…"` what-ifs · `CUSTOM="…"` the custom
-  skill's profile.
+  skill's profile · `FAST=8` fast-forward (above).
 
 **Sweep (overnight)** — `tools/playlab_sweep.sh [GAMES] [HZ] [TABLES…]`
 
 ```
-tools/playlab_sweep.sh                                # every table, 2 games per skill, both rates
-BASELINE=latest tools/playlab_sweep.sh 6 both         # compare with the newest earlier sweep
+tools/playlab_sweep.sh                                # every table, 2 games per skill
+BASELINE=latest tools/playlab_sweep.sh 6             # compare with the newest earlier sweep
 tools/playlab_sweep.sh 2 both lamplight monsoon       # just these tables
 ```
 
@@ -131,7 +141,8 @@ sweep stamp · `UNTIL_TIGHT=0.5` keep adding games until the advanced/expert dra
 | Argument | Meaning |
 |---|---|
 | `-shotlab TABLE` | Open the table, run the Shot Lab, quit when saved. |
-| `-shotlab-scenario NAME` · `-shotlab-flippers left,right` · `-shotlab-start inlane` | As the runner's arguments above. |
+| `-shotlab-scenario NAME` · `-shotlab-flippers left,right` · `-shotlab-start inlane` · `-shotlab-hz 120\|60\|both` · `-shotlab-drops N` | As the runner's arguments above. |
+| `-lab-fast N` | Fast-forward: N fixed 1/120 s physics steps per drawn frame (Simulator, Debug; either lab). |
 | `-playlab TABLE` | Open the table, run the Play Lab, quit when saved. |
 | `-playlab-games N` · `-playlab-hz 120\|60\|both` · `-playlab-skills expert,custom` · `-playlab-cap SECONDS` | Games per skill and rate, rates, skills, game cap (default 480 s). |
 | `-playlab-plunge [REPEATS]` | The plunge sweep. |
@@ -158,7 +169,7 @@ CUSTOM="base=intermediate,sigma=0.025,catch=0.30" tools/playlab_run.sh lamplight
 
 | Tool | What it does |
 |---|---|
-| `playlab_report.py REPORT.json --html` | The Play Lab page: scores, drains, objectives, aims, heat maps, time-to-objective curves, and a replay player over the table's art. Also `--tracks`, `--heat`, `--curves` (SVGs), `--checks`, `--precise`, `--tightness`. |
+| `playlab_report.py REPORT.json --html` | The Play Lab page: scores, drains, objectives, aims, time per ball against the design targets, heat maps, time-to-objective curves, and a replay player over the table's art. Also `--tracks`, `--heat`, `--curves` (SVGs), `--checks`, `--precise`, `--tightness`. |
 | `playlab_index.py --out ShotLab/sweep-X.html REPORTS… [--baseline latest]` | One page comparing tables (what the sweep writes). |
 | `playlab_merge.py --out MERGED.json A.json B.json` | Merges runs of the same table into one report. |
 | `playlab_calibrate.py RECORDING.json [ROBOT REPORTS…]` | Which robot you play like, and the custom skill's profile. |

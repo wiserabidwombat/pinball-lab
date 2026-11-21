@@ -18,6 +18,42 @@ Too-hard flags (first-guess thresholds; tune them as the tables teach us):
 import json, sys, argparse, collections, statistics, os, html, math, random
 
 SKILLS = ["beginner", "intermediate", "advanced", "expert"]
+# Design targets, seconds per ball (gi-starter/BALL-TIME-TARGETS.md, Aaron's research 2026-11-21): beginner 20-40 s
+# (up to 60 is the casual-friendly band), intermediate 1-2 min, advanced 2-5 min, expert 10+ min on a forgiving table.
+BALL_TARGETS = {"beginner": (20, 60), "intermediate": (60, 120), "advanced": (120, 300), "expert": (600, None)}
+BALL_TARGET_TEXT = {"beginner": "20-40 s (casual 30-60 s)", "intermediate": "1-2 min", "advanced": "2-5 min", "expert": "10+ min"}
+
+
+def ball_time_rows(d, by, passes):
+    """Seconds per ball (game seconds / balls played) per pass x skill, against BALL_TARGETS."""
+    cap = d.get("maxGameSeconds", 480)
+    out = []
+    for p in passes:
+        for sk in SKILLS:
+            gs = [g for g in by.get((p, sk), []) if g.get("ballsPlayed") and g.get("seconds")]
+            if not gs:
+                continue
+            v = sorted(g["seconds"] / g["ballsPlayed"] for g in gs)
+            q = lambda f: v[min(len(v) - 1, int(f * len(v)))]
+            capped = sum(1 for g in gs if g.get("endedBy") != "gameOver")
+            limit = cap / max(1.0, mean([g["ballsPlayed"] for g in gs]))   # the longest ball the cap lets a game show
+            med = median(v)
+            lo, hi = BALL_TARGETS.get(sk, (None, None))
+            if lo is None:
+                verdict, level = "no target", "mid"
+            elif lo > limit:
+                verdict, level = f"cap too low to tell (a ball can show at most ~{limit:.0f} s; raise CAP)", "mid"
+            elif med < lo:
+                verdict, level = "short", "bad"
+                if capped * 4 >= len(gs):
+                    verdict, level = f"short, but {capped} of {len(gs)} games hit the cap", "warn"
+            elif hi is not None and med > hi:
+                verdict, level = "long", "warn"
+            else:
+                verdict, level = "in range", "good"
+            out.append(dict(pass_=p, skill=sk, games=len(gs), median=med, q1=q(0.25), q3=q(0.75), capped=capped,
+                            target=BALL_TARGET_TEXT.get(sk, "-"), verdict=verdict, level=level))
+    return out
 OUTCOME_COLOR = {"made": "#2e9e4e", "miss": "#8a8a8a", "drain": "#d1403a"}
 
 
@@ -306,6 +342,7 @@ def analyze(d, precise=()):
     tightness = max(tight) if tight and len(tight) == len(good_cells) else float("inf")
 
     return dict(games=games, passes=passes, objectives=objectives, names=names, extras=extras, rows=rows, grid=grid,
+                ball_rows=ball_time_rows(d, by, passes),
                 tightness=tightness, plunge_rows=plunge_rows, plunge_bands=plunge_bands,
                 aims=aims, banners=banners, shots=shots, objs=objs, incidents=incidents, captures=captures,
                 tracks=tracks, track_rows=track_rows, flags=flags, notes=notes, drain_rows=drain_rows, no60=no60,
@@ -539,6 +576,11 @@ def print_text(d, a, report_path, checks):
               f"{r['catches']:>6.1f}{r['lane_taps']:>6.1f}{r['nudges']:>6.1f}{r['tilts']:>5.1f}{r['bounces']:>7.1f}{r['traps']:>5.1f}{r['live']:>5.1f}" + "".join(f"{r['extras'][k]:>8.1f}" for k in extras)
               + "  " + ",".join(e[:4] for e in r["ends"])
               + (f"  score ±{(r['score_hi'] - r['score_lo']) / 2:,.0f}" if r["score_lo"] is not None else ""))
+    if a["ball_rows"]:
+        print("\nTime per ball vs the design targets (game seconds / balls played · median · middle half · games at the cap):")
+        for r in a["ball_rows"]:
+            print(f"  {r['pass_']:7}{r['skill']:13}{r['median']:5.0f} s  ({r['q1']:.0f}-{r['q3']:.0f})  capped {r['capped']:2}/{r['games']:<3}"
+                  f"  target {r['target']:25} {r['verdict']}")
     if a["names"]:
         print("\nObjectives reached (games that reached it / games · median seconds to the first):")
         print(f"{'objective':15}" + "".join(f"{p + ' ' + s[:3]:>12}" for p in passes for s in SKILLS))
@@ -790,6 +832,19 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
                  + "".join(f"<td>{r['extras'][k]:.1f}</td>" for k in extras)
                  + f"<td>{e(', '.join(r['ends']))}</td></tr>")
     h.append("</table></div>")
+
+    # Time per ball against the design targets
+    if a["ball_rows"]:
+        h.append("<h2>Time per ball</h2><div class='panel small'>game seconds / balls played, against the design targets "
+                 "(beginner and expert from published sources, the middle two estimates). A game that hit the cap was "
+                 "still going, so its balls would have run longer.</div>"
+                 "<div class='panel'><table><tr><th>pass</th><th>skill</th><th>median</th><th>middle half</th>"
+                 "<th>games at the cap</th><th>target</th><th>verdict</th></tr>")
+        for r in a["ball_rows"]:
+            h.append(f"<tr><td>{e(r['pass_'])}</td><td>{e(r['skill'])}</td><td>{r['median']:.0f} s</td>"
+                     f"<td>{r['q1']:.0f}–{r['q3']:.0f} s</td><td>{r['capped']} / {r['games']}</td><td>{e(r['target'])}</td>"
+                     f"<td style='color:var(--{r['level']})'>{e(r['verdict'])}</td></tr>")
+        h.append("</table></div>")
 
     # Objective grid
     if a["names"]:

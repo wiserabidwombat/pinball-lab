@@ -9,15 +9,15 @@
 #   SKIP_BUILD=1 tools/playlab_run.sh lamplight     # reuse the last build
 #   tools/playlab_run.sh monsoon plunge [hz]        # plan 2 round 7a: the plunge sweep (33 powers × 2 balls per pass)
 #   BUILD_ONLY=1 tools/playlab_run.sh lamplight     # build (and write the build id), then stop — the sweep uses this
-#   DEVICE="iPhone 17 Pro Max · lab 2" tools/playlab_run.sh …   # another Simulator device (the sweep's --parallel clones)
+#   DEVICE="iPhone 18 Pro Max · lab 2" tools/playlab_run.sh …   # another Simulator device (the sweep's --parallel clones)
 #
 # Tables: lamplight, greyinvasion, cthulhu, monsoon, grandtour (as they adopt PlayLabHost). Reports go to ShotLab/.
 set -euo pipefail
 TABLE=${1:?table (lamplight, greyinvasion, cthulhu, monsoon, grandtour)}
 GAMES=${2:-2}
-HZ=${3:-both}
+HZ=${3:-120}     # 2026-11-21: 120 Hz by default (devices no longer step at 1/60 s); 60 or both on request
 SKILLS=${4:-}
-DEVICE=${DEVICE:-iPhone 17 Pro Max}
+DEVICE=${DEVICE:-iPhone 18 Pro Max}
 BUNDLE=com.aarontilley.pinballlab
 PROJECT=GreyInvasionPinball.xcodeproj
 SCHEME=GreyInvasionPinball
@@ -88,6 +88,8 @@ fi
 [ -n "$SKILLS" ] && ARGS+=(-playlab-skills "$SKILLS")
 # Plan 2 round 18: OVERRIDE="Mon.ragingPush=2000" — what-if tunables (GreyInvasionPinball/LabOverrides.swift).
 [ -n "${OVERRIDE:-}" ] && ARGS+=(-override "$OVERRIDE") && echo "▶ Overrides: $OVERRIDE"
+# Lab fast-forward: FAST=8 → 8 fixed 1/120 s updates per drawn frame (4× real time; no screenshots in this mode).
+[ -n "${FAST:-}" ] && ARGS+=(-lab-fast "$FAST") && echo "▶ Fast-forward: $FAST steps per frame"
 # The custom skill's profile: CUSTOM="base=advanced,sigma=0.013,catch=0.86" … custom (tools/playlab_calibrate.py prints it).
 [ -n "${CUSTOM:-}" ] && ARGS+=(-playlab-custom "$CUSTOM") && echo "▶ Custom skill: $CUSTOM"
 echo "▶ Launching the Play Lab: ${ARGS[*]} (the app quits by itself when the report is saved)"

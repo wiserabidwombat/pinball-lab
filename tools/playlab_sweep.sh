@@ -26,12 +26,12 @@
 # finished. Each table's own output goes to ShotLab/sweep-<stamp>-<table>.log; the terminal shows it prefixed "[table]".
 set -uo pipefail
 GAMES=${1:-2}
-HZ=${2:-both}
+HZ=${2:-120}     # 2026-11-21: 120 Hz by default; pass both for the old 60 Hz pass too
 shift 2 2>/dev/null || shift $# 2>/dev/null
 TABLES=("$@")
 [ ${#TABLES[@]} -gt 0 ] || TABLES=(lamplight greyinvasion cthulhu monsoon)
 cd "$(dirname "$0")/.."
-DEVICE=${DEVICE:-iPhone 17 Pro Max}
+DEVICE=${DEVICE:-iPhone 18 Pro Max}
 PARALLEL=${PARALLEL:-1}
 [ "$PARALLEL" -ge 1 ] 2>/dev/null || PARALLEL=1
 STAMP=$(date -u +%Y-%m-%dT%H-%M-%SZ)

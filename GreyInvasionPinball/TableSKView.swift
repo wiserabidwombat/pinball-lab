@@ -13,6 +13,22 @@ import SpriteKit
 import MetalKit
 import QuartzCore
 
+/// Lab fast-forward (Debug, Simulator only): launched with `-lab-fast N` (tools: FAST=N), the table is hosted by
+/// SceneHostView and every drawn frame runs N updates of exactly 1/120 s on a clock of its own — the step devices use —
+/// so a lab run goes N × 60 / 120 times real speed (N = 8: 4× real time, 8× the old half-speed 120 Hz pass). No
+/// screenshots in this mode (they need SKView). 0 = off.
+nonisolated enum LabFast {
+    static let steps: Int = {
+        #if DEBUG && targetEnvironment(simulator)
+        guard let s = UserDefaults.standard.string(forKey: "lab-fast"), let n = Int(s) else { return 0 }
+        return min(64, max(0, n))
+        #else
+        return 0
+        #endif
+    }()
+    static var isOn: Bool { steps > 0 }
+}
+
 /// A table scene that can be drawn by the SKRenderer host: `hostView` is the touch surface when `view` is nil.
 @MainActor
 protocol RendererHostedScene: SKScene {
@@ -27,7 +43,7 @@ struct TableSKView: UIViewRepresentable {
     /// forces SKView on a device (the pause card's debug "Loop" button; takes effect the next time a table opens).
     static var usesRenderer: Bool {
         #if targetEnvironment(simulator)
-        return false
+        return LabFast.isOn          // lab fast-forward runs on the renderer host; otherwise SKView for the labs
         #else
         return !UserDefaults.standard.bool(forKey: "skUseSKView")
         #endif
@@ -115,6 +131,8 @@ final class SceneHostView: MTKView, MTKViewDelegate {
     /// steps over 1/90 s, stay off). Capped at 4 updates, so a long hitch doesn't snowball.
     private static let maxStep: CFTimeInterval = 1.0 / 120
     private static let maxUpdatesPerFrame = 4
+    /// Lab fast-forward: the clock the fixed steps run on (never the wall clock).
+    private var fastClock: CFTimeInterval = 1000
 
     func draw(in view: MTKView) {
         frameInFlight.wait()
@@ -123,13 +141,21 @@ final class SceneHostView: MTKView, MTKViewDelegate {
         cb.addCompletedHandler { @Sendable [frameInFlight] _ in frameInFlight.signal() }   // runs off the main thread
         fitScene()
         let now = CACurrentMediaTime()
-        if let last = lastUpdate, now > last {
-            // 120 Hz: 8.3 ms → 1 update. 60 Hz: 16.7 ms → 2. The 0.3 of slack keeps ProMotion's uneven frames (up to
-            // ~10.8 ms) at one update, so 120 Hz devices play exactly as before.
-            let n = min(max(Int(((now - last) / Self.maxStep - 0.3).rounded(.up)), 1), Self.maxUpdatesPerFrame)
-            for i in 1..<n { renderer.update(atTime: last + (now - last) * Double(i) / Double(n)) }
+        if LabFast.isOn {
+            // Lab fast-forward: N updates of exactly 1/120 s per drawn frame, whatever the wall clock says.
+            for _ in 0..<LabFast.steps {
+                fastClock += Self.maxStep
+                renderer.update(atTime: fastClock)
+            }
+        } else {
+            if let last = lastUpdate, now > last {
+                // 120 Hz: 8.3 ms → 1 update. 60 Hz: 16.7 ms → 2. The 0.3 of slack keeps ProMotion's uneven frames (up
+                // to ~10.8 ms) at one update, so 120 Hz devices play exactly as before.
+                let n = min(max(Int(((now - last) / Self.maxStep - 0.3).rounded(.up)), 1), Self.maxUpdatesPerFrame)
+                for i in 1..<n { renderer.update(atTime: last + (now - last) * Double(i) / Double(n)) }
+            }
+            renderer.update(atTime: now)                     // update, actions, physics, didFinishUpdate
         }
-        renderer.update(atTime: now)                         // update, actions, physics, didFinishUpdate
         lastUpdate = now
         renderer.render(withViewport: CGRect(origin: .zero, size: drawableSize),
                         commandBuffer: cb, renderPassDescriptor: pass)

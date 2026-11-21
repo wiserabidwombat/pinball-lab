@@ -20,7 +20,8 @@
 //
 // Unattended runs: launch the app with `-playlab <table>` (lamplight, greyinvasion, cthulhu, monsoon) and it opens
 // that table, runs the lab and quits when the report is saved. Options: `-playlab-games N` (per skill and pass,
-// default 2), `-playlab-hz 120|60|both` (default both), `-playlab-skills beginner,expert` (default all),
+// default 2), `-playlab-hz 120|60|both` (default 120: since 2026-11-03 every device steps
+// physics at 1/120 s or finer, so the 60 Hz pass only models old devices), `-playlab-skills beginner,expert` (default all),
 // `-playlab-cap SECONDS` (a game that runs this long is closed early, default 480), `-playlab-plunge [REPEATS]` (plan 2
 // round 7a: the plunge sweep — no flipping, every served ball plunged at the next power of 0.20…1.00 by 0.05, REPEATS
 // balls per power (default 3), and what each plunge did recorded in the report's `plunges`). `-playlab-custom
@@ -904,7 +905,7 @@ extension PlayLabHost where Self: SKScene {
 struct PlayLabConfig {
     var gamesPerSkill = 2
     var skills = PlaySkill.allCases
-    var passes = PlayPass.allCases
+    var passes: [PlayPass] = [.hz120]          // 120 Hz by default; -playlab-hz 60|both for the old 60 Hz pass
     /// A game that runs this long (table time) is closed early.
     var maxGameSeconds: TimeInterval = 480
     /// A flip "made" its shot if that shot's event comes within this long.
@@ -975,7 +976,12 @@ struct PlayLabConfig {
         c.build = PlayLabBuild.current(fromArguments: d.string(forKey: "playlab-build"))
         if let n = d.object(forKey: "playlab-games") as? String, let v = Int(n), v > 0 { c.gamesPerSkill = v }
         if let hz = d.string(forKey: "playlab-hz") {
-            switch hz { case "120": c.passes = [.hz120]; case "60": c.passes = [.hz60]; default: break }
+            switch hz { case "120": c.passes = [.hz120]; case "60": c.passes = [.hz60]; case "both": c.passes = PlayPass.allCases; default: break }
+        }
+        // Lab fast-forward (-lab-fast N): the host already steps at exactly 1/120 s, so play at the scene's own speed.
+        if LabFast.isOn {
+            c.passes = [.hz120]
+            c.nativeSpeed = true
         }
         if let s = d.string(forKey: "playlab-skills") {
             let picked = s.split(separator: ",").compactMap { PlaySkill(rawValue: $0.trimmingCharacters(in: .whitespaces)) }

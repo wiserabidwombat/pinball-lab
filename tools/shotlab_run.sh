@@ -23,7 +23,7 @@ BUNDLE=com.aarontilley.pinballlab
 PROJECT=GreyInvasionPinball.xcodeproj
 SCHEME=GreyInvasionPinball
 cd "$(dirname "$0")/.."
-DERIVED=build/playlab
+DERIVED=${DERIVED:-build/playlab}   # another session's builds can live elsewhere: DERIVED=build/playlab-lab
 
 echo "▶ Simulator: $DEVICE"
 UDID=$(xcrun simctl list devices available -j | python3 -c "

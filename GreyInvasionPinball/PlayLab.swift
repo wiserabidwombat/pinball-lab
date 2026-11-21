@@ -288,6 +288,10 @@ final class PlayRobot {
     /// Round 11: multiball traps — whether the cradle in hand is being held because another ball is loose, and how
     /// many such holds there were.
     private var trapHeld = false
+    private var trapSince: TimeInterval = 0
+    /// The longest one trap is held. Without a limit, two balls cradled on flippers that share a button (the Lamplight's
+    /// loft flipper and its lower right flipper) each kept the other "trapped" for the rest of the game.
+    static let trapMaxSeconds: TimeInterval = 8
     private(set) var traps = 0
     private var nudgeTimes: [TimeInterval] = []
     private var nudgeCooldownUntil: TimeInterval = -1
@@ -460,10 +464,18 @@ final class PlayRobot {
             // other flipper plays that one — unless the table's most wanted shot is this flipper's. On release the
             // shot is picked afresh (the table may have moved on while the ball waited).
             let f = flippers[i]
-            let anotherLoose = lowerFree.contains { hypot($0.position.x - f.cradle.x, $0.position.y - f.cradle.y) > 40 }
+            // A ball lying still in another flipper's cradle isn't loose: it is trapped too (this flipper's button may
+            // be the one holding it up), and nothing will ever play it while this one waits.
+            let anotherLoose = lowerFree.contains { b in
+                hypot(b.position.x - f.cradle.x, b.position.y - f.cradle.y) > 40
+                    && !flippers.contains { g in
+                        hypot(b.position.x - g.cradle.x, b.position.y - g.cradle.y) < 26 && hypot(b.velocity.dx, b.velocity.dy) < 60
+                    }
+            }
             let wantedHere = view.wanted.first.map { w in f.shots(for: pass).contains { $0.name == w } } ?? false
-            if skill.trapsInMultiball, anotherLoose, !wantedHere {
-                if !trapHeld { trapHeld = true; traps += 1 }
+            let trapSpent = trapHeld && now - trapSince > Self.trapMaxSeconds
+            if skill.trapsInMultiball, anotherLoose, !wantedHere, !trapSpent {
+                if !trapHeld { trapHeld = true; trapSince = now; traps += 1 }
                 pressed[i] = true
                 mode = .cradled(flipper: i, dropAt: max(dropAt, now + 0.3), target: target, delay: delay)
             } else if now >= dropAt {

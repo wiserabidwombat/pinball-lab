@@ -115,6 +115,7 @@ ensure_devices() {
   local base; base=$(udid_of "$DEVICE")
   [ -n "$base" ] || { say "No simulator named '$DEVICE' (set DEVICE=...)"; exit 1; }
   local k name
+  [ "$PARALLEL" -ge 2 ] || return 0   # macOS seq counts DOWN (seq 2 1 → 2 1): without this a clone was made at PARALLEL=1
   for k in $(seq 2 "$PARALLEL"); do
     name=$(device_for_slot "$k")
     if [ -z "$(udid_of "$name")" ]; then

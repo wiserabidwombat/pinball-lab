@@ -62,6 +62,16 @@ struct ChompTableView: View {
             // Game controller: A = Play / Resume / Play Again, Menu = pause (flippers and plunger: the scene)
             LabGamepad.shared.claim("chomp", onA: { gamepadA() }, onMenu: { gamepadMenu() })
             #if DEBUG
+            // M4 v1: `-playlab chomp` (tools/playlab_run.sh chomp) starts the Play Lab at once; the app quits when done.
+            if PlayLab.launchTable == "chomp" {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartPlayLab()
+                }
+            }
             // M2 v6: `-shotlab chomp` (tools/shotlab_run.sh chomp) starts the Shot Lab at once; the app quits when done.
             if PlayLab.launchTable == nil, ShotLab.launchTable == "chomp" {
                 Task { @MainActor in
@@ -69,7 +79,7 @@ struct ChompTableView: View {
                     try? await Task.sleep(for: .milliseconds(500))
                     screen = .playing
                     setPaused(false)
-                    if ShotLab.launchScenario == "fanprobe" { scene.debugFanProbe() } else if ShotLab.launchScenario == "pierprobe" { scene.debugPierProbe() } else if ShotLab.launchScenario == "dropprobe" { scene.debugDropProbe() } else { scene.debugStartShotLab() }
+                    if ShotLab.launchScenario == "fanprobe" { scene.debugFanProbe() } else if ShotLab.launchScenario == "pierprobe" { scene.debugPierProbe() } else if ShotLab.launchScenario == "dropprobe" { scene.debugDropProbe() } else if ShotLab.launchScenario == "catchprobe" { scene.debugCatchProbe() } else { scene.debugStartShotLab() }
                 }
             }
             #endif

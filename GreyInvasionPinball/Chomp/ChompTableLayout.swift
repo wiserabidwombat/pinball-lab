@@ -313,7 +313,7 @@ enum ChompTableLayout {
     /// 1040 so the harpoon lane beside it keeps 38 pt under our arch (the real U-turn is higher, under a higher top).
     static let tongueRightX: CGFloat = 70
     /// v18c (p. 40 close-up, p40_loopMouth.png: the real strip ends at y ~924): the rounded bottom's centre, r 5 below it.
-    static let tongueBottomY: CGFloat = 929
+    static let tongueBottomY: CGFloat = 925   // v24 (p. 40 at ×9, v23/tongue9.png): the strip ends at y ~922
     static var tongue: [CGPoint] {
         let r = (tongueRightX - harpoonX) / 2, cx = harpoonX + r
         // M3 v18b/c: a rounded bottom (centre (65, tongueBottomY)) instead of a square corner, so a loop shot that meets it
@@ -342,8 +342,11 @@ enum ChompTableLayout {
     /// blue strip whose left side leans up-left from a tip at ~(141, 876) to x ~106 by y 1060, then straight up to the
     /// outer wall. It is now a closed solid (left side traced, right side our x 147 wall), so the loop runs x 70 → the
     /// post (52 pt at its mouth, 36 from y 1060 up) and loop shots pass left of the shark target below the tip.
-    static let loopPostEdge: [CGPoint] = [CGPoint(x: 141, y: 876), CGPoint(x: 128, y: 900), CGPoint(x: 114, y: 945),
-                                          CGPoint(x: 108, y: 1000), CGPoint(x: 106, y: 1060)]
+    /// M3 v24 (p. 40's blue read row by row): the tip is at ~(143, 863) and the left side stands steeper near it —
+    /// x 133 at 868, 125 at 900, 112.6 at 940, 106 by 996.
+    static let loopPostEdge: [CGPoint] = [CGPoint(x: 143, y: 863), CGPoint(x: 133, y: 868), CGPoint(x: 127.5, y: 884),
+                                          CGPoint(x: 125, y: 900), CGPoint(x: 123, y: 908), CGPoint(x: 112.6, y: 940),
+                                          CGPoint(x: 106, y: 996), CGPoint(x: 106, y: 1060)]
     /// The post's left side at height y (straight up at x 106 above the traced points).
     static func loopPostLeftX(atY y: CGFloat) -> CGFloat {
         let e = loopPostEdge
@@ -355,8 +358,8 @@ enum ChompTableLayout {
     }
     static var loopRight: [CGPoint] {
         let topLeft = archPoint(atX: 106)
-        return [CGPoint(x: 147, y: 885), CGPoint(x: 147, y: 1180), archPoint(atX: 157), topLeft]
-            + loopPostEdge.reversed() + [CGPoint(x: 147, y: 885)]
+        return [CGPoint(x: 147, y: 872), CGPoint(x: 147, y: 1180), archPoint(atX: 157), topLeft]
+            + loopPostEdge.reversed() + [CGPoint(x: 147, y: 872)]   // v24: right side down to the lower tip
     }
 
     // MARK: Milestone 2 v5: the wave ramp (the real table's Left Metal Ramp)
@@ -715,11 +718,15 @@ extension ChompTableLayout {
 extension ChompTableLayout {
     /// Switches 45 / 47 / 48 ("Tgt 1–3") from p. 17's switch map, placed on p. 40's yellow target faces: one below the
     /// post between the loop and the wave ramp, two either side of the reel's keyhole mouth. Faces point down the table.
-    static let sharkTargetCentres = [CGPoint(x: 153, y: 816), CGPoint(x: 414, y: 931), CGPoint(x: 494, y: 931)]
+    // M3 v24 (p. 40 at ×10, v23/tgt10.png): Tgt1's yellow face is ~4 pt right of v17's spot and tilted 18° toward the
+    /// right flipper (bottom edge (146.6, 809.5) → (166.9, 816.2)); the scene turns each target by sharkTargetAngles.
+    static let sharkTargetAngles: [CGFloat] = [18.3 * .pi / 180, 0, 0]
+    static let sharkTargetCentres = [CGPoint(x: 155.5, y: 816.6), CGPoint(x: 414, y: 931), CGPoint(x: 494, y: 931)]
     static let sharkTargetSize = CGSize(width: 22, height: 8)
     /// Closed backings from each target's back to the plastic behind it, sides steep so a ball rolls off (no ledge).
     static let sharkBacks: [[CGPoint]] = [
-        [CGPoint(x: 142, y: 820), CGPoint(x: 164, y: 820), CGPoint(x: 151, y: 870), CGPoint(x: 142, y: 820)],
+        [CGPoint(x: 143.8, y: 816.9), CGPoint(x: 164.7, y: 823.9), CGPoint(x: 151, y: 870), CGPoint(x: 143, y: 863),
+         CGPoint(x: 143.8, y: 816.9)],   // v24: from the tilted target's back up to the post's tip
         [CGPoint(x: 403, y: 935), CGPoint(x: 425, y: 935), CGPoint(x: 426, y: 978), CGPoint(x: 395, y: 978),
          CGPoint(x: 403, y: 935)],
         [CGPoint(x: 483, y: 935), CGPoint(x: 505, y: 935), CGPoint(x: 505, y: 983), CGPoint(x: 500, y: 983),

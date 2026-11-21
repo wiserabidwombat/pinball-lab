@@ -100,7 +100,17 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// M2 v15: the pier probe's clock (nil when it isn't running).
     fileprivate var pierProbeT: Double?
     fileprivate var dropProbeT: Double?          // M3 v13: the drop probe
+    fileprivate var catchProbe = false           // M4 v2: the drop probe's clock runs the catch probe
+    /// M4 v1: the Play Lab (shared, PlayLab.swift; Table 06's host pattern): the run, when its next game starts.
+    private var playLab: PlayLab?
+    private var playLabNextAt: TimeInterval?
+    private var playLabStarting = false
+    /// The Play Lab's watchdog: where each ball was last seen moving, and when.
+    private var watchSpots: [ObjectIdentifier: (CGPoint, TimeInterval)] = [:]
     #endif
+    /// M4 v1: the Play Lab robot's buttons (always false outside it).
+    private var robotLeft = false
+    private var robotRight = false
     private var lastSpinSound: TimeInterval = 0
     private var quickshotLanes: [ChompRollover] = []
     private var bankTargets: [SKShapeNode] = []
@@ -139,6 +149,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             if isAttractMode { releaseAllControls() }
             #if DEBUG
             if isAttractMode { shotLab = nil }         // Menu stops the Shot Lab
+            if isAttractMode { stopPlayLab(saving: true) }      // and the Play Lab (saving the games so far)
             #endif
             refreshCamera()
         }
@@ -166,7 +177,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M3 v22"
+    static let buildTagText = "T7 M4 v2"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -614,9 +625,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private func addSharkTower() {
         for back in ChompTableLayout.sharkBacks { addWall(points: back) }
         let size = ChompTableLayout.sharkTargetSize
-        for c in ChompTableLayout.sharkTargetCentres {
+        for (i, c) in ChompTableLayout.sharkTargetCentres.enumerated() {
             let node = SKShapeNode(rectOf: size, cornerRadius: 2)
             node.position = c
+            node.zRotation = ChompTableLayout.sharkTargetAngles[i]   // M3 v24: Tgt1 faces the right flipper
             node.strokeColor = SKColor(white: 1, alpha: 0.6)
             node.lineWidth = 1
             node.zPosition = 1
@@ -1073,7 +1085,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)\(frameStatsShown)\(Self.buildTagText) \(effectiveCameraMode.tag) · \(speed)"
+        var text = "\(fps)\(frameStatsShown)\(Self.buildTagText) \(effectiveCameraMode.tag) · \(speed)"
+        #if DEBUG
+        if let lab = playLab { text += "\n" + lab.progressText }   // M4 v1
+        #endif
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -1129,6 +1144,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                              // a new game stops the Shot Lab
+        if !playLabStarting { stopPlayLab(saving: true) }   // and the Play Lab, unless it's starting its next game
         #endif
         removeAllBalls()
         nextBallAt = nil
@@ -1154,11 +1170,18 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     }
 
     private func showBanner(_ text: String) {
+        #if DEBUG
+        playLab?.banner(text)
+        labObjective(forBanner: text)
+        #endif
         game.banner = text
         bannerClearAt = gameTime + ChompTableLayout.bannerSeconds
     }
 
     private func sfx(_ s: MonSound) {
+        #if DEBUG
+        if playLab != nil, playLab?.isWatching != true { return }   // the robot plays silently unless watched
+        #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }
 
@@ -1227,8 +1250,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         #if DEBUG
         if shotLab != nil { return }               // the robot has the flippers
         #endif
-        var left = activeTouches.values.contains(.left) || padLeft
-        var right = activeTouches.values.contains(.right) || padRight
+        var left = activeTouches.values.contains(.left) || padLeft || robotLeft
+        var right = activeTouches.values.contains(.right) || padRight || robotRight
         if nudge.tilted { left = false; right = false }      // tilted: dead flippers until the next ball
         if left && !leftFlipper.isPressed { sfx(.flipper) }
         if right && !rightFlipper.isPressed { sfx(.flipper) }
@@ -1339,7 +1362,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     override func update(_ realTime: TimeInterval) {
         cpuStart = CACurrentMediaTime()
-        let step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        var step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        #if DEBUG
+        if let lab = playLab { step *= Double(lab.physicsSpeed) }   // M4 v1: the Play Lab's pass (120 Hz steps)
+        #endif
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
@@ -1368,6 +1394,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         let dt = CGFloat(step)
         lastStep = dt
         updateGamepad()
+        #if DEBUG
+        updatePlayLab(now)
+        #endif
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         miniFlipper.step(dt: dt)
@@ -1429,6 +1458,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             placeBallOnPlunger()
         }
 
+        #if DEBUG
+        checkPlayLabGame(now)
+        #endif
         let waiting = isBallOnPlunger
         if game.ballOnPlunger != waiting {
             game.ballOnPlunger = waiting
@@ -1676,6 +1708,8 @@ extension ChompTableScene {
     fileprivate func labEvent(_ name: String) {
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
+        playLab?.shot(name, now: gameTime)                                    // M4 v1
+        if Self.playLabShotObjectives.contains(name) { playLab?.objective(name, now: gameTime) }
         #endif
     }
 }
@@ -1687,7 +1721,8 @@ extension ChompTableScene: ShotLabHost {
     var shotLabTableName: String { "Chomp" }
 
     /// The shots a player aims for end a trial; slings, lanes, the spinner and the bumper are noted only.
-    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "chumBucket", "sharkTower", "harpoonGate", "fishPhone", "buoy"] }
+    // M3 v23: "sharkTower" is minor (like the fin): a graze off Tgt1 no longer ends a trial before the ball reaches the loop.
+    var shotLabMajorEvents: Set<String> { ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "chumBucket", "harpoonGate", "fishPhone", "buoy"] }
 
     /// M2 v15: real gravity (v14) rolls the cradled ball down the flipper more slowly — the right flipper's shots moved
     /// to 0.51–0.58 s, the end of the shared 0.20–0.58 sweep — so CHOMP! sweeps to 0.85 s.
@@ -1761,6 +1796,7 @@ extension ChompTableScene: ShotLabHost {
     }
 
     func debugStartShotLab() {
+        stopPlayLab(saving: true)                  // M4 v1 review: a Shot Lab started mid Play Lab ends that run first
         isAttractMode = false
         removeAllBalls()
         shotLabTime = 0
@@ -1887,8 +1923,10 @@ extension ChompTableScene {
                 let piv = ChompTableLayout.rightFlipperPivot
                 let a = ChompTableLayout.flipperRestAngle
                 let along = (p.flipPoint.x - piv.x) * -cos(a) + (p.flipPoint.y - piv.y) * -sin(a)
-                print(String(format: "FAN %.1f %.2f %.0f %.2f %.0f %.2f", Double(speed), Double(tr.along), Double(tr.roll),
-                             Double(atan2(dy, dx) * 180 / .pi), Double(hypot(v.dx, v.dy)), Double(along)))
+                // M3 v23: + where the ball is as it leaves the flipper's reach (x y), to extend each shot to the loop.
+                print(String(format: "FAN %.1f %.2f %.0f %.2f %.0f %.2f %.1f %.1f", Double(speed), Double(tr.along), Double(tr.roll),
+                             Double(atan2(dy, dx) * 180 / .pi), Double(hypot(v.dx, v.dy)), Double(along),
+                             Double(b.position.x), Double(b.position.y)))
                 rightFlipper.isPressed = false
                 p.stage = 0; p.t = 0; p.i += 1
                 if p.i >= p.trials.count {
@@ -1955,19 +1993,60 @@ extension ChompTableScene {
         isAttractMode = false
         removeAllBalls()
         dropProbeT = 0
+        catchProbe = false
         print("DROP start")
+    }
+
+    // MARK: M4 v2: the catch probe (`-shotlab chomp -shotlab-scenario catchprobe`): the right flipper held up the whole
+    // time (a Play Lab catch), balls dropped onto it from above and fed down the right inlane; prints `CATCH i t x y vx vy`
+    // every 0.05 s, 2.5 s each — where a held flipper settles a 30 pt ball (the robot's cradle test is 26 pt).
+    private static var catchDrops: [(CGPoint, CGVector)] {
+        var d: [(CGPoint, CGVector)] = []
+        for x in stride(from: CGFloat(300), through: 390, by: 15) {
+            for vy in [-300, -800, -1400] as [CGFloat] { d.append((CGPoint(x: x, y: 330), CGVector(dx: 0, dy: vy))) }
+        }
+        let ix = ChompTableLayout.mirrorSum - (ChompTableLayout.laneGuideX + 25), iy = ChompTableLayout.laneGuideTop + 10
+        for v in [300, 600, 900, 1200] as [CGFloat] {
+            d.append((CGPoint(x: ix, y: iy), CGVector(dx: -v * 0.45, dy: -v * 0.89)))
+        }
+        return d
+    }
+
+    func debugCatchProbe() {
+        isAttractMode = false
+        removeAllBalls()
+        dropProbeT = 0
+        catchProbe = true
+        print("CATCH start \(Self.catchDrops.count) drops")
     }
 
     fileprivate func updateDropProbe(_ dt: CGFloat) {
         guard let t0 = dropProbeT else { return }
         let t = t0 + Double(dt)
         dropProbeT = t
-        let i = Int(t / 2), i0 = Int(t0 / 2)
+        let span = catchProbe ? 2.5 : 2.0
+        let i = Int(t / span), i0 = Int(t0 / span)
         updateGates()                              // (the gate is per ball; update() is skipped while probing)
-        if i >= Self.probeDrops.count { print("DROP done"); dropProbeT = nil; ShotLab.quitIfLaunchedForLab(); return }
+        let drops = catchProbe ? Self.catchDrops : Self.probeDrops
+        if i >= drops.count { print(catchProbe ? "CATCH done" : "DROP done"); dropProbeT = nil; ShotLab.quitIfLaunchedForLab(); return }
+        if catchProbe {                            // M4 v2: the right flipper held up, as the robot holds it to catch
+            rightFlipper.isPressed = true
+            leftFlipper.step(dt: dt); rightFlipper.step(dt: dt); miniFlipper.step(dt: dt)
+            handBallsToSwingingFlippers()
+            if Int(t0 / 0.05) != Int(t / 0.05) || i != i0, let b = balls.first {
+                let v = b.physicsBody?.velocity ?? .zero
+                print(String(format: "CATCH %d %.2f %.1f %.1f %.0f %.0f", i, t.truncatingRemainder(dividingBy: span),
+                             Double(b.position.x), Double(b.position.y), Double(v.dx), Double(v.dy)))
+            }
+            if i != i0 || t0 == 0 {
+                removeAllBalls()
+                shotLabPlaceBall(at: drops[i].0, velocity: drops[i].1)
+            }
+            return
+        }
         if i != i0 || t0 == 0 {
             removeAllBalls()
-            shotLabPlaceBall(at: Self.probeDrops[i].0, velocity: Self.probeDrops[i].1)
+            shotLabPlaceBall(at: drops[i].0, velocity: drops[i].1)
         }
         if Int(t0 / 0.01) != Int(t / 0.01), let b = balls.first {
             let v = b.physicsBody?.velocity ?? .zero
@@ -1975,6 +2054,236 @@ extension ChompTableScene {
                          Double(b.position.x), Double(b.position.y), Double(v.dx), Double(v.dy), "\(b.layer)",
                          b.physicsBody?.categoryBitMask ?? 0, b.physicsBody?.collisionBitMask ?? 0))
         }
+    }
+}
+#endif
+
+#if DEBUG
+// MARK: - M4 v1: the Play Lab host (Table 06's pattern). Robot players at four skills play whole games on the grey box.
+// No rules yet, so the objectives are the shots and the M2–M3 placeholder banners; the report's job here is drains,
+// stuck balls and which shots get made before the layout is locked.
+extension ChompTableScene: PlayLabHost {
+    var playLabTableName: String { "Chomp" }
+    var playLabBallRadius: CGFloat { ChompTableLayout.ballRadius }
+    var playLabVariantCount: Int { 1 }
+
+    /// Shot events that count as objectives the first time each game (labEvent reports them).
+    static let playLabShotObjectives: Set<String> = ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel",
+                                                      "fin", "chumBucket", "harpoonGate", "buoy"]
+
+    var playLabObjectives: [PlayObjective] {
+        [PlayObjective(name: "centerRamp", text: "Make the center ramp"),
+         PlayObjective(name: "boat", text: "Hit the boat's captive ball"),
+         PlayObjective(name: "chumBucket", text: "Hit the chum bucket"),
+         PlayObjective(name: "waveRamp", text: "Make the wave ramp"),
+         PlayObjective(name: "rightRamp", text: "Make the right ramp"),
+         PlayObjective(name: "reel", text: "Spin the fishing reel"),
+         PlayObjective(name: "leftLoop", text: "Make the left loop"),
+         PlayObjective(name: "harpoonGate", text: "Shoot through the harpoon gate"),
+         PlayObjective(name: "harpoonLane", text: "Come down the harpoon lane"),
+         PlayObjective(name: "fin", text: "Drop the fin"),
+         PlayObjective(name: "buoy", text: "Hit the buoy"),
+         PlayObjective(name: "fishPhoneBank", text: "Complete the Fish Phone bank"),
+         PlayObjective(name: "sharkTowerSet", text: "Complete the shark tower"),
+         PlayObjective(name: "innerTubeLit", text: "Light the inner tube (buoy)"),
+         PlayObjective(name: "innerTubeSave", text: "The inner tube saves a ball"),
+         PlayObjective(name: "ballSaved", text: "The ball save saves a ball"),
+         PlayObjective(name: "tilt", text: "Tilt")]
+    }
+
+    /// Flip delays = the middle of each Shot Lab window, 120 Hz (the default pass; the 60 Hz pass now only models the
+    /// SKView fallback): left from shotlab-chomp-2026-11-20T23-19-22Z (v21; the left flipper's shots haven't moved
+    /// since), right from 2026-11-21T15-13-32Z (v24). Bands of 3+ trials only (the right ramp, reel and loop are 1–2
+    /// trial slivers from the cradle). Inlane feeds from shotlab-chomp-inlane-2026-11-21T15-38-42Z, 4 pt bins, 3+.
+    var playLabFlippers: [PlayRobotFlipper] {
+        let specs = shotLabFlippers
+        let rest = ChompTableLayout.flipperRestAngle
+        // M4 v2 (catch probe, build/t7_catchprobe_v2.txt): a 30 pt ball on the held-up flipper settles at (382, 252) —
+        // 24–27 pt from the Shot Lab's drop point, on the edge of the robot's 26 pt "caught" test (run 1: ~0 catches).
+        // The robot's cradle is where the ball really rests (the Shot Lab's trials also start from there: 1.2 s settle).
+        let rightRest = CGPoint(x: 382, y: 252)
+        let leftRest = CGPoint(x: ChompTableLayout.mirrorSum - rightRest.x, y: rightRest.y)
+        return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: ChompTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: false, cradle: leftRest, rightButton: false, upper: false,
+                                 shots: [("centerRamp", 0.226), ("fishPhone", 0.371), ("boat", 0.470), ("sharkTower", 0.537),
+                                         ("buoy", 0.579), ("chumBucket", 0.633)],
+                                 inlane: [("buoy", 36, 39), ("chumBucket", 40, 43)]),
+                PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: ChompTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: rightRest, rightButton: true, upper: false,
+                                 shots: [("centerRamp", 0.408), ("chumBucket", 0.477), ("harpoonGate", 0.540),
+                                         ("fishPhone", 0.581)],
+                                 inlane: [("chumBucket", 28, 39)])]
+    }
+
+    func playLabStartGame(variant: Int) -> String {
+        game.isRobot = true
+        playLabStarting = true
+        newGame()
+        playLabStarting = false
+        physicsWorld.speed = playLab?.physicsSpeed ?? 1
+        return ""
+    }
+
+    func playLabEndGame() -> [String: Int] {
+        if !game.isGameOver {
+            removeAllBalls()
+            nextBallAt = nil
+        }
+        return ["fishPhoneDown": bankDown.filter { $0 }.count, "sharkDown": sharkDown.filter { $0 }.count]
+    }
+
+    func playLabStop() {
+        game.isRobot = false
+    }
+
+    /// Starts the Play Lab (robot players at four skills, 120 Hz, or as the launch arguments say). Menu or a new game
+    /// stops it, saving the games played so far.
+    func debugStartPlayLab() {
+        shotLab = nil
+        stopPlayLab(saving: true)
+        isAttractMode = false
+        let lab = PlayLab(host: self)
+        playLab = lab
+        lab.beginGame(now: gameTime)
+    }
+
+    /// Everything the robot needs to know this frame, and its buttons and plunger applied.
+    fileprivate func updatePlayLab(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if game.isGameOver || playLabNextAt != nil {
+            if robotLeft || robotRight { robotLeft = false; robotRight = false; updateFlippers() }
+            return
+        }
+        let view = PlayRobotView(now: now, balls: balls.map { b in
+            PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: !b.isOnFloor,
+                               isHeld: false, onPlunger: isOnPlunger(b), id: ObjectIdentifier(b).hashValue)
+        }, wanted: robotWanted())
+        runWatchdog(now, lab)
+        guard let cmd = lab.frame(view) else { return }
+        if let direction = cmd.nudge { applyNudge(direction) }
+        if cmd.left != robotLeft || cmd.right != robotRight {
+            robotLeft = cmd.left
+            robotRight = cmd.right
+            updateFlippers()
+        }
+        if let power = cmd.plunge, isBallOnPlunger {
+            plungerPull = power * ChompTableLayout.plungerMaxPull
+            releasePlunger()
+        }
+    }
+
+    /// A ball off the table, or one that hasn't moved 4 pt in 5 s while not on the plunger or cradled (incl. the pier
+    /// flipper held up), is recorded as an incident and served again (no ball lost).
+    private func runWatchdog(_ now: TimeInterval, _ lab: PlayLab) {
+        let w = ChompTableLayout.worldSize
+        for ball in balls {
+            let id = ObjectIdentifier(ball)
+            let p = ball.position
+            if !p.x.isFinite || !p.y.isFinite || p.x < -30 || p.x > w.width + 30 || p.y > w.height + 30 {
+                watchdogRescue("offTable", ball, now, lab)
+                continue
+            }
+            if isOnPlunger(ball) || isCradled(ball) || p.y < 0 {
+                watchSpots[id] = (p, now)
+                continue
+            }
+            if let spot = watchSpots[id], hypot(p.x - spot.0.x, p.y - spot.0.y) < 4 {
+                if now - spot.1 > 5 { watchdogRescue("stuck", ball, now, lab) }
+            } else {
+                watchSpots[id] = (p, now)
+            }
+        }
+    }
+
+    /// A ball resting on a raised flipper (left, right or the pier) is being held on purpose.
+    private func isCradled(_ ball: ChompBall) -> Bool {
+        let specs = shotLabFlippers
+        for (i, pressed) in [leftFlipper.isPressed, rightFlipper.isPressed, miniFlipper.isPressed].enumerated()
+            where pressed && i < specs.count {
+            // M4 v1 review: the pier's Shot Lab "cradle" (500, 600) is its drop point; a held ball rests at ~(490, 562).
+            let c = i == 2 ? CGPoint(x: 490, y: 562) : specs[i].cradle
+            if hypot(ball.position.x - c.x, ball.position.y - c.y) < 30 { return true }
+        }
+        return false
+    }
+
+    private func watchdogRescue(_ kind: String, _ ball: ChompBall, _ now: TimeInterval, _ lab: PlayLab) {
+        let p = ball.position
+        let x = p.x.isFinite ? Double(p.x) : -1, y = p.y.isFinite ? Double(p.y) : -1
+        lab.incident(PlayIncident(kind: kind, x: x.rounded(), y: y.rounded(), upper: !ball.isOnFloor,
+                                  time: lab.elapsed(now: now).rounded()))
+        watchSpots[ObjectIdentifier(ball)] = nil
+        removeBall(ball)
+        if balls.isEmpty, nextBallAt == nil { nextBallAt = now + 0.5 }      // served again, no ball lost
+        showBanner("WATCHDOG · \(kind == "stuck" ? "STUCK BALL" : "BALL OFF THE TABLE") AT \(Int(x)), \(Int(y))")
+    }
+
+    /// The shots the table wants, most wanted first (no lamps until the rules): unlit Fish Phone / shark tower
+    /// targets, then the shots in the order a player learns them.
+    private func robotWanted() -> [String] {
+        var w: [String] = []
+        if bankDown.contains(false) { w.append("fishPhone") }
+        if sharkDown.contains(false) { w.append("sharkTower") }
+        w += ["centerRamp", "boat", "chumBucket", "harpoonGate", "buoy", "fishPhone", "sharkTower"]
+        return w
+    }
+
+    /// Placeholder banners double as objectives: the first of each per game is what the report shows.
+    fileprivate func labObjective(forBanner text: String) {
+        guard let lab = playLab else { return }
+        let name: String?
+        switch text {
+        case "FISH PHONE": name = "fishPhoneBank"
+        case "SHARK TOWER": name = "sharkTowerSet"
+        case "HARPOON LANE": name = "harpoonLane"
+        case "INNER TUBE LIT": name = "innerTubeLit"
+        case "INNER TUBE SAVE": name = "innerTubeSave"
+        case "BALL SAVED": name = "ballSaved"
+        case "TILT": name = "tilt"
+        default: name = nil
+        }
+        if let name { lab.objective(name, now: gameTime) }
+    }
+
+    /// At game over (or after the cap) the game is recorded; the next one starts 2 s later.
+    fileprivate func checkPlayLabGame(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if let due = playLabNextAt {
+            if now >= due {
+                playLabNextAt = nil
+                if lab.isDone { finishPlayLab() } else { lab.beginGame(now: now) }
+            }
+            return
+        }
+        guard lab.current != nil, game.isGameOver || lab.isTimeUp(now: now) else { return }
+        let over = game.isGameOver
+        lab.endGame(score: game.score, ballsPlayed: ChompGameState.ballsPerGame - game.ballsLeft + (over ? 0 : 1),
+                    endedBy: over ? "gameOver" : "time", now: now)
+        physicsWorld.speed = lab.physicsSpeed
+        playLabNextAt = now + 2
+    }
+
+    private func finishPlayLab() {
+        guard let lab = playLab else { return }
+        let saved = lab.save()
+        let count = lab.games.count
+        stopPlayLab(saving: false)
+        newGame()
+        game.banner = "PLAY LAB DONE · \(count) GAMES · \(saved)"
+        bannerClearAt = nil
+        PlayLab.quitIfLaunchedForLab()
+    }
+
+    fileprivate func stopPlayLab(saving: Bool) {
+        guard let lab = playLab else { return }
+        playLab = nil
+        lab.stop(saving: saving)
+        playLabNextAt = nil
+        watchSpots.removeAll()
+        robotLeft = false
+        robotRight = false
+        if leftFlipper != nil { updateFlippers() }
+        physicsWorld.speed = isAttractMode ? 0 : 1
     }
 }
 #endif

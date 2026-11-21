@@ -318,12 +318,12 @@ enum ChompTableLayout {
         let r = (tongueRightX - harpoonX) / 2, cx = harpoonX + r
         // M3 v18b/c: a rounded bottom (centre (65, tongueBottomY)) instead of a square corner, so a loop shot that meets it
         // glances off (Shot Lab run 35: 108° loop shots hit the square corner at (70, 920) head-on).
-        var pts = [CGPoint(x: harpoonX, y: tongueBottomY), CGPoint(x: harpoonX, y: 1040)]
+        var pts = [CGPoint(x: harpoonX, y: tongueBottomY), CGPoint(x: harpoonX, y: tongueTopY)]
         for i in 1...11 {
             let a = CGFloat.pi - CGFloat.pi * CGFloat(i) / 12
-            pts.append(CGPoint(x: cx + r * cos(a), y: 1040 + r * sin(a)))
+            pts.append(CGPoint(x: cx + r * cos(a), y: tongueTopY + r * sin(a)))
         }
-        pts += [CGPoint(x: tongueRightX, y: 1040), CGPoint(x: tongueRightX, y: tongueBottomY)]
+        pts += [CGPoint(x: tongueRightX, y: tongueTopY), CGPoint(x: tongueRightX, y: tongueBottomY)]
         for i in 1...11 {
             let a = -CGFloat.pi * CGFloat(i) / 12
             pts.append(CGPoint(x: cx + r * cos(a), y: tongueBottomY + r * sin(a)))
@@ -635,9 +635,18 @@ enum ChompTableLayout {
                             to: CGPoint(x: leftWallX, y: leftBulgeTop))
         points.append(CGPoint(x: leftWallX, y: archStartY))
         let midX = worldSize.width / 2
+        // M3 v22: the real loop's U-turn (p. 40): the left wall runs straight up to the U, which turns over the harpoon
+        // lane, the tongue and the loop (x 20 → 106, the post's left side) with its top at y 1160; then up the post to the
+        // old arch, which goes on from x 106 as before (the arch used to cut across the harpoon lane above y ~1080).
+        let u = loopUCentre, ur = loopURadius
+        points.append(CGPoint(x: leftWallX, y: u.y))
+        for i in 1...16 {
+            let a = CGFloat.pi - CGFloat.pi * CGFloat(i) / 16
+            points.append(CGPoint(x: u.x + ur * cos(a), y: u.y + ur * sin(a)))
+        }
         points += quadCurve(from: CGPoint(x: leftWallX, y: archStartY),
                             control: CGPoint(x: leftWallX, y: topY),
-                            to: CGPoint(x: midX, y: topY))
+                            to: CGPoint(x: midX, y: topY)).filter { $0.x > u.x + ur }
         // M3 v12: the arch's right half is cut where it crosses y 1230; a straight top wall and a curve (centre
         // outerArcCentre, r 80) turn the plunger lane and the reel lane left into the right ramp's entrance.
         // M3 v21: with the turn raised to y 1280 (above the arch's top, 1270), the top wall runs straight from the
@@ -736,4 +745,15 @@ extension ChompTableLayout {
         let minY = outerWall.map(\.y).min() ?? 0
         return CGRect(x: leftWallX, y: minY, width: laneTopOuterX - leftWallX, height: topEdgeY - minY)
     }
+}
+
+// MARK: - M3 v22: the loop's U-turn at the real height
+extension ChompTableLayout {
+    /// The U over the harpoon lane, the tongue and the loop: from the left wall (x 20) to the post's left side (x 106),
+    /// top at y 1160 (the real U's, p. 40; ours used to be the Table 06 arch, which crossed the harpoon lane at ~1080).
+    static let loopURadius: CGFloat = 43
+    static let loopUCentre = CGPoint(x: 63, y: 1117)
+    /// The tongue's round top (centre y; r 5): 1040 → 1108 (the real tongue ends at ~1116), so the hairpin round it
+    /// is 47 pt (≥ 1.5 balls) under the U and the harpoon lane beside it stays 40 wide all the way up.
+    static let tongueTopY: CGFloat = 1108
 }

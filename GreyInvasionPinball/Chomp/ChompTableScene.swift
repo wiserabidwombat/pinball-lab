@@ -166,7 +166,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M3 v21"
+    static let buildTagText = "T7 M3 v22"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -1946,7 +1946,10 @@ extension ChompTableScene {
         (CGPoint(x: 528, y: 983), CGVector(dx: 1022, dy: 2575)), (CGPoint(x: 533, y: 983), CGVector(dx: 1022, dy: 2575)),
         (CGPoint(x: 522, y: 983), CGVector(dx: 1022, dy: 2575)), (CGPoint(x: 528, y: 983), CGVector(dx: 700, dy: 2600)),
         (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 1500)), (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 1800)),
-        (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 2200))]
+        (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 2200)),
+        // M3 v22: loop balls in the channel going up, round the U-turn and down the harpoon lane.
+        (CGPoint(x: 88, y: 990), CGVector(dx: -150, dy: 900)), (CGPoint(x: 88, y: 990), CGVector(dx: -250, dy: 1400)),
+        (CGPoint(x: 88, y: 990), CGVector(dx: -350, dy: 2000))]
 
     func debugDropProbe() {
         isAttractMode = false

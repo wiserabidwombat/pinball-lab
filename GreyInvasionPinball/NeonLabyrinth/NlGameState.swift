@@ -9,6 +9,9 @@ private let nlHighScoreKey = "neon.highScore"
 enum NlPoints {
     static let slingshot = 10
     static let target = 500
+    /// T8 M2 v1: a ball made up the ramp onto the turntable, and a ball out through an exit portal.
+    static let ramp = 1000
+    static let exit = 5000
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

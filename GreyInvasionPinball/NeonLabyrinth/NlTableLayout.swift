@@ -83,6 +83,27 @@ enum NlTableLayout {
     /// The lamps in each outlane.
     static let kickLampLeft = CGPoint(x: 45, y: 330)
 
+    // MARK: The Switchyard (T8 M2 v1)
+    /// A floor ball crossing into the ramp's mouth going up at least this fast is taken up the ramp (a scripted ride);
+    /// slower, it stays on the floor and falls back off the U's gable (a weak shot).
+    static let rampMinSpeed: CGFloat = 400
+    /// Up the ramp at the shot's speed × 0.7, between these, rising to the turntable's height.
+    static let rampRideScale: CGFloat = 0.7
+    static let rampRideSpeeds: ClosedRange<CGFloat> = 450...900
+    /// Held on the turntable this long before it fires the ball along its heading.
+    static let turntableHold: CGFloat = 0.5
+    /// The turntable and the bridge turn this fast (rad/s) on screen.
+    static let turnRate: CGFloat = 7
+    /// Along a light-rail to its exit portal.
+    static let railRideSpeed: CGFloat = 700
+    /// A derail (the turntable and the bridge don't line up): the ball leaves the turntable along its heading, past the
+    /// ring, and drops to the floor here, with this velocity (tools/nl_derail_sim.py: no stuck balls; 87–97% reach a
+    /// flipper first with the flippers down and no player).
+    static let derailOut: CGFloat = NlCellLayout.railRingRadii.1 + 10
+    static let derailNorthOut: CGFloat = NlCellLayout.railRingRadii.1 + 16
+    static let derailSideVelocity = CGVector(dx: 250, dy: -60)     // W mirrored
+    static let derailNorthVelocity = CGVector(dx: 60, dy: 150)     // ± dx, alternating
+
     // MARK: Game
     static let ballsPerGame = 3
     static let bannerSeconds: TimeInterval = 1.6

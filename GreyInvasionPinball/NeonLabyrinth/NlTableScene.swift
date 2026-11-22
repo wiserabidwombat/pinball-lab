@@ -10,6 +10,11 @@
 //   FROM ABOVE  : falls in through the top port onto a return wire, rides it round to an inlane (sides alternate);
 //   FROM LEFT / FROM RIGHT : through a side entry portal onto that side's return wire, down to its inlane.
 // Geometry: NlCellLayout.swift (generated from tools/nl_layout.py, checked by nl_checks.py / nl_sim.py).
+// M2 v1: the Switchyard works. A ramp shot rides up onto the turntable; SWITCH ◄ / ► turn the turntable (W N E,
+// stepping), RAILS steps the light-rail ring's bridge (W → N → E → W). Lined up, the turntable fires the ball down that
+// light-rail and out through the exit portal; not lined up, the ball derails to the floor. With no maze yet, a ball
+// out of an exit comes straight back in as the cell next door would get it (out the left → in from the right, out the
+// top → in from below), costing nothing.
 // M1 v2: the Shot Lab and Play Lab hosts (CHOMP!'s pattern; `-shotlab neon`, `-playlab neon`). In the Play Lab the cell
 // plays as a bottom-row cell: a drain costs a ball (the next ball still comes in by the next way in).
 import SpriteKit
@@ -44,8 +49,22 @@ final class NlTableScene: SKScene, RendererHostedScene {
         let release: CGVector
         /// The lab event when the ride lets go (which arrival it was).
         var event: String? = nil
+        /// M2 v1: the height at the end of the path (the height eases from `height` to this along the path).
+        var heightEnd: CGFloat? = nil
+        /// M2 v1: what happens at the end of the path.
+        var end: RideEnd = .release
+        /// M2 v1: seconds to wait at the end of the path before it ends.
+        var hold: CGFloat = 0
         var total: CGFloat { cumulative.last ?? 0 }
     }
+
+    /// M2 v1: how a ride ends: dropped to the floor with its release velocity, onto the turntable (held, then fired),
+    /// fired off the turntable (down a rail or a derail, decided as it fires), out through an exit, or derailed.
+    private enum RideEnd { case release, turntable, fire, exit(Int), derail(Int) }
+
+    /// M2 v1: the three ways the turntable and the bridge can point: 0 = W (◄), 1 = N (▲), 2 = E (►).
+    static let headingGlyph = ["◄", "▲", "►"]
+    static let headingAngle: [CGFloat] = [.pi, .pi / 2, 0]
 
     private let game: NlGameState
     private let settings: GameSettings
@@ -89,6 +108,20 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private var saveLit = false
     private var targetsHitForSave: Set<String> = []
     private var kickLamps: [SKShapeNode] = []
+    // M2 v1: the Switchyard. Where the turntable and the bridge point (0 W, 1 N, 2 E), their drawn angles, and the
+    // nodes that show the route.
+    private var turntable = 1
+    private var bridge = 0
+    private var turntableShown: CGFloat = .pi / 2
+    private var bridgeShown: CGFloat = .pi
+    private var turntablePointer: SKShapeNode?
+    private var bridgeNode: SKShapeNode?
+    private var railNodes: [[SKShapeNode]] = []
+    private var routeLamps: [(lamp: SKShapeNode, label: SKLabelNode)] = []
+    private var routeOpen: Bool { turntable == bridge }
+    /// The arrival a ball out of an exit comes back in by (the cell next door's view), ahead of the drain cycle.
+    private var pendingArrival: Arrival?
+    private var nextNorthDerailRight = true
 
     #if DEBUG
     /// M1 v2: the Shot Lab robot (shared ShotLab) and its own clock.
@@ -153,7 +186,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M1 v4"
+    static let buildTagText = "T8 M2 v1"
     /// The targets' lab event names.
     static let targetEvent = ["SWITCH ◄": "switchLeft", "SWITCH ►": "switchRight", "RAILS": "rails"]
 
@@ -372,8 +405,26 @@ final class NlTableScene: SKScene, RendererHostedScene {
             ring.zPosition = 16
             addChild(ring)
         }
+        // M2 v1: the turntable's pointer and the ring's bridge (drawn pointing east; turned by zRotation).
+        let pointer = CGMutablePath()
+        pointer.addLines(between: [CGPoint(x: -14, y: 9), CGPoint(x: C.hubTrackRadius - 4, y: 0), CGPoint(x: -14, y: -9)])
+        pointer.closeSubpath()
+        let pointerNode = SKShapeNode(path: pointer)
+        pointerNode.position = C.hubCenter
+        pointerNode.lineWidth = 2
+        pointerNode.zPosition = 16.5
+        addChild(pointerNode)
+        turntablePointer = pointerNode
+        let bridgeShape = SKShapeNode(rect: CGRect(x: C.railRingRadii.0 - 2, y: -C.railHalfWidth,
+                                                   width: C.railRingRadii.1 - C.railRingRadii.0 + 6, height: 2 * C.railHalfWidth),
+                                      cornerRadius: 3)
+        bridgeShape.position = C.hubCenter
+        bridgeShape.lineWidth = 2
+        bridgeShape.zPosition = 16.4
+        addChild(bridgeShape)
+        bridgeNode = bridgeShape
         // Light-rails and return wires: two silver rails each.
-        for rail in [C.railW, C.railN, C.railE] { addRails(rail, halfWidth: C.railHalfWidth, z: 16) }
+        railNodes = [C.railW, C.railN, C.railE].map { addRails($0, halfWidth: C.railHalfWidth, z: 16) }
         for wire in [C.returnWireLeft, C.returnWireRight, C.entryStubLeft, C.entryStubRight] {
             addRails(wire, halfWidth: 17, z: 17)
         }
@@ -394,11 +445,14 @@ final class NlTableScene: SKScene, RendererHostedScene {
             label.position = lamp.position
             label.zPosition = -17.9
             addChild(label)
+            routeLamps.append((lamp: lamp, label: label))
         }
+        refreshRoute(snap: true)
     }
 
-    private func addRails(_ centre: [CGPoint], halfWidth: CGFloat, z: CGFloat) {
-        guard centre.count >= 2 else { return }
+    @discardableResult
+    private func addRails(_ centre: [CGPoint], halfWidth: CGFloat, z: CGFloat) -> [SKShapeNode] {
+        guard centre.count >= 2 else { return [] }
         var sides: [[CGPoint]] = [[], []]
         for (i, p) in centre.enumerated() {
             let a = centre[max(0, i - 1)], b = centre[min(centre.count - 1, i + 1)]
@@ -407,6 +461,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
             sides[0].append(CGPoint(x: p.x + n.dx * halfWidth, y: p.y + n.dy * halfWidth))
             sides[1].append(CGPoint(x: p.x - n.dx * halfWidth, y: p.y - n.dy * halfWidth))
         }
+        var nodes: [SKShapeNode] = []
         for side in sides {
             let path = CGMutablePath()
             path.addLines(between: side)
@@ -415,6 +470,152 @@ final class NlTableScene: SKScene, RendererHostedScene {
             node.lineWidth = 1.6
             node.zPosition = z
             addChild(node)
+            nodes.append(node)
+        }
+        return nodes
+    }
+
+    // MARK: - The Switchyard (M2 v1)
+
+    /// Colours the route: the turntable's pointer and its route lamp cyan when the bridge lines up (the route is
+    /// open), orange when it doesn't (a ramp shot would derail); the bridge and its lamp's ring magenta; the open
+    /// route's light-rail bright. `snap` puts the drawn angles straight on their headings.
+    private func refreshRoute(snap: Bool = false) {
+        if snap {
+            turntableShown = Self.headingAngle[turntable]
+            bridgeShown = Self.headingAngle[bridge]
+        }
+        let orange = SKColor(red: 1.0, green: 0.55, blue: 0.15, alpha: 1)
+        let aim = routeOpen ? Self.entryColor : orange
+        turntablePointer?.strokeColor = aim
+        turntablePointer?.fillColor = aim.withAlphaComponent(0.35)
+        turntablePointer?.zRotation = turntableShown
+        bridgeNode?.strokeColor = routeOpen ? Self.entryColor : Self.exitColor
+        bridgeNode?.fillColor = (routeOpen ? Self.entryColor : Self.exitColor).withAlphaComponent(0.25)
+        bridgeNode?.zRotation = bridgeShown
+        for (i, nodes) in railNodes.enumerated() {
+            let open = routeOpen && i == turntable
+            for n in nodes {
+                n.strokeColor = open ? Self.entryColor : Self.wireColor
+                n.lineWidth = open ? 2.6 : 1.6
+            }
+        }
+        for (i, l) in routeLamps.enumerated() {
+            let aimed = i == turntable
+            l.lamp.fillColor = aimed ? aim.withAlphaComponent(routeOpen ? 0.85 : 0.45) : SKColor(white: 0.05, alpha: 1)
+            l.lamp.strokeColor = i == bridge ? Self.exitColor : Self.entryColor.withAlphaComponent(0.5)
+            l.lamp.lineWidth = i == bridge ? 3 : 1.5
+            l.label.fontColor = aimed ? .white : Self.entryColor.withAlphaComponent(0.6)
+        }
+    }
+
+    /// Eases the drawn turntable and bridge toward their headings (update(), so a pause holds them).
+    private func turnRoute(_ dt: CGFloat) {
+        let step = NlTableLayout.turnRate * dt
+        func ease(_ shown: inout CGFloat, _ target: CGFloat) -> Bool {
+            let d = target - shown
+            guard abs(d) > 0.0001 else { return false }
+            shown = abs(d) <= step ? target : shown + (d > 0 ? step : -step)
+            return true
+        }
+        let a = ease(&turntableShown, Self.headingAngle[turntable])
+        let b = ease(&bridgeShown, Self.headingAngle[bridge])
+        if a || b {
+            turntablePointer?.zRotation = turntableShown
+            bridgeNode?.zRotation = bridgeShown
+        }
+    }
+
+    /// A target turned the turntable (SWITCH ◄ / ►, stepping, stopping at W and E) or stepped the bridge (RAILS).
+    private func switchyardHit(_ name: String) {
+        switch name {
+        case "SWITCH ◄": turntable = max(0, turntable - 1)
+        case "SWITCH ►": turntable = min(2, turntable + 1)
+        case "RAILS": bridge = (bridge + 1) % 3
+        default: return
+        }
+        refreshRoute()
+        sfx(.diverter)
+    }
+
+    /// The banner for a Switchyard target: the route open, or which way the part now points.
+    private func switchyardBanner(_ name: String) -> String {
+        if routeOpen { return "ROUTE OPEN \(Self.headingGlyph[turntable])" }
+        return name == "RAILS" ? "RAILS \(Self.headingGlyph[bridge])" : "TURNTABLE \(Self.headingGlyph[turntable])"
+    }
+
+    /// A floor ball crossing into the ramp's mouth going up fast enough is taken up the ramp to the turntable.
+    private func checkRampEntry(_ ball: NlBall) {
+        let p0 = ball.previousPosition, p = ball.position
+        let entryY = NlCellLayout.rampMouthY + 12
+        guard ball.isOnFloor, p0.y < entryY, p.y >= entryY,
+              abs(p.x - NlCellLayout.centerX) < NlCellLayout.rampMouthPosts[1].x - NlCellLayout.centerX,
+              let v = ball.physicsBody?.velocity, v.dy >= NlTableLayout.rampMinSpeed else { return }
+        let speed = min(max(hypot(v.dx, v.dy) * NlTableLayout.rampRideScale, NlTableLayout.rampRideSpeeds.lowerBound),
+                        NlTableLayout.rampRideSpeeds.upperBound)
+        let c = NlCellLayout.centerX
+        ride(ball, path: [p, CGPoint(x: c, y: NlCellLayout.rampUTopY), CGPoint(x: c, y: NlCellLayout.rampTopY),
+                          NlCellLayout.hubCenter],
+             speed: speed, height: 0, heightEnd: NlTableLayout.rampTopHeight, release: .zero, end: .turntable)
+        game.add(NlPoints.ramp)
+        sfx(.ramp)
+        labEvent("ramp")
+    }
+
+    /// The end of a Switchyard ride (from updateRides, after the ride is removed).
+    private func endSwitchyardRide(_ done: Ride) {
+        typealias C = NlCellLayout
+        let ball = done.ball
+        let hub = C.hubCenter
+        let h = NlTableLayout.rampTopHeight
+        switch done.end {
+        case .release:
+            break
+        case .turntable:
+            ride(ball, path: [hub, hub], speed: 0, height: h, release: .zero, end: .fire,
+                 hold: NlTableLayout.turntableHold)
+            showBanner("SWITCHYARD \(Self.headingGlyph[turntable])")
+            sfx(.scoopIn)
+        case .fire:
+            let k = turntable
+            let a = Self.headingAngle[k]
+            if routeOpen {
+                let rail = [C.railW, C.railN, C.railE][k]
+                ride(ball, path: [hub] + rail, speed: NlTableLayout.railRideSpeed, height: h, release: .zero, end: .exit(k))
+                sfx(.launch)
+            } else {
+                let out = k == 1 ? NlTableLayout.derailNorthOut : NlTableLayout.derailOut
+                let to = CGPoint(x: hub.x + out * cos(a), y: hub.y + out * sin(a))
+                ride(ball, path: [hub, to], speed: NlTableLayout.railRideSpeed, height: h, heightEnd: 0,
+                     release: .zero, end: .derail(k))
+            }
+        case .exit(let k):
+            removeBall(ball)
+            if !nudge.tilted { game.add(NlPoints.exit) }   // a tilted ball still leaves, but scores nothing
+            showBanner("EXIT \(Self.headingGlyph[k]) · \(NlPoints.exit)")
+            labEvent(["exitLeft", "exitTop", "exitRight"][k])
+            sfx(.jackpot)
+            hitHaptic.impactOccurred(intensity: 1)
+            // No maze yet: it comes straight back in as the cell next door would get it.
+            pendingArrival = [Arrival.fromRight, .fromBelow, .fromLeft][k]
+            if balls.isEmpty, nextBallAt == nil { nextBallAt = gameTime + 0.8 }
+        case .derail(let k):
+            let v: CGVector
+            switch k {
+            case 0: v = CGVector(dx: -NlTableLayout.derailSideVelocity.dx, dy: NlTableLayout.derailSideVelocity.dy)
+            case 2: v = NlTableLayout.derailSideVelocity
+            default:
+                let n = NlTableLayout.derailNorthVelocity
+                v = CGVector(dx: nextNorthDerailRight ? n.dx : -n.dx, dy: n.dy)
+                nextNorthDerailRight.toggle()
+            }
+            ball.setLayer(.floor)
+            ball.rampHeight = 0
+            ball.physicsBody?.velocity = v
+            ball.previousPosition = ball.position
+            showBanner("DERAIL")
+            labEvent("derail")
+            sfx(.gate)
         }
     }
 
@@ -490,7 +691,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)\(Self.buildTagText) · \(speed) · drains \(drains) · next \(nextArrival.banner.lowercased())"
+        let route = "\(Self.headingGlyph[turntable])\(routeOpen ? "=" : "≠")\(Self.headingGlyph[bridge])"
+        let text = "\(fps)\(Self.buildTagText) · \(speed) · \(route) · drains \(drains) · next \(nextArrival.banner.lowercased())"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -558,14 +760,22 @@ final class NlTableScene: SKScene, RendererHostedScene {
         let ball = NlBall(at: start)
         addChild(ball)
         balls.append(ball)
+        ride(ball, path: path, speed: speed, height: height, release: release, event: event)
+    }
+
+    /// Puts a ball (new or in play) on a ride along `path`.
+    private func ride(_ ball: NlBall, path: [CGPoint], speed: CGFloat, height: CGFloat, heightEnd: CGFloat? = nil,
+                      release: CGVector, event: String? = nil, end: RideEnd = .release, hold: CGFloat = 0) {
+        rides.removeAll(where: { $0.ball === ball })
         ball.setLayer(.ride)
         ball.physicsBody?.velocity = .zero
+        ball.flipperGhostSteps = 0
         var cumulative: [CGFloat] = [0]
         for i in 1..<max(path.count, 1) {
             cumulative.append(cumulative[i - 1] + hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y))
         }
         rides.append(Ride(ball: ball, path: path, cumulative: cumulative, speed: speed, height: height, release: release,
-                          event: event))
+                          event: event, heightEnd: heightEnd, end: end, hold: hold))
     }
 
     /// Moves every riding ball along its path; at the end it drops to the floor with its release velocity.
@@ -582,16 +792,26 @@ final class NlTableScene: SKScene, RendererHostedScene {
             let f = min(max((s - ride.cumulative[k - 1]) / seg, 0), 1)
             ride.ball.position = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
             ride.ball.physicsBody?.velocity = .zero
-            ride.ball.rampHeight = ride.height
-            if ride.s >= ride.total { finished.append(i) }
+            if let h1 = ride.heightEnd, ride.total > 0 {
+                ride.ball.rampHeight = ride.height + (h1 - ride.height) * s / ride.total
+            } else {
+                ride.ball.rampHeight = ride.heightEnd ?? ride.height
+            }
+            if ride.s >= ride.total {
+                if ride.hold > 0 { rides[i].hold -= dt } else { finished.append(i) }
+            }
         }
         for i in finished.reversed() {
             let ride = rides.remove(at: i)
             if let name = ride.event { labEvent(name) }
-            ride.ball.setLayer(.floor)
-            ride.ball.rampHeight = 0
-            ride.ball.physicsBody?.velocity = ride.release
-            ride.ball.previousPosition = ride.ball.position
+            if case .release = ride.end {
+                ride.ball.setLayer(.floor)
+                ride.ball.rampHeight = 0
+                ride.ball.physicsBody?.velocity = ride.release
+                ride.ball.previousPosition = ride.ball.position
+            } else {
+                endSwitchyardRide(ride)
+            }
         }
     }
 
@@ -611,6 +831,11 @@ final class NlTableScene: SKScene, RendererHostedScene {
         saveLit = false
         targetsHitForSave = []
         refreshKickLamps()
+        turntable = 1                              // M2 v1: the turntable points N, the bridge W (not lined up)
+        bridge = 0
+        pendingArrival = nil
+        nextNorthDerailRight = true
+        refreshRoute(snap: true)
         drains = 0
         nextBelowLeft = true
         nextAboveLeft = true
@@ -760,6 +985,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         updateRides(dt)
+        turnRoute(dt)
         handBallsToSwingingFlippers()
         slingshots.forEach { $0.settle() }
         governInlanes()                          // the inlane speed limit (InlaneGovernor, shared)
@@ -796,10 +1022,15 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
         if let due = nextBallAt, now >= due {
             nextBallAt = nil
-            let arrival = nextArrival
-            let all = Arrival.allCases
-            nextArrival = all[(all.firstIndex(of: arrival)! + 1) % all.count]
-            arrive(arrival)
+            if let back = pendingArrival {         // M2 v1: back in from an exit (the drain cycle doesn't move)
+                pendingArrival = nil
+                arrive(back)
+            } else {
+                let arrival = nextArrival
+                let all = Arrival.allCases
+                nextArrival = all[(all.firstIndex(of: arrival)! + 1) % all.count]
+                arrive(arrival)
+            }
         }
         #if DEBUG
         checkPlayLabGame(now)
@@ -895,13 +1126,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 let scale = NlTableLayout.maxBallSpeed / speed
                 body.velocity = CGVector(dx: v.dx * scale, dy: v.dy * scale)
             }
-            // A floor ball crossing into the ramp's mouth going up (the labs' "ramp" shot until the ramp works).
-            let p0 = ball.previousPosition, p = ball.position
-            let entryY = NlCellLayout.rampMouthY + 12
-            if ball.isOnFloor, p0.y < entryY, p.y >= entryY,
-               abs(p.x - NlCellLayout.centerX) < NlCellLayout.rampMouthPosts[1].x - NlCellLayout.centerX {
-                labEvent("ramp")
-            }
+            checkRampEntry(ball)                   // M2 v1: up the ramp onto the turntable
             ball.previousPosition = ball.position
             ball.previousVelocity = body.velocity
             ball.updateLook()
@@ -1001,7 +1226,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
             }
             labEvent(Self.targetEvent[t.name] ?? "target")
             game.add(NlPoints.target)
-            showBanner(t.name)
+            switchyardHit(t.name)
+            showBanner(switchyardBanner(t.name))
             sfx(.standup)
             hitHaptic.impactOccurred(intensity: 0.7)
             t.face.strokeColor = .white                     // back to its colour in update()
@@ -1089,6 +1315,9 @@ extension NlTableScene: ShotLabHost {
         kickbackLit = false                         // the robot measures the bare table: no saves
         saveLit = false
         refreshKickLamps()
+        turntable = 1                               // M2 v1: and the route as a new game has it
+        bridge = 0
+        refreshRoute(snap: true)
     }
 
     /// Where shots cross the shot line (the ramp mouth and the SWITCH targets, y ~560–610) and the RAILS target's height.
@@ -1150,7 +1379,8 @@ extension NlTableScene: PlayLabHost {
     /// Shot events that count as objectives the first time each game (labEvent reports them).
     static let playLabShotObjectives: Set<String> = ["ramp", "switchLeft", "switchRight", "rails",
                                                       "fromBelow", "fromAbove", "fromLeft", "fromRight",
-                                                      "kickback", "saveLit", "outlaneSave"]
+                                                      "kickback", "saveLit", "outlaneSave",
+                                                      "exitLeft", "exitTop", "exitRight", "derail"]
 
     var playLabObjectives: [PlayObjective] {
         [PlayObjective(name: "ramp", text: "Shoot into the ramp's mouth"),
@@ -1164,6 +1394,10 @@ extension NlTableScene: PlayLabHost {
          PlayObjective(name: "kickback", text: "The kickback saves a ball"),
          PlayObjective(name: "saveLit", text: "Light the outlane save (all three targets)"),
          PlayObjective(name: "outlaneSave", text: "The outlane save saves a ball"),
+         PlayObjective(name: "exitLeft", text: "Out the left exit (turntable and bridge ◄, then the ramp)"),
+         PlayObjective(name: "exitTop", text: "Out the top exit (▲)"),
+         PlayObjective(name: "exitRight", text: "Out the right exit (►)"),
+         PlayObjective(name: "derail", text: "A ramp shot derails"),
          PlayObjective(name: "tilt", text: "Tilt")]
     }
 
@@ -1292,8 +1526,19 @@ extension NlTableScene: PlayLabHost {
     /// The shots the table wants, most wanted first (no rules yet): the ramp, then the targets.
     private func robotWanted() -> [String] {
         // The targets still needed for the outlane save first, then the ramp and the rest.
+        // M2 v1: then the route: the ramp when it's open, else the target that lines it up soonest.
         let need = targets.map(\.name).filter { !targetsHitForSave.contains($0) }.compactMap { Self.targetEvent[$0] }
-        return (saveLit ? [] : need) + ["ramp", "switchLeft", "switchRight", "rails"]
+        var route: [String] = ["ramp"]
+        if !routeOpen {
+            let switchHits = abs(turntable - bridge)
+            let railsHits = (turntable - bridge + 3) % 3
+            route = railsHits <= switchHits ? ["rails"] : [turntable > bridge ? "switchLeft" : "switchRight"]
+        }
+        var out: [String] = []
+        for s in route + (saveLit ? [] : need) + ["ramp", "switchLeft", "switchRight", "rails"] where !out.contains(s) {
+            out.append(s)
+        }
+        return out
     }
 
     /// Banners that double as objectives.

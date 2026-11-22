@@ -40,7 +40,9 @@ final class QfGameState {
 
     var hp: Int { run.hp }
     var maxHP: Int { run.maxHP }
-    var isGameOver: Bool { run.hp <= 0 }
+    /// T9 M1 v2: the player left through the Forest Gate (the visit ends with the HP and loot they still have).
+    var leftForest = false
+    var isGameOver: Bool { run.hp <= 0 || leftForest }
 
     func add(_ points: Int) {
         score += points * multiplier
@@ -64,8 +66,16 @@ final class QfGameState {
         return lost
     }
 
+    /// Leaving through the Forest Gate ends the visit.
+    func leaveForest() {
+        ballOnPlunger = false
+        leftForest = true
+        recordHighScore()
+    }
+
     func reset(run newRun: QfRunState = .knight) {
         score = 0
+        leftForest = false
         run = newRun
         ballOnPlunger = false
         multiplier = 1

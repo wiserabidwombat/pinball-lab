@@ -7,7 +7,9 @@
 //     East lantern and the forest island's solid block;
 //   - drains cost HP from the run (QfRunState), not balls: zero HP ends the game. Hits on the trunk and the lantern
 //     show their damage (impact speed × the run's ball strength); the trunk only takes damage once all the bark is down.
-// Drawn only this round (they work later): the ramp's raised part and wire, the Forest Gate, the wisps in the glade.
+// M1 v2: the Old Road is a real ramp (QfRamp, CHOMP!'s ramp layer): up through the island, over the hook, down its wire
+// into the right inlane. Felling the Treant lights the exit: then a made Old Road rides into the Forest Gate and the visit
+// ends ("You Escaped"). Drawn only (they work later): the wisps in the glade.
 // Geometry: QfForestLayout.swift (generated from tools/qf_layout.py, checked by qf_checks.py / qf_sim.py).
 import SpriteKit
 import UIKit
@@ -27,6 +29,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         let release: CGVector
         /// Hidden while riding (a subway under the table).
         let hidden: Bool
+        /// Into the Forest Gate: the ball leaves the table at the end and the visit ends.
+        var exits = false
         var total: CGFloat { cumulative.last ?? 0 }
     }
 
@@ -89,6 +93,18 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private var digSpins: CGFloat = 0
     private var lastSpinAt: TimeInterval = 0
     private var hpLostLast = 0
+    private var ramps: [QfRamp] = []
+    private var oldRoad: QfRamp!
+    /// Monsters defeated this visit, and whether the exit (the Forest Gate on the Old Road) is lit.
+    private var defeats = 0
+    private var exitLit = false
+    private var forestGate: SKShapeNode!
+    #if DEBUG
+    /// DEBUG `-questRampProbe`: balls fired up the Old Road's mouth at rising speeds; prints what each one does.
+    private var probeSpeeds: [CGFloat] = []
+    private var probeNextAt: TimeInterval = 0
+    private var probeSpeed: CGFloat = 0
+    #endif
 
     // Plunger and input
     private var plungerStartY: CGFloat = 0
@@ -143,7 +159,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M1 v1"
+    static let buildTagText = "T9 M1 v2"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -224,7 +240,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
                   Scoop(kind: .log, center: F.logHole, radius: F.logCaptureRadius)]
         for s in scoops { addHole(at: s.center) }
         addSpinner()
-        addDrawnRamp()
+        addOldRoad()
+        addForestGate()
         addDrawnGlade()
         addAreaLabels()
     }
@@ -387,55 +404,29 @@ final class QfTableScene: SKScene, RendererHostedScene {
         spinnerFlash = node
     }
 
-    /// The Old Road's raised part (its low end is the island's solid U), the wire back to the right inlane, and the
-    /// Forest Gate at the apex. Drawn only in M1 v1: the ramp layer comes next round.
-    private func addDrawnRamp() {
-        typealias F = QfForestLayout
-        let path = F.rampPath
-        var s: [CGFloat] = [0]
-        for i in 1..<path.count { s.append(s[i - 1] + hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)) }
-        let uLength = F.rampUTopY - F.rampMouthY
-        let plasticEnd = F.rampApexDistance + 120
-        var left: [CGPoint] = [], right: [CGPoint] = [], wireL: [CGPoint] = [], wireR: [CGPoint] = []
-        for i in path.indices {
-            let a = path[max(0, i - 1)], b = path[min(path.count - 1, i + 1)]
-            let len = max(hypot(b.x - a.x, b.y - a.y), 0.001)
-            let n = CGVector(dx: -(b.y - a.y) / len, dy: (b.x - a.x) / len)
-            let w = F.rampChannelHalfWidth
-            let l = CGPoint(x: path[i].x + n.dx * w, y: path[i].y + n.dy * w)
-            let r = CGPoint(x: path[i].x - n.dx * w, y: path[i].y - n.dy * w)
-            if s[i] >= uLength && s[i] <= plasticEnd { left.append(l); right.append(r) }
-            if s[i] >= plasticEnd - 10 {
-                let wl = CGPoint(x: path[i].x + n.dx * 17, y: path[i].y + n.dy * 17)
-                let wr = CGPoint(x: path[i].x - n.dx * 17, y: path[i].y - n.dy * 17)
-                wireL.append(wl); wireR.append(wr)
-            }
-        }
-        let band = CGMutablePath()
-        band.addLines(between: left + right.reversed())
-        band.closeSubpath()
-        let plastic = SKShapeNode(path: band)
-        plastic.fillColor = Self.wallColor.withAlphaComponent(0.16)
-        plastic.strokeColor = Self.wallColor.withAlphaComponent(0.5)
-        plastic.lineWidth = 1.5
-        plastic.zPosition = 15
-        addChild(plastic)
-        for side in [wireL, wireR] where side.count > 1 {
-            let p = CGMutablePath()
-            p.addLines(between: side)
-            let node = SKShapeNode(path: p)
-            node.strokeColor = Self.wireColor
-            node.lineWidth = 1.6
-            node.zPosition = 16
-            addChild(node)
-        }
+    /// The Old Road (CHOMP!'s ramp class): its plastic climbs from the mouth up through the island (whose solid U is
+    /// the low end for floor balls, so no U of its own here), hooks right over the glade, and its wire runs down the
+    /// right lane into the right inlane.
+    private func addOldRoad() {
+        let ramp = QfRamp(path: QfTableLayout.oldRoadPath, apexDistance: QfForestLayout.rampApexDistance,
+                          mouthHalfWidth: QfForestLayout.rampMouthHalfWidth,
+                          halfWidth: QfForestLayout.rampChannelHalfWidth,
+                          flareLength: 60, postLength: 0, lowLength: 0)
+        addChild(ramp)
+        ramps.append(ramp)
+        oldRoad = ramp
+    }
+
+    /// The Forest Gate beside the Old Road's hook: dark until the exit lights, then a blinking gold ring.
+    private func addForestGate() {
         let gate = SKShapeNode(circleOfRadius: 16)
-        gate.position = F.forestGate
-        gate.strokeColor = Self.targetColor.withAlphaComponent(0.6)
+        gate.position = QfForestLayout.forestGate
+        gate.strokeColor = Self.targetColor.withAlphaComponent(0.35)
         gate.fillColor = SKColor(white: 0.05, alpha: 1)
-        gate.lineWidth = 1.5
-        gate.zPosition = 16
+        gate.lineWidth = 2
+        gate.zPosition = 19                                     // under the Old Road's art (z 20–21), which crosses it
         addChild(gate)
+        forestGate = gate
     }
 
     /// The wisps' home in the glade (drawn only until the wisps move, next rounds).
@@ -591,7 +582,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     /// Puts a ball on a scripted ride (collisions and gravity off) from where it is along `path`.
-    private func startRide(_ ball: QfBall, path: [CGPoint], speed: CGFloat, release: CGVector, hidden: Bool) {
+    private func startRide(_ ball: QfBall, path: [CGPoint], speed: CGFloat, release: CGVector, hidden: Bool,
+                           exits: Bool = false) {
         ball.setLayer(.ride)
         ball.physicsBody?.velocity = .zero
         if hidden { ball.alpha = 0 }
@@ -599,7 +591,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         for i in 1..<max(path.count, 1) {
             cumulative.append(cumulative[i - 1] + hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y))
         }
-        rides.append(Ride(ball: ball, path: path, cumulative: cumulative, speed: speed, release: release, hidden: hidden))
+        rides.append(Ride(ball: ball, path: path, cumulative: cumulative, speed: speed, release: release, hidden: hidden,
+                          exits: exits))
     }
 
     private func updateRides(_ dt: CGFloat) {
@@ -619,7 +612,12 @@ final class QfTableScene: SKScene, RendererHostedScene {
         }
         for i in finished.reversed() {
             let ride = rides.remove(at: i)
+            if ride.exits {
+                leaveForest(ride.ball)
+                continue
+            }
             ride.ball.alpha = 1
+            ride.ball.rampHeight = 0
             ride.ball.setLayer(.floor)
             ride.ball.physicsBody?.velocity = ride.release
             ride.ball.previousPosition = ride.ball.position
@@ -635,6 +633,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         targetLastHit = [:]
         treantHP = QfMonsterHP.treant
         digSpins = 0
+        defeats = 0
+        setExitLit(false)
         raiseBark()
         game.reset()
         updateStatus()
@@ -651,7 +651,11 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     private func updateStatus() {
-        game.status = treantHP > 0 ? "TREANT \(treantHP)/\(QfMonsterHP.treant) · BREAK THE BARK" : nil
+        if exitLit {
+            game.status = "EXIT LIT · THE OLD ROAD LEAVES THE FOREST"
+        } else {
+            game.status = "TREANT \(treantHP)/\(QfMonsterHP.treant) · BREAK THE BARK"
+        }
     }
 
     private func sfx(_ s: MonSound) {
@@ -817,6 +821,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
 
         let dt = CGFloat(step)
         lastStep = dt
+        #if DEBUG
+        updateRampProbe(now)
+        #endif
         updateGamepad()
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
@@ -981,6 +988,137 @@ final class QfTableScene: SKScene, RendererHostedScene {
         return true
     }
 
+    // MARK: - The Old Road and the Forest Gate
+
+    /// The ramps' switches, from the ball's move this frame (CHOMP!'s updateRampLayer): the entry puts a floor ball on
+    /// the ramp (backward = it fell back out), the made switch just past the top scores it, the exit at the end of the
+    /// wire puts it back on the floor. A ramp ball found far from its channel drops to the floor (the safety net).
+    private func updateRampLayer(_ ball: QfBall, from p0: CGPoint, to p: CGPoint) {
+        if ball.isOnFloor {
+            if let ramp = ramps.first(where: { $0.entrySwitch.crossing(from: p0, to: p) == .forward
+                                               && $0.distanceToCenterline(p) < $0.maxHalfWidth }) {
+                ball.activeRamp = ramp
+                ball.setLayer(.rampUp)
+            }
+            return
+        }
+        guard let ramp = ball.activeRamp else { ball.setLayer(.floor); return }
+        switch ball.layer {
+        case .floor, .ride:
+            return
+        case .rampUp:
+            if ramp.entrySwitch.crossing(from: p0, to: p) == .backward {
+                ball.setLayer(.floor)
+                probeLog("BACK", p)
+            } else if ramp.madeSwitch.crossing(from: p0, to: p) == .forward {
+                ball.setLayer(.rampDown)
+                rampMade(ball, ramp)
+                if ball.layer == .ride { return }              // into the Forest Gate
+            }
+        case .rampDown:
+            if ramp.exitSwitch.crossing(from: p0, to: p) == .forward {
+                ball.setLayer(.floor)
+                probeLog("EXIT", p, ball.physicsBody?.velocity)
+            } else if ramp.madeSwitch.crossing(from: p0, to: p) == .backward {
+                ball.setLayer(.rampUp)
+            }
+        }
+        if !ball.isOnFloor, ramp.distanceToCenterline(p) > ramp.maxHalfWidth + QfTableLayout.ballRadius + 12 {
+            ball.setLayer(.floor)
+        }
+    }
+
+    /// The Old Road made: with the exit lit the ball turns into the Forest Gate (the visit ends); otherwise it scores
+    /// and rides the wire back to the right inlane.
+    private func rampMade(_ ball: QfBall, _ ramp: QfRamp) {
+        probeLog("MADE", ball.position, ball.physicsBody?.velocity)
+        if exitLit, !game.isGameOver {
+            ball.rampHeight = QfTableLayout.rampTopHeight
+            startRide(ball, path: [ball.position, QfForestLayout.forestGate], speed: QfTableLayout.gateRideSpeed,
+                      release: .zero, hidden: false, exits: true)
+            showBanner("THE FOREST GATE")
+            sfx(.scoopIn)
+            hitHaptic.impactOccurred()
+            return
+        }
+        game.add(QfPoints.ramp)
+        showBanner("OLD ROAD")
+        sfx(.ramp)
+        hitHaptic.impactOccurred()
+    }
+
+    /// A monster beaten (the Treant, for now). Enough of them light the exit.
+    private func monsterDefeated() {
+        defeats += 1
+        if !exitLit, defeats >= QfTableLayout.exitAfterDefeats {
+            setExitLit(true)
+            // after the defeat's own banner (review: TREANT FELLED was overwritten at once)
+            run(.sequence([.wait(forDuration: 1.2), .run { [weak self] in self?.showBanner("THE FOREST GATE OPENS") }]))
+        }
+        updateStatus()
+    }
+
+    private func setExitLit(_ lit: Bool) {
+        exitLit = lit
+        guard let gate = forestGate else { return }
+        gate.removeAction(forKey: "blink")
+        if lit {
+            gate.strokeColor = Self.targetColor
+            gate.fillColor = Self.targetColor.withAlphaComponent(0.25)
+            gate.run(.repeatForever(.sequence([.fadeAlpha(to: 0.35, duration: 0.35), .fadeAlpha(to: 1, duration: 0.35)])),
+                     withKey: "blink")
+        } else {
+            gate.strokeColor = Self.targetColor.withAlphaComponent(0.35)
+            gate.fillColor = SKColor(white: 0.05, alpha: 1)
+            gate.alpha = 1
+        }
+    }
+
+    /// The ball reached the Forest Gate: it leaves the table and the visit ends with the HP the player still has.
+    private func leaveForest(_ ball: QfBall) {
+        probeLog("GATE", ball.position)
+        removeBall(ball)
+        nextBallAt = nil
+        game.leaveForest()
+        showBanner("YOU LEAVE THE FOREST")
+        cameraRig.shake(strength: 2, duration: 0.2)
+    }
+
+    // MARK: - DEBUG ramp probe
+
+    func debugStartRampProbe() {
+        #if DEBUG
+        newGame()
+        game.isRobot = true                                     // a probe never records a high score
+        if ProcessInfo.processInfo.arguments.contains("-questExitLit") { setExitLit(true) }   // test the Forest Gate
+        removeAllBalls()
+        probeSpeeds = stride(from: CGFloat(600), through: 2000, by: 100).map { $0 }
+        probeNextAt = gameTime + 0.5
+        #endif
+    }
+
+    private func probeLog(_ what: String, _ p: CGPoint, _ v: CGVector? = nil) {
+        #if DEBUG
+        guard probeSpeed > 0 else { return }
+        let sp = v.map { Int(hypot($0.dx, $0.dy)) } ?? 0
+        print("RAMPPROBE \(Int(probeSpeed)) \(what) x \(Int(p.x)) y \(Int(p.y)) v \(sp) t \(String(format: "%.2f", gameTime - (probeNextAt - 3)))")
+        #endif
+    }
+
+    #if DEBUG
+    private func updateRampProbe(_ now: TimeInterval) {
+        guard probeSpeed > 0 || !probeSpeeds.isEmpty, now >= probeNextAt else { return }
+        removeAllBalls()
+        guard !probeSpeeds.isEmpty else { probeSpeed = 0; print("RAMPPROBE DONE"); return }
+        probeSpeed = probeSpeeds.removeFirst()
+        let ball = QfBall(at: CGPoint(x: QfForestLayout.rampCenterX, y: QfForestLayout.rampMouthY - 20))
+        addChild(ball)
+        balls.append(ball)
+        ball.physicsBody?.velocity = CGVector(dx: 0, dy: probeSpeed)
+        probeNextAt = now + 3
+    }
+    #endif
+
     // MARK: - Physics frame
 
     /// The solid blocks (closed outlines): a floor ball whose centre ends up inside one is put back just outside its
@@ -1039,6 +1177,20 @@ final class QfTableScene: SKScene, RendererHostedScene {
             guard let body = ball.physicsBody else { continue }
             if ball.flipperGhostSteps > 0 { ball.flipperGhostSteps -= 1 }
             let p0 = ball.previousPosition
+            if ball.layer != .ride {
+                updateRampLayer(ball, from: p0, to: ball.position)
+                if ball.layer != .ride {                       // (the Forest Gate ride keeps the ramp's height)
+                    ball.rampHeight = ball.isOnFloor ? 0 : (ball.activeRamp?.height(at: ball.position) ?? 0)
+                }
+                if !ball.isOnFloor, ball.layer != .ride {
+                    let v = body.velocity
+                    let speed = hypot(v.dx, v.dy)
+                    if speed > QfTableLayout.maxBallSpeed {
+                        body.velocity = CGVector(dx: v.dx * QfTableLayout.maxBallSpeed / speed,
+                                                 dy: v.dy * QfTableLayout.maxBallSpeed / speed)
+                    }
+                }
+            }
             if ball.isOnFloor {
                 leftFlipper.solveSwing(ball, ballRadius: r)
                 rightFlipper.solveSwing(ball, ballRadius: r)
@@ -1069,12 +1221,6 @@ final class QfTableScene: SKScene, RendererHostedScene {
                     game.add(QfPoints.orbit)
                     sfx(.orbit)
                     showBanner("GRAVEYARD ORBIT")
-                }
-                // The Old Road: into the ramp's mouth going up (the ramp layer comes next round).
-                if p0.y < F.rampEntryY, p.y >= F.rampEntryY, abs(p.x - F.rampCenterX) < F.rampMouthHalfWidth {
-                    game.add(QfPoints.ramp)
-                    sfx(.ramp)
-                    showBanner("OLD ROAD")
                 }
                 catchInScoops(ball, from: p0, to: p)
             }
@@ -1143,6 +1289,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 if treantHP == 0 {
                     showBanner("TREANT FELLED")
                     game.add(QfPoints.treantFelled)
+                    monsterDefeated()
                     cameraRig.shake(strength: 6, duration: 0.5)
                     treantHP = QfMonsterHP.treant              // M1 placeholder: a new Treant takes its place
                     barkDownAt = gameTime - QfTableLayout.barkRegrow + 1.5     // the bark rises again in 1.5 s

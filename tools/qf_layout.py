@@ -231,12 +231,15 @@ class RampPath:
     """The path builder every table uses (TourRampPath)."""
     def __init__(self, start, heading):
         self.points, self.headings, self.dist, self.h = [start], [heading], [0.0], heading
+        self.start, self.heading0, self.pieces = start, heading, []   # (radius, value): radius 0 = a line of length value
     def line(self, L, step=10):
+        self.pieces.append((0.0, L))
         n = max(1, math.ceil(L / step)); x0, y0 = self.points[-1]; s0 = self.dist[-1]
         for i in range(1, n + 1):
             d = L * i / n
             self.points.append((x0 + d * math.cos(self.h), y0 + d * math.sin(self.h))); self.headings.append(self.h); self.dist.append(s0 + d)
     def arc(self, r, turn, step=8):
+        self.pieces.append((r, turn))
         n = max(2, math.ceil(abs(turn) * r / step)); sg = 1 if turn > 0 else -1
         x0, y0 = self.points[-1]; c = (x0 - sg * r * math.sin(self.h), y0 + sg * r * math.cos(self.h))
         a0 = math.atan2(y0 - c[1], x0 - c[0]); s0 = self.dist[-1]; h0 = self.h

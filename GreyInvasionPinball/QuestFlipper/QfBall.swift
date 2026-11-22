@@ -1,11 +1,13 @@
 // Pinball Lab Table 09 (Quest & Flipper): copied from CHOMP!'s committed file (fa86dbb, real ball scale) with the "Qf" prefix.
-// T9 M1 v1: no ramp layer yet; the second layer is a scripted ride (the Old Well's subway to the left inlane).
+// T9 M1 v2: the ramp layer (CHOMP!'s: rampUp / rampDown on a QfRamp) plus a scripted ride (scoop holds, the Old Well's
+// subway, the Forest Gate).
 import SpriteKit
 import CoreGraphics
 import Foundation
 
-/// Which level a ball is on: the floor, or a scripted ride (the scene moves it along a path; nothing collides with it).
-enum QfBallLayer { case floor, ride }
+/// Which level a ball is on: the floor, up or down a ramp, or a scripted ride (the scene moves it along a path;
+/// nothing collides with it).
+enum QfBallLayer { case floor, rampUp, rampDown, ride }
 
 /// One ball in play. The node carries the physics body; `visual` is the look. Per-ball state lives here, so
 /// multiball works from the start.
@@ -40,6 +42,10 @@ final class QfBall: SKNode {
     /// T7 M2 v5: the ramp layer (Table 06's TourBall pattern). On a ramp the ball takes the ramp's ball category and
     /// collides with that ramp's rails (and other ramp balls) only; floor parts, sensors and switches ignore it.
     private(set) var layer: QfBallLayer = .floor
+    /// The ramp a ramp-layer ball is on (its rails and ball category).
+    var activeRamp: QfRamp? {
+        didSet { if activeRamp !== oldValue { applyLevel() } }
+    }
     /// How high the ramp under this ball is (0 on the floor); the scene sets it each frame. The ball draws lifted by
     /// height × oblique so it rides on the drawn ramp.
     var rampHeight: CGFloat = 0
@@ -48,14 +54,19 @@ final class QfBall: SKNode {
 
     func setLayer(_ newLayer: QfBallLayer) {
         layer = newLayer
-        physicsBody?.affectedByGravity = newLayer == .floor
+        if newLayer == .floor || newLayer == .ride { activeRamp = nil }
+        physicsBody?.affectedByGravity = newLayer != .ride
         shadow.alpha = newLayer == .floor ? 1 : 0.6
         applyLevel()
         updateLook()
     }
 
     private func applyLevel() {
-        zPosition = layer == .floor ? 10 : 30
+        switch layer {
+        case .floor: zPosition = 10
+        case .ride: zPosition = 30
+        case .rampUp, .rampDown: zPosition = activeRamp?.ballZ ?? 30
+        }
         updateCollisionMask()
     }
 
@@ -131,9 +142,16 @@ final class QfBall: SKNode {
 
     private func updateCollisionMask() {
         guard let body = physicsBody else { return }
-        if layer != .floor {                                   // T8: riding — nothing touches it
+        if layer == .ride {                                    // riding — nothing touches it
             body.categoryBitMask = QfPhysicsCategory.rideBall
             body.collisionBitMask = 0
+            body.contactTestBitMask = 0
+            return
+        }
+        if layer != .floor {                                   // on a ramp: its level only, and no floor contacts
+            body.categoryBitMask = activeRamp?.ballCategory ?? QfPhysicsCategory.rampBall
+            body.collisionBitMask = (activeRamp?.wallCategory ?? QfPhysicsCategory.rampWall)
+                | (activeRamp?.ballCategory ?? QfPhysicsCategory.rampBall)
             body.contactTestBitMask = 0
             return
         }

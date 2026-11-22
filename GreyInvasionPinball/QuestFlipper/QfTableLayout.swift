@@ -83,6 +83,28 @@ enum QfTableLayout {
     static let subwaySpeed: CGFloat = 900
     static let inlaneReleaseSpeed: CGFloat = 450
 
+    // MARK: Ramp layer (CHOMP!'s values; T9 M1 v2, the Old Road)
+    static let rampEntryDistance: CGFloat = 12
+    static let rampMadeAfterApex: CGFloat = 10
+    static let rampExitBeforeEnd: CGFloat = 15
+    static let rampFriction: CGFloat = 0.05
+    static let rampRestitution: CGFloat = 0.1
+    static let rampRiseLength: CGFloat = 110
+    static let rampEndHeight: CGFloat = 12
+    /// The Old Road's centreline, built from QfForestLayout's builder steps (generated from tools/qf_layout.py).
+    static var oldRoadPath: QfRampPath {
+        var p = QfRampPath(start: QfForestLayout.rampStart, heading: QfForestLayout.rampStartHeading)
+        for piece in QfForestLayout.rampPieces {
+            if piece.radius == 0 { p.line(piece.value) } else { p.arc(radius: piece.radius, turn: piece.value) }
+        }
+        return p
+    }
+    /// The Forest Gate: a ball made up the Old Road while the exit is lit rides into it at this speed.
+    static let gateRideSpeed: CGFloat = 500
+    /// Monsters to defeat before the exit lights. Placeholder: 1 while the Treant is the only monster; ~3 once the
+    /// wisps and ghosts fight back.
+    static let exitAfterDefeats = 1
+
     // MARK: Game
     static let bannerSeconds: TimeInterval = 1.6
     /// The bark rises again this long after it all fell, if the Treant hasn't been felled.

@@ -59,6 +59,18 @@ struct QfTableView: View {
         .onAppear {
             // Game controller: A = Play / Resume / Play Again, Menu = pause (flippers and plunger: the scene)
             LabGamepad.shared.claim("quest", onA: { gamepadA() }, onMenu: { gamepadMenu() })
+            #if DEBUG
+            // DEBUG `-playlab quest -questRampProbe`: fires balls up the Old Road at rising speeds (prints RAMPPROBE).
+            if ProcessInfo.processInfo.arguments.contains("-questRampProbe") {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartRampProbe()
+                }
+            }
+            #endif
         }
         .onDisappear { LabGamepad.shared.release("quest") }
         .onChange(of: scenePhase) { _, phase in
@@ -287,8 +299,14 @@ struct QfTableView: View {
 
     private var gameOverOverlay: some View {
         overlayCard {
-            Text("Game Over")
+            Text(game.leftForest ? "You Escaped" : "Game Over")
                 .font(.orbitron(30, .black))
+            if game.leftForest {
+                Text("Out of the Haunted Forest with \(game.hp) HP")
+                    .font(.orbitron(13))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .multilineTextAlignment(.center)
+            }
             Text("Score \(game.score.formatted())")
                 .font(.orbitron(22, .bold))
                 .monospacedDigit()

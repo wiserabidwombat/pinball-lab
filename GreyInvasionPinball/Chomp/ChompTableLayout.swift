@@ -56,7 +56,7 @@ enum ChompTableLayout {
 
     // MARK: Walls
     static let leftWallX: CGFloat = 20
-    static let rightWallX: CGFloat = 584      // M2 v4: shooter lane 548–584, 36 wide for the 30 pt ball (was 32)
+    static let rightWallX: CGFloat = 589      // M2 v4: 584 (36 wide). M4 v4: 589 — the real shooter lane, x 549–589 (p. 17)
     static let laneWallX: CGFloat = 548
     static let laneFloorY: CGFloat = 40
     static let archStartY: CGFloat = 1000
@@ -128,7 +128,16 @@ enum ChompTableLayout {
         CGPoint(x: laneCenterX, y: plungerRestTop - plungerSize.height / 2)
     }
     static let plungerMaxPull: CGFloat = 60
-    static let minLaunchSpeed: CGFloat = 1080
+    /// M4 v4d: 1080 → 950. With the real right side (the shooter lane ends beside the bumper) the softest plunges are
+    /// the skill shots: one that just reaches the curve's foot (~y 740) is nudged left and drops past the bumper into the
+    /// lane above the mini flipper (L2); a little harder hits the bumper (L1); harder still meets the pin (L3: down to
+    /// the flippers; the hardest come back down the shooter lane). 1080 already went over the bumper.
+    /// M4 v5 (drop probe v5, plunges from 1,040 to 1,340 in 20s): 1,040 falls back onto the plunger; **1,060–1,120 drop
+    /// onto the bumper** (skill shot L1); 1,140–1,320 meet the pin. 1,080 cut that window in half, and with a straight
+    /// pull → speed line it was 5 % of the pull. Now 1,050 and the pull is eased in (speed = min + (max − min) · pull^1.4),
+    /// so L1 is ~0–13 % of the pull; a full pull is unchanged.
+    static let minLaunchSpeed: CGFloat = 1050
+    static let plungePowerExponent: CGFloat = 1.4
     static let maxLaunchSpeed: CGFloat = 2310
     static let tapLaunchPower: CGFloat = 0.6
     static let plungerZoneMinX: CGFloat = 0.62
@@ -281,8 +290,44 @@ enum ChompTableLayout {
     /// the bumper sits 21 pt left of the real one to keep the mid flipper lane right of it 36 wide (x 512–548), and the
     /// buoy goes below-LEFT of it (below-right would sit in that lane and under the wave wire's drop). Both now clear the
     /// left flipper's 69–70° shots (the right ramp's), which the old buoy at (452, 690) stopped (was (462, 752) / (452, 690)).
-    static let bumperCenter = CGPoint(x: 490, y: 687)
+    /// M4 v4: the real spot (p. 17 registered: bumper 33 at (513, 686)) — the right wall now curves out beside it.
+    static let bumperCenter = CGPoint(x: 513, y: 686)
     static let bumperRadius: CGFloat = 22
+    /// M4 v3 (plunge sweep, playlab-chomp-2026-11-21T19-29-16Z: every 0.45–0.68 plunge fell back down the right lane at
+    /// x ~525, clipped the bumper's right side, hit the x 548 wall and went straight down the middle). On the real table
+    /// the right wall bulges out to ~575 here, so the ball passes right of the bumper into the mid flipper lane (skill
+    /// shot L2). Ours can't bulge (the plunger lane is there), so a short guide leaning right takes a ball coming down at
+    /// x ~525 to x ≥ 533 by the bumper's top (clear of the bumper, 1 pt off the wall). Its top stays ≥ 30 pt from the
+    /// fin's lowest tip (~(494.5, 766)), and its bottom 28 pt from the bumper's top (closed).
+    /// v3b (stuck test 49: 9 balls at (532, 733) — the leaning rail's bottom left exactly 30 pt to the wall, a wedge):
+    /// straight down x 513 to y 665, so the lane stays 35 wide and the rail shields the bumper's right side (a ball in the
+    /// lane passes it instead of clipping it).
+    static let midLaneGuide: [CGPoint] = [CGPoint(x: 513, y: 765), CGPoint(x: 513, y: 665)]   // M4 v4: no longer used
+    /// M4 v4 (Aaron watched real play: the plunge comes out beside the bumper, not at the top; p. 17 registered): the
+    /// shooter lane's inner wall ends at y ~645; above y 700 the lane's right side is a wall curving in from the shooter
+    /// lane's outer wall (589, 700) to the lane right of the reel (548, 900), so a plunge rides it up into that lane and
+    /// round the top turn, and a ball coming back down passes the bumper into the mid flipper lane (or drops back into
+    /// the shooter lane).
+    static let shooterInnerTopY: CGFloat = 645
+    /// M4 v4b (Aaron's photo: "there is a pin just up the ramp so it would deflect any hard shot. There's not a rail up
+    /// and around"): a rubber pin where a plunge leaving the curve crosses the lane (v4's plunges went on into Tgt3's
+    /// face from below and straight down the middle).
+    /// v4c (Aaron: "Does that pin show up in the table document?"): p. 17 draws a round post at ~(527, 857); p. 40 a
+    /// yellow barrel beside it on the plastic (x ~537–590, y 852–888) whose rounded end reaches into the lane to x ~537.
+    static let plungePin = CGPoint(x: 527, y: 857)
+    /// The barrel's rounded end (centre (552, 870), r 15, leftmost x 537), closed into the wall on its right.
+    static var barrelEnd: [CGPoint] {
+        let c = CGPoint(x: 552, y: 870), r: CGFloat = 15
+        var p = stride(from: 90, through: 270, by: 15).map { (d: Int) -> CGPoint in
+            CGPoint(x: c.x + r * cos(CGFloat(d) * .pi / 180), y: c.y + r * sin(CGFloat(d) * .pi / 180)) }
+        p += [CGPoint(x: 566, y: 855), CGPoint(x: 566, y: 885)]
+        p.append(p[0])
+        return p
+    }
+    static let plungePinRadius: CGFloat = 5
+    static let rightLaneCurve: [CGPoint] = [CGPoint(x: 548, y: 900), CGPoint(x: 549, y: 865), CGPoint(x: 555, y: 830),
+                                            CGPoint(x: 562, y: 800), CGPoint(x: 570, y: 775), CGPoint(x: 578, y: 750),
+                                            CGPoint(x: 585, y: 725), CGPoint(x: 589, y: 700)]
     static let bumperKickSpeed: CGFloat = 1150
     static let buoyCenter = CGPoint(x: 468, y: 638)
     static let buoyFacingDegrees: CGFloat = 205
@@ -654,21 +699,18 @@ enum ChompTableLayout {
         // outerArcCentre, r 80) turn the plunger lane and the reel lane left into the right ramp's entrance.
         // M3 v21: with the turn raised to y 1280 (above the arch's top, 1270), the top wall runs straight from the
         // arch's top to the turn's end (it rises 10 pt), as the real top-right plastic does.
-        points += turnEnd                                        // M3 v14b: the turn's end, 90° → 85°
-        points += plungerOuterArc.reversed()                    // M3 v14: the spiral, then the plunger lane's curve
-        points.append(CGPoint(x: rightWallX, y: laneBendY))   // M3 v13: the plunger lane's outer wall leans out to x 598
+        // M4 v4: no plunger lane up the side any more: the turn's wall is one solid r 80 curve from 90° to 0° (the old
+        // divider + gate + turn end), then the reel-right lane's wall down to the bend, the curve out beside the bumper,
+        // and the shooter lane.
+        points += stride(from: 90, through: 0, by: -5).map { turnPoint(turnInnerR, CGFloat($0)) }
+        points.append(CGPoint(x: laneWallX, y: laneBendY))
+        points += rightLaneCurve.dropFirst()
         points += [
             CGPoint(x: rightWallX, y: laneFloorY),
             CGPoint(x: laneWallX, y: laneFloorY),
             CGPoint(x: laneWallX, y: rightBulgeBottom),
+            CGPoint(x: laneWallX, y: shooterInnerTopY),        // M4 v4: the inner wall ends at y 645 (was up to 900)
         ]
-        points += quadCurve(from: CGPoint(x: laneWallX, y: rightBulgeBottom),
-                            control: CGPoint(x: laneWallX - rightBulgeControlInset,
-                                             y: (rightBulgeBottom + rightBulgeTop) / 2),
-                            to: CGPoint(x: laneWallX, y: rightBulgeTop))
-        points.append(CGPoint(x: laneWallX, y: laneBendY))      // M3 v13: the inner wall leans out to x 562 at its top
-        points.append(CGPoint(x: laneTopInnerX, y: laneWallTop))
-        points += dividerArc.dropFirst()                       // M3 v14: the divider curves left over the top
         return points
     }
 

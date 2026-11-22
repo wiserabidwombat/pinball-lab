@@ -29,6 +29,11 @@ enum ChompPoints {
     static let chumBucket = 750                 // M3 v16 placeholder (the chum bucket target)
     static let sharkTarget = 500                // M3 v17 placeholder (each shark tower standup)
     static let sharkTowerComplete = 5_000       // M3 v17 placeholder (all three)
+    // M5 v1: the skill shots, at the real table's values (the plan: Jaws numbers, millions). The placeholders above
+    // move to the real scale as their rules arrive.
+    static let skillShot1 = 5_000_000           // plunge into the bumper
+    static let skillShot2 = 10_000_000          // plunge into the lane above the mini flipper, bumper untouched
+    static let skillShot3 = 15_000_000          // the flashing Fish Phone target, no other switch first
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.
@@ -50,6 +55,11 @@ final class ChompGameState {
     var bonusText: String?
     /// The mission and goal (from the rules milestone); shown dim when there's no banner.
     var status: String?
+    /// M5 v1: Beach Junk (the real table's gear) lit and not yet collected. Skill shots 2 and 3 light one; collecting
+    /// comes with the rules-depth milestone.
+    var beachJunkLit = 0
+    /// M5 v2: every cameo jackpot adds +1x to the Flip-Flop Smack (the real machete), built in rules depth.
+    var smackBonus = 0
     var highScore = UserDefaults.standard.integer(forKey: chompHighScoreKey)
     var isNewHighScore = false
 
@@ -87,6 +97,8 @@ final class ChompGameState {
         banner = nil
         bonusText = nil
         status = nil
+        beachJunkLit = 0
+        smackBonus = 0
         isNewHighScore = false
     }
 

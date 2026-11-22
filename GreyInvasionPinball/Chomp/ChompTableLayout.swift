@@ -314,7 +314,11 @@ enum ChompTableLayout {
     /// face from below and straight down the middle).
     /// v4c (Aaron: "Does that pin show up in the table document?"): p. 17 draws a round post at ~(527, 857); p. 40 a
     /// yellow barrel beside it on the plastic (x ~537–590, y 852–888) whose rounded end reaches into the lane to x ~537.
-    static let plungePin = CGPoint(x: 527, y: 857)
+    /// M5 v1c: 6 pt right of p. 17's post (527, 857). Aaron: on the real table a hard plunge comes off the pin down to the
+    /// flippers (skill shot 3). At 527 every 1,310–2,120 pt/s plunge met the pin's underside and dropped onto the bumper
+    /// (drop probe m5v1); the arriving ball now meets the pin's lower-left side and leaves down-left, past the bumper
+    /// (pymunk twin /tmp/pinsim.py: the bumper→flippers switch-over is ~4 pt wide, so the pin sits inside the plateau).
+    static let plungePin = CGPoint(x: 533, y: 857)
     /// The barrel's rounded end (centre (552, 870), r 15, leftmost x 537), closed into the wall on its right.
     static var barrelEnd: [CGPoint] {
         let c = CGPoint(x: 552, y: 870), r: CGFloat = 15
@@ -667,6 +671,23 @@ enum ChompTableLayout {
     static let kickbackSpeed: CGFloat = 1500
     /// Ball save: armed while the ball waits on the plunger and for 10 s after launch, once per player ball.
     static let ballSaveSeconds: TimeInterval = 10
+    /// M5 v1: each skill shot made adds this much to the ball's save (the real rules).
+    static let skillShotSaveBonus: TimeInterval = 5
+    /// M5 v1: the plunger pull (0–1) that drops the ball on the bumper (drop probe v5: 1,060–1,120 pt/s = pull
+    /// 0.032–0.127); the Play Lab's aiming robots plunge here while the skill shot is lit.
+    static let skillPlungePull: CGFloat = 0.08
+    /// M5 v1b (drop probe m5v1, plunges 1,040–2,300 in 30s): every plunge from 1,310 to 2,120 bounces off the pin and
+    /// comes down onto the bumper as its first switch, after rising to y ~830–848; the soft ones that drop onto the
+    /// bumper (1,070–1,100) top out at y 744–772. Skill shot 1 counts only a bumper hit before the ball rose this high.
+    static let skillBumperMaxPeakY: CGFloat = 820
+    /// M5 v2c: how long a skill shot / cameo banner keeps the plain shot-name banners off the display.
+    static let bannerHoldSeconds: TimeInterval = 1.5
+    /// M5 v2: the shot lamps (arrow inserts) — where each sits and the way it points (degrees), just below the shot.
+    static let shotLampSpots: [ChompShot: (CGPoint, CGFloat)] = [
+        .leftLoop: (CGPoint(x: 108, y: 835), 95), .waveRamp: (CGPoint(x: 174, y: 905), 90),
+        .centerRamp: (CGPoint(x: 262, y: 955), 90), .boat: (CGPoint(x: 350, y: 962), 90),
+        .reel: (CGPoint(x: 466, y: 952), 90), .rightRamp: (CGPoint(x: 526, y: 905), 88),
+        .harpoonGate: (CGPoint(x: 86, y: 790), 175), .fishPhone: (CGPoint(x: 128, y: 618), 150)]
 
     /// One continuous wall: left wall (with the bulge) → arched top → right wall → plunger lane
     /// floor → inner plunger lane wall (also the outside of the right outlane, with its own bulge).

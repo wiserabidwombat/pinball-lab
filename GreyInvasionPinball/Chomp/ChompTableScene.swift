@@ -119,6 +119,20 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     // The ball save: once per player ball, on the plunger and for 10 s after launch.
     private var ballSaveUsed = false
     private var launchedAt: TimeInterval?
+    /// M5 v1: the skill shot is lit from the serve until the first switch after the launch.
+    private var skillShotLive = false
+    /// M5 v1: the Fish Phone target flashing for skill shot 3, and the one the latest bank hit struck.
+    private var skillTarget: Int?
+    private var bankHitIndex: Int?
+    /// M5 v1: seconds the skill shots added to this ball's save.
+    private var ballSaveBonus: TimeInterval = 0
+    /// M5 v1b: the served ball's highest point since the launch, while the skill shot is lit.
+    private var skillPeakY: CGFloat = 0
+    /// M5 v2c: a skill shot / cameo banner holds the line this long; plain shot-name banners don't cover it.
+    private var bannerHoldUntil: TimeInterval = 0
+    /// M5 v2: Kevin's cameos (rules in ChompCameos) and the shot lamps that show them.
+    let cameos = ChompCameos()
+    private var shotLamps: [ChompShot: SKShapeNode] = [:]
     private var wasOnPlunger = false
 
     // Input
@@ -177,7 +191,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M4 v6"
+    static let buildTagText = "T7 M5 v2c"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -542,10 +556,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             body.velocity = CGVector(dx: v.dx * ChompSpinner.ballSpeedKept, dy: v.dy * ChompSpinner.ballSpeedKept)
         }
         if ChompTableLayout.loopEntranceSwitch.crossing(from: p0, to: p) == .forward {
+            showBanner("LEFT LOOP")
             labEvent("leftLoop")
             game.add(ChompPoints.loop)
             sfx(.orbit)
-            showBanner("LEFT LOOP")
         }
     }
 
@@ -627,6 +641,87 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                                  postRadius: ChompTableLayout.boatPostRadius, lip: ChompTableLayout.boatLip)
         addChild(b)
         boat = b
+        addShotLamps()
+    }
+
+    // MARK: - M5 v2: Kevin's cameos
+
+    /// Arrow inserts below the shots the cameos light (grey-box lamps until the art).
+    private func addShotLamps() {
+        for (shot, spot) in ChompTableLayout.shotLampSpots {
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 11, y: 0))
+            path.addLine(to: CGPoint(x: -7, y: 8))
+            path.addLine(to: CGPoint(x: -7, y: -8))
+            path.closeSubpath()
+            let lamp = SKShapeNode(path: path)
+            lamp.position = spot.0
+            lamp.zRotation = spot.1 * .pi / 180
+            lamp.strokeColor = SKColor(white: 0, alpha: 0.5)
+            lamp.lineWidth = 1
+            lamp.fillColor = Self.shotLampOff
+            lamp.zPosition = 0.8
+            addChild(lamp)
+            shotLamps[shot] = lamp
+        }
+    }
+
+    static let shotLampOff = SKColor(white: 0.35, alpha: 0.35)
+    static let shotLampBlue = SKColor(red: 0.25, green: 0.55, blue: 1.0, alpha: 1)
+    static let shotLampFinal = SKColor(red: 1.0, green: 0.55, blue: 0.15, alpha: 1)
+    static let shotLampGold = SKColor(red: 1.0, green: 0.84, blue: 0.30, alpha: 1)
+
+    private func lampColor(_ lamp: ChompCameos.Lamp, _ now: TimeInterval) -> SKColor? {
+        let slow = Int(now * 4) % 2 == 0, fast = Int(now * 10) % 2 == 0
+        switch lamp {
+        case .off: return nil
+        case .white: return slow ? .white : Self.shotLampOff
+        case .blue: return Self.shotLampBlue
+        case .blueFast: return fast ? Self.shotLampBlue : .white
+        case .final: return slow ? Self.shotLampFinal : Self.shotLampBlue
+        case .jackpot: return fast ? Self.shotLampGold : .white
+        }
+    }
+
+    /// Every frame of play: the cameo clock (stopped while the ball waits on the plunger), the fin window, the lamps
+    /// and the HUD line.
+    private func updateCameos(_ dt: CGFloat, _ now: TimeInterval) {
+        if !isBallOnPlunger, !balls.isEmpty { applyCameo(cameos.tick(dt: TimeInterval(dt), now: now)) }
+        if cameos.jackpotUntil != nil, fin?.isUp == true { cameos.startJackpotWindow(now: now) }
+        for (shot, node) in shotLamps {
+            let c = lampColor(cameos.lamp(shot), now) ?? Self.shotLampOff
+            if node.fillColor != c { node.fillColor = c }
+        }
+        fin?.setGlow(lampColor(cameos.lamp(.fin), now))
+        if !skillShotLive { game.status = cameos.statusText(now: now) }
+    }
+
+    /// A switch, for the cameos (from labEvent).
+    private func cameoEvent(_ name: String) {
+        if name == "sharkTower" { cameos.sharkTowerHit(); return }
+        guard let shot = ChompShot(rawValue: name) else { return }
+        applyCameo(cameos.shot(shot, now: gameTime))
+    }
+
+    private func applyCameo(_ effects: [ChompCameos.Effect]) {
+        for e in effects {
+            switch e {
+            case .score(let points, let banner):
+                game.add(points)
+                if let banner { showBanner(banner, hold: true) }
+            case .banner(let text):
+                showBanner(text, hold: true)
+            case .beachJunk:
+                game.beachJunkLit += 1
+            case .started:
+                sfx(.skillShot)
+                bigHaptic.impactOccurred()
+            case .ended(_, let completed):
+                if completed { game.smackBonus = cameos.macheteBonus }
+            case .raiseFin, .dropFin:
+                break                                     // updateFin follows cameos.finWanted
+            }
+        }
     }
 
     /// M3 v9: the fishing reel — the keyhole's blue blocks and the disc over its round end.
@@ -722,15 +817,19 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             finHitPending = false
             if f.isUp {
                 f.drop(at: now)
+                showBanner("FIN")
                 labEvent("fin")
                 game.add(ChompPoints.fin)
                 hitHaptic.impactOccurred(intensity: 0.8)
                 sfx(.standup)
-                showBanner("FIN")
             }
         }
-        if !f.isUp, now - f.droppedAt >= ChompTableLayout.finRelightTime {
-            f.raise(clearOf: balls.filter { $0.isOnFloor }.map { $0.position }, ballRadius: ChompTableLayout.ballRadius)
+        let floorBalls = balls.filter { $0.isOnFloor }.map { $0.position }
+        if let want = cameos.finWanted {                  // M5 v2: a cameo raises / holds the fin down
+            if want, !f.isUp { f.raise(clearOf: floorBalls, ballRadius: ChompTableLayout.ballRadius) }
+            if !want, f.isUp { f.drop(at: now) }
+        } else if !f.isUp, now - f.droppedAt >= ChompTableLayout.finRelightTime {
+            f.raise(clearOf: floorBalls, ballRadius: ChompTableLayout.ballRadius)
         }
         f.update(dt: dt, speed: ChompTableLayout.finRoamSpeed)
     }
@@ -760,10 +859,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// M3 v4: the captive ball reached the boat target (placeholder scoring until the rules, M4).
     private func updateBoat(_ now: TimeInterval) {
         guard let b = boat, b.reachedTop(at: now, length: ChompTableLayout.boatChannelLength) else { return }
+        showBanner("BOAT")
         labEvent("boat")
         game.add(ChompPoints.boat)
         hitHaptic.impactOccurred()
-        showBanner("BOAT")
     }
 
     /// The ramps' switches, from the ball's move this frame (Table 06's updateRampLayer): the entry puts a floor ball on
@@ -811,11 +910,11 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         } else {
             (event, points, banner) = ("waveRamp", ChompPoints.waveRamp, "WAVE RAMP")
         }
+        showBanner(banner)
         labEvent(event)
         game.add(points)
         hitHaptic.impactOccurred()
         sfx(.ramp)
-        showBanner(banner)
     }
 
     /// Turns the spinner; each half-turn scores, with one tick sound per 50 ms.
@@ -946,7 +1045,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             sfx(.lane)
             if !upPostsArmed {
                 upPostsArmed = true
-                showBanner("UP-POSTS ARMED · TEST")
+                if game.banner == nil { showBanner("UP-POSTS ARMED · TEST") }   // M5 v1: not over a skill shot's
             }
             return
         }
@@ -1004,7 +1103,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// 10 s after launch.
     private var ballSaveNow: Bool {
         guard !ballSaveUsed else { return false }
-        if let t = launchedAt { return gameTime - t <= ChompTableLayout.ballSaveSeconds }
+        if let t = launchedAt { return gameTime - t <= ChompTableLayout.ballSaveSeconds + ballSaveBonus }
         return true
     }
 
@@ -1130,6 +1229,58 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         addChild(ball)
         balls.append(ball)
         servedBall = ball
+        startSkillShot()
+    }
+
+    // MARK: - Skill shots (M5 v1)
+
+    /// Lit on every serve: plunge onto the bumper (L1), into the lane above the mini flipper without touching the
+    /// bumper (L2), or to the flippers and then hit the flashing Fish Phone target before any other switch (L3).
+    private func startSkillShot() {
+        stopSkillFlash()
+        skillShotLive = true
+        ballSaveBonus = 0
+        skillPeakY = 0
+        let lit = bankDown.indices.filter { !bankDown[$0] }
+        skillTarget = lit.randomElement()
+        if let i = skillTarget, i < bankTargets.count {
+            let t = bankTargets[i]
+            t.run(.repeatForever(.sequence([.run { t.fillColor = .white }, .wait(forDuration: 0.15),
+                                            .run { t.fillColor = Self.bankLitColor }, .wait(forDuration: 0.15)])),
+                  withKey: "skillFlash")
+        }
+        game.status = "SKILL SHOT: BUMPER · MINI LANE · FLASHING TARGET"
+    }
+
+    private func stopSkillFlash() {
+        guard let i = skillTarget, i < bankTargets.count else { return }
+        bankTargets[i].removeAction(forKey: "skillFlash")
+        bankTargets[i].fillColor = bankDown[i] ? Self.bankDarkColor : Self.bankLitColor
+    }
+
+    /// The first switch after the launch decides the skill shot (called from labEvent, so every switch counts).
+    private func skillShotSwitch(_ name: String) {
+        guard skillShotLive, launchedAt != nil else { return }
+        skillShotLive = false
+        let flashing = skillTarget
+        stopSkillFlash()
+        skillTarget = nil
+        game.status = nil
+        switch name {
+        case "bumper" where skillPeakY < ChompTableLayout.skillBumperMaxPeakY: awardSkillShot(1, ChompPoints.skillShot1)
+        case "miniLane": awardSkillShot(2, ChompPoints.skillShot2)
+        case "fishPhone" where bankHitIndex != nil && bankHitIndex == flashing: awardSkillShot(3, ChompPoints.skillShot3)
+        default: break
+        }
+    }
+
+    private func awardSkillShot(_ level: Int, _ points: Int) {
+        game.add(points)
+        ballSaveBonus += ChompTableLayout.skillShotSaveBonus
+        if level >= 2 { game.beachJunkLit += 1 }
+        showBanner("SKILL SHOT \(level) · \(points / 1_000_000)M" + (level >= 2 ? " · BEACH JUNK LIT" : ""), hold: true)
+        sfx(.skillShot)
+        bigHaptic.impactOccurred()
     }
 
     private func removeBall(_ ball: ChompBall) {
@@ -1182,16 +1333,23 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         fin?.reset()
         finHitPending = false
         ballSaveUsed = false
+        cameos.newGame()                           // M5 v2
         game.reset()
         placeBallOnPlunger()
         refreshCamera()
     }
 
-    private func showBanner(_ text: String) {
+    private static let minorBanners: Set<String> = ["LEFT LOOP", "BOAT", "WAVE RAMP", "CENTER RAMP", "RIGHT RAMP", "FIN",
+                                                    "FISH PHONE", "SHARK TOWER", "HARPOON LANE"]
+
+    private func showBanner(_ text: String, hold: Bool = false) {
         #if DEBUG
         playLab?.banner(text)
         labObjective(forBanner: text)
         #endif
+        // M5 v2c: the plain shot names wait while a skill shot / cameo banner holds the line.
+        if gameTime < bannerHoldUntil, Self.minorBanners.contains(text) || text.hasPrefix("FISHING REEL") { return }
+        if hold { bannerHoldUntil = gameTime + ChompTableLayout.bannerHoldSeconds }
         game.banner = text
         bannerClearAt = gameTime + ChompTableLayout.bannerSeconds
     }
@@ -1428,6 +1586,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         updateReel(dt, now)
         updateBoat(now)
         updateFin(dt, now)
+        updateCameos(dt, now)                    // M5 v2
         if bankRelightPending { bankRelightPending = false; resetBank() }
         if sharkRelightPending { sharkRelightPending = false; resetSharkTower() }
 
@@ -1444,6 +1603,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             sfx(.launch)
         }
         wasOnPlunger = onPlunger
+        if skillShotLive, launchedAt != nil, let served = servedBall { skillPeakY = max(skillPeakY, served.position.y) }
         updateKickback()
 
         // Drain: remove every ball off the bottom; a ball is lost only when none are left.
@@ -1461,6 +1621,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                     ballSaveUsed = false             // the next ball gets its own save
                     cameraRig.shake(strength: 4, duration: 0.3)
                     sfx(.drain)
+                    applyCameo(cameos.ballLost())    // M5 v2: a cameo ends with the ball
                     game.ballDrained()
                     if !game.isGameOver {
                         nextBallAt = now + 1.0
@@ -1650,7 +1811,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         case ChompPhysicsCategory.target:
             // M2 v1: the Fish Phone bank (placeholder: all three → "FISH PHONE", then they relight).
             if let i = bankTargets.firstIndex(where: { $0 === node }) {
+                bankHitIndex = i                              // M5 v1: the skill shot needs to know which one
                 labEvent("fishPhone")
+                bankHitIndex = nil
                 if !bankDown[i] {
                     bankDown[i] = true
                     bankTargets[i].fillColor = Self.bankDarkColor
@@ -1723,9 +1886,13 @@ extension ChompTableScene: SKPhysicsContactDelegate {
 }
 
 extension ChompTableScene {
-    /// A shot event for the labs (a no-op in play and in Release builds).
+    /// A shot event for the labs (a no-op in play and in Release builds). M5 v1: every switch passes here, so it also
+    /// decides the skill shot (in every build).
     fileprivate func labEvent(_ name: String) {
+        skillShotSwitch(name)
+        cameoEvent(name)                                   // M5 v2
         #if DEBUG
+        if let t = dropProbeT, !catchProbe { print(String(format: "DROPEV %d %.2f ", Int(t / 2), t.truncatingRemainder(dividingBy: 2)) + name) }
         shotLab?.event(name, at: shotLabTime)
         playLab?.shot(name, now: gameTime)                                    // M4 v1
         if Self.playLabShotObjectives.contains(name) { playLab?.objective(name, now: gameTime) }
@@ -2004,26 +2171,12 @@ extension ChompTableScene {
         (CGPoint(x: 522, y: 983), CGVector(dx: 1022, dy: 2575)), (CGPoint(x: 528, y: 983), CGVector(dx: 700, dy: 2600)),
         (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 1500)), (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 1800)),
         (CGPoint(x: 567, y: 600), CGVector(dx: 0, dy: 2200)),
-        // M4 v4b: plunges from the plunger's top (y ~140) at the launch speeds 1,080 → 2,310 (power 0 → 1).
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1040)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1060)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1080)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1100)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1120)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1140)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1160)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1180)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1200)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1220)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1240)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1260)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1280)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1300)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1320)),
-        (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: 1340)),
         // M3 v22: loop balls in the channel going up, round the U-turn and down the harpoon lane.
         (CGPoint(x: 88, y: 990), CGVector(dx: -150, dy: 900)), (CGPoint(x: 88, y: 990), CGVector(dx: -250, dy: 1400)),
         (CGPoint(x: 88, y: 990), CGVector(dx: -350, dy: 2000))]
+        // M5 v1: plunges from the plunger's top at 1,040 → 2,300 pt/s in 30s (the whole pull), drops 10…, to see which
+        // first switch each one makes (DROPEV lines) for the skill shot.
+        + stride(from: 1040, through: 2300, by: 30).map { (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: CGFloat($0))) }
 
     func debugDropProbe() {
         isAttractMode = false
@@ -2124,7 +2277,14 @@ extension ChompTableScene: PlayLabHost {
          PlayObjective(name: "innerTubeLit", text: "Light the inner tube (buoy)"),
          PlayObjective(name: "innerTubeSave", text: "The inner tube saves a ball"),
          PlayObjective(name: "ballSaved", text: "The ball save saves a ball"),
-         PlayObjective(name: "tilt", text: "Tilt")]
+         PlayObjective(name: "tilt", text: "Tilt"),
+         PlayObjective(name: "skillShot1", text: "Skill shot 1: plunge onto the bumper"),
+         PlayObjective(name: "skillShot2", text: "Skill shot 2: plunge into the lane above the mini flipper"),
+         PlayObjective(name: "skillShot3", text: "Skill shot 3: the flashing Fish Phone target first"),
+         PlayObjective(name: "cameoLit", text: "Light a cameo at the boat"),
+         PlayObjective(name: "cameoStarted", text: "Start one of Kevin's cameos"),
+         PlayObjective(name: "cameoJackpot", text: "Collect a cameo jackpot at the fin"),
+         PlayObjective(name: "cameoBackup", text: "Collect a backup jackpot at the boat")]
     }
 
     /// Flip delays = the middle of each Shot Lab window, 120 Hz (the default pass; the 60 Hz pass now only models the
@@ -2193,7 +2353,8 @@ extension ChompTableScene: PlayLabHost {
         let view = PlayRobotView(now: now, balls: balls.map { b in
             PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero, isUpper: !b.isOnFloor,
                                isHeld: false, onPlunger: isOnPlunger(b), id: ObjectIdentifier(b).hashValue)
-        }, wanted: robotWanted())
+        }, wanted: robotWanted(),
+           skillPlunge: skillShotLive ? ChompTableLayout.skillPlungePull : nil)      // M5 v1: L1, the bumper
         runWatchdog(now, lab)
         guard let cmd = lab.frame(view) else { return }
         if let direction = cmd.nudge { applyNudge(direction) }
@@ -2266,6 +2427,11 @@ extension ChompTableScene: PlayLabHost {
     /// targets, then the shots in the order a player learns them.
     private func robotWanted() -> [String] {
         var w: [String] = []
+        // M5 v2: the cameos first — lit shots, then the boat (lights / boosts them).
+        for lamp in [ChompCameos.Lamp.jackpot, .final, .blueFast, .blue, .white] {
+            for s in ChompShot.allCases where cameos.lamp(s) == lamp && !w.contains(s.rawValue) { w.append(s.rawValue) }
+        }
+        if !cameos.isRunning, !w.contains("boat") { w.append("boat") }
         if bankDown.contains(false) { w.append("fishPhone") }
         if sharkDown.contains(false) { w.append("sharkTower") }
         w += ["centerRamp", "boat", "chumBucket", "harpoonGate", "buoy", "fishPhone", "sharkTower"]
@@ -2284,6 +2450,13 @@ extension ChompTableScene: PlayLabHost {
         case "INNER TUBE SAVE": name = "innerTubeSave"
         case "BALL SAVED": name = "ballSaved"
         case "TILT": name = "tilt"
+        case _ where text.hasPrefix("SKILL SHOT 1"): name = "skillShot1"
+        case _ where text.hasPrefix("SKILL SHOT 2"): name = "skillShot2"
+        case _ where text.hasPrefix("SKILL SHOT 3"): name = "skillShot3"
+        case "CAMEO LIT": name = "cameoLit"
+        case _ where ChompCameos.Kind.allCases.contains(where: { $0.title == text }): name = "cameoStarted"
+        case _ where text.hasPrefix("CAMEO JACKPOT"): name = "cameoJackpot"
+        case _ where text.hasPrefix("BACKUP JACKPOT"): name = "cameoBackup"
         default: name = nil
         }
         if let name { lab.objective(name, now: gameTime) }

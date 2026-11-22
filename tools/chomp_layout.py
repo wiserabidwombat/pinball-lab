@@ -691,6 +691,8 @@ bumperCenter, bumperRadius = (513, 686), 22
 midLaneGuide = [(513, 765), (513, 665)]     # M4 v3b, no longer used (kept for the history)
 # M4 v4b / v4c: the plunge pin (p. 17's post) and the barrel's rounded end (p. 40) that deflect hard plunges.
 plungePin, plungePinRadius = (527, 857), 5
+# M5 v1c: the pin 6 pt right (533, 857) so hard plunges leave it down-left past the bumper to the flippers (skill shot 3).
+plungePin = (533, 857)
 barrelEnd = [(552 + 15 * math.cos(math.radians(d)), 870 + 15 * math.sin(math.radians(d))) for d in range(90, 271, 15)] \
     + [(566, 855), (566, 885)]
 barrelEnd = barrelEnd + [barrelEnd[0]]

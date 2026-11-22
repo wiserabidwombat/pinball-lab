@@ -122,6 +122,12 @@ final class ChompFin: SKNode {
         return true
     }
 
+    /// M5 v2: the fin's lamp — the blade takes a colour while a cameo wants it (nil = shark grey).
+    func setGlow(_ color: SKColor?) {
+        let c = color ?? SKColor(red: 0.36, green: 0.42, blue: 0.50, alpha: 1)
+        if blade.fillColor != c { blade.fillColor = c }
+    }
+
     /// Up, at the slot's upper-left stop, roaming toward the right.
     func reset() {
         isUp = true

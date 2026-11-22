@@ -109,6 +109,15 @@ extension LabTable {
                 LabStat(label: "Goal", value: "Fight the Haunted Forest's monsters, loot what you can, and leave before your HP runs out"),
                 LabStat(label: "Art", value: "Coming later: dark pixel art lit only by lanterns"),
             ]
+        case .neon:
+            // T8 M1: one cell in grey box so far.
+            return [
+                LabStat(label: "Table size", value: "600 × 1060 points a cell, one screen each, at real ball size"),
+                LabStat(label: "Camera", value: "The whole cell on screen"),
+                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones"),
+                LabStat(label: "Goal", value: "Breach each sector's lock and find the way through the maze to the Core"),
+                LabStat(label: "Art", value: "Coming later: glowing neon outlines over a dark grid"),
+            ]
         case .chomp:
             // T7 M1: a grey box so far.
             return [
@@ -189,6 +198,11 @@ extension LabTable {
                 LabNote(title: "Drains cost HP", detail: "There are no balls to lose. Each drain costs HP from your run, and zero HP ends it."),
                 LabNote(title: "Damage from speed", detail: "A hit's damage is how fast the ball was going times its strength, so clean, hard shots hurt more."),
             ]
+        case .neon:
+            return [
+                LabNote(title: "A maze of tables", detail: "Each cell is its own small table. Exits on the left, right and top lead to the next cell; a drain drops you to the cell below."),
+                LabNote(title: "Every way in ends on a flipper", detail: "From the side or from above, a wire carries the ball to an inlane; from below, it rises up through the drain and drops onto a flipper."),
+            ]
         case .chomp:
             return [
                 LabNote(title: "A fourth flipper", detail: "A small pier flipper on the right wall, on the right button, shoots back across the table."),
@@ -251,6 +265,10 @@ extension LabTable {
         case .quest:
             return [
                 LabNote(title: "Numbers the table reads", detail: "HP, ball strength and armour come from the run, so the map, classes and gear can change them later without touching the table."),
+            ]
+        case .neon:
+            return [
+                LabNote(title: "Check the gaps before the code", detail: "Every lane and passage of a cell was measured and the ball's ways in were simulated before any Swift was written."),
             ]
         case .chomp:
             return [

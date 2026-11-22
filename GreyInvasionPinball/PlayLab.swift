@@ -666,7 +666,17 @@ final class PlayRobot {
             if trigger[i] == nil { trigger[i] = max(0, 0.025 + gauss(skill.timingSigma)) }
             let d = Self.distance(b.position, toSegment: f.pivot, f.restTip) - ballRadius - 8
             let speed = max(40, hypot(b.velocity.dx, b.velocity.dy))
-            let ttc = Double(max(0, d) / speed)
+            var ttc = Double(max(0, d) / speed)
+            // A ball falling just past the tip (into the centre gap) is only reachable by the tip in mid-stroke, near
+            // pivot height — well above the resting tip. Measured on CHOMP! (2026-11-22): the rule above pressed when
+            // such a ball was level with the resting tip, and 59–88% of those were lost. With a tip lead (seconds;
+            // `-override "Lab.tipLead=0.04"`, 0 = off) the press comes that long before the ball reaches pivot height.
+            let tipLead = Double(LabOverrides.cg("Lab.tipLead", 0))
+            let pastTip = (b.position.x - f.restTip.x) * (f.pointsLeft ? -1 : 1)
+            if tipLead > 0, pastTip > 0, b.velocity.dy < -40 {
+                let toPivotHeight = Double(max(0, b.position.y - ballRadius - f.pivot.y) / -b.velocity.dy)
+                ttc = min(ttc, max(0, toPivotHeight - tipLead))
+            }
             if ttc <= trigger[i] ?? 0 {
                 holdUntil[i] = now + 0.22
                 pressed[i] = true

@@ -332,11 +332,16 @@ final class PlayRobot {
         return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
     }
 
+    /// How far past a flipper's ends a ball can still be reached: tip radius + ball radius, 14 pt on the 18 pt-ball
+    /// tables (ball r 9), scaled by the ball for a real-scale table (CHOMP!, ball r 15 → 23). With the fixed 14 the
+    /// robot never flipped at balls coming down CHOMP!'s centre gap just past a tip (table agent's note, 2026-11-22).
+    private var tipReach: CGFloat { 14 * ballRadius / 9 }
+
     /// The flipper's "zone": above it and within its reach, on its layer.
     private func inZone(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper, height: CGFloat) -> Bool {
         guard b.isUpper == f.upper, !b.isHeld, !b.onPlunger else { return false }
         let tip = f.restTip
-        let minX = min(f.pivot.x, tip.x) - 14, maxX = max(f.pivot.x, tip.x) + 14
+        let minX = min(f.pivot.x, tip.x) - tipReach, maxX = max(f.pivot.x, tip.x) + tipReach
         return b.position.x >= minX && b.position.x <= maxX
             && b.position.y >= tip.y - 12 && b.position.y <= f.pivot.y + height
     }
@@ -347,7 +352,7 @@ final class PlayRobot {
     private func catchable(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
         let tip = f.restTip
         let lo = min(f.pivot.x, tip.x), hi = max(f.pivot.x, tip.x)
-        let span = (lo - 14)...(hi + 14)
+        let span = (lo - tipReach)...(hi + tipReach)
         guard span.contains(b.position.x) else { return false }
         // Round 4e: only the crossing ball is refused — low (below pivot height + 20) and moving in from the tip side
         // at speed. Inlane feeds (slow, at the pivot end) and balls dropping from above are caught as before.
@@ -390,7 +395,7 @@ final class PlayRobot {
     private func overFlipper(_ b: PlayRobotView.Ball, _ f: PlayRobotFlipper) -> Bool {
         let tip = f.restTip
         let lo = min(f.pivot.x, tip.x), hi = max(f.pivot.x, tip.x)
-        let span = f.pointsLeft ? (lo + 4)...(hi + 14) : (lo - 14)...(hi - 4)
+        let span = f.pointsLeft ? (lo + 4)...(hi + tipReach) : (lo - tipReach)...(hi - 4)
         return b.isUpper == f.upper && !b.isHeld && span.contains(b.position.x) && b.position.y > tip.y - 12
             && b.position.y < f.pivot.y + 160
     }

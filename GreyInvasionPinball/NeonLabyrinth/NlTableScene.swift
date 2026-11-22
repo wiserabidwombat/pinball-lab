@@ -9,12 +9,15 @@
 //   FROM BELOW  : rises up through the drain chute and the flipper gap, then pops onto a flipper (sides alternate);
 //   FROM ABOVE  : falls in through the top port onto a return wire, rides it round to an inlane (sides alternate);
 //   FROM LEFT / FROM RIGHT : through a side entry portal onto that side's return wire, down to its inlane.
-// Geometry: NlCellLayout.swift (generated from tools/nl_layout.py, checked by nl_checks.py / nl_sim.py).
+// Geometry: NlCellLayout.swift (the kit, generated from tools/nl_kit.py; checked by nl_checks.py / nl_sim.py).
 // M2 v1: the Switchyard works. A ramp shot rides up onto the turntable; SWITCH ◄ / ► turn the turntable (W N E,
 // stepping), RAILS steps the light-rail ring's bridge (W → N → E → W). Lined up, the turntable fires the ball down that
 // light-rail and out through the exit portal; not lined up, the ball derails to the floor. With no maze yet, a ball
 // out of an exit comes straight back in as the cell next door would get it (out the left → in from the right, out the
 // top → in from below), costing nothing.
+// M2 round A: the scene is the shared CELL; the Switchyard is a room (NlRoom / NlSwitchyardRoom.swift) that adds its own
+// parts, targets, drawn parts and exit puzzle. The cell draws only the room's exits (and those sides' entry portals),
+// brings in only arrivals through open sides, and calls the room each frame, per ball, per target hit and at ride ends.
 // M1 v2: the Shot Lab and Play Lab hosts (CHOMP!'s pattern; `-shotlab neon`, `-playlab neon`). In the Play Lab the cell
 // plays as a bottom-row cell: a drain costs a ball (the next ball still comes in by the next way in).
 import SpriteKit
@@ -52,19 +55,11 @@ final class NlTableScene: SKScene, RendererHostedScene {
         /// M2 v1: the height at the end of the path (the height eases from `height` to this along the path).
         var heightEnd: CGFloat? = nil
         /// M2 v1: what happens at the end of the path.
-        var end: RideEnd = .release
+        var end: NlRideEnd = .release
         /// M2 v1: seconds to wait at the end of the path before it ends.
         var hold: CGFloat = 0
         var total: CGFloat { cumulative.last ?? 0 }
     }
-
-    /// M2 v1: how a ride ends: dropped to the floor with its release velocity, onto the turntable (held, then fired),
-    /// fired off the turntable (down a rail or a derail, decided as it fires), out through an exit, or derailed.
-    private enum RideEnd { case release, turntable, fire, exit(Int), derail(Int) }
-
-    /// M2 v1: the three ways the turntable and the bridge can point: 0 = W (◄), 1 = N (▲), 2 = E (►).
-    static let headingGlyph = ["◄", "▲", "►"]
-    static let headingAngle: [CGFloat] = [.pi, .pi / 2, 0]
 
     private let game: NlGameState
     private let settings: GameSettings
@@ -108,20 +103,18 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private var saveLit = false
     private var targetsHitForSave: Set<String> = []
     private var kickLamps: [SKShapeNode] = []
-    // M2 v1: the Switchyard. Where the turntable and the bridge point (0 W, 1 N, 2 E), their drawn angles, and the
-    // nodes that show the route.
-    private var turntable = 1
-    private var bridge = 0
-    private var turntableShown: CGFloat = .pi / 2
-    private var bridgeShown: CGFloat = .pi
-    private var turntablePointer: SKShapeNode?
-    private var bridgeNode: SKShapeNode?
-    private var railNodes: [[SKShapeNode]] = []
-    private var routeLamps: [(lamp: SKShapeNode, label: SKLabelNode)] = []
-    private var routeOpen: Bool { turntable == bridge }
+    // M2 round A: the room on this cell, the exit portals' nodes, and which are lit (the room's exit open).
+    private let room: NlRoom
+    #if DEBUG
+    /// The lab events that count as Play Lab objectives: the room's and the cell's (built once).
+    fileprivate lazy var cachedShotObjectives: Set<String> =
+        room.playLabShotObjectives.union(["fromBelow", "fromAbove", "fromLeft", "fromRight",
+                                          "kickback", "saveLit", "outlaneSave"])
+    #endif
+    private var exitPortals: [NlExit: SKShapeNode] = [:]
+    private var exitsLit: Set<NlExit> = []
     /// The arrival a ball out of an exit comes back in by (the cell next door's view), ahead of the drain cycle.
     private var pendingArrival: Arrival?
-    private var nextNorthDerailRight = true
 
     #if DEBUG
     /// M1 v2: the Shot Lab robot (shared ShotLab) and its own clock.
@@ -186,13 +179,12 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M2 v1"
-    /// The targets' lab event names.
-    static let targetEvent = ["SWITCH ◄": "switchLeft", "SWITCH ►": "switchRight", "RAILS": "rails"]
+    static let buildTagText = "T8 M2 A"
 
     init(game: NlGameState, settings: GameSettings) {
         self.game = game
         self.settings = settings
+        self.room = NlSwitchyardRoom()             // M2 round A: the cell's room (the only one so far)
         super.init(size: NlTableLayout.worldSize)
         scaleMode = .resizeFill
         backgroundColor = SKColor(red: 0.0, green: 0.0, blue: 0.02, alpha: 1)
@@ -235,16 +227,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
         typealias C = NlCellLayout
         addWall(points: C.outerWall, friction: NlTableLayout.railFriction, restitution: NlTableLayout.railRestitution)
         for pts in [C.laneGuideLeft, C.laneGuideRight, C.outlaneWallLeft, C.outlaneWallRight,
-                    C.outlanePostRailLeft, C.outlanePostRailRight, C.topLaneWallLeft, C.topLaneWallRight,
-                    C.switchBlockLeft, C.switchBlockRight, C.railsBlock, C.rampU] {
+                    C.outlanePostRailLeft, C.outlanePostRailRight, C.topLaneWallLeft, C.topLaneWallRight] {
             addWall(points: pts)
         }
         for p in [C.laneGuidePostLeft, C.laneGuidePostRight, C.outlanePostLeft, C.outlanePostRight] {
             addPost(at: p, radius: C.laneGuidePostRadius)
         }
         for p in C.topLanePosts { addPost(at: p, radius: C.topLanePostRadius) }
-        for p in C.rampMouthPosts { addPost(at: p, radius: C.rampMouthPostRadius) }
-        addPost(at: C.hubCenter, radius: C.hubBaseRadius, fill: SKColor(red: 0.08, green: 0.16, blue: 0.11, alpha: 1))
 
         for s in [C.slingLeft, C.slingRight] {
             let sling = NlSlingshot(top: s[0], corner: s[1], tip: s[2], artBaked: false,
@@ -259,12 +248,9 @@ final class NlTableScene: SKScene, RendererHostedScene {
         leftFlipper.attach(to: self)
         rightFlipper.attach(to: self)
 
-        addTarget(name: "SWITCH ◄", face: C.switchLeftFace, normal: C.switchLeftNormal)
-        addTarget(name: "SWITCH ►", face: C.switchRightFace, normal: C.switchRightNormal)
-        addTarget(name: "RAILS", face: C.railsFace, normal: C.railsNormal)
-
-        addDrawnSwitchyard()
+        addWires()
         addPortals()
+        room.build(in: self)                       // M2 round A: the room's parts, targets and drawn parts
         for p in [NlTableLayout.kickLampLeft, CGPoint(x: NlTableLayout.mirrorSum - NlTableLayout.kickLampLeft.x,
                                                        y: NlTableLayout.kickLampLeft.y)] {
             let lamp = SKShapeNode(circleOfRadius: 9)
@@ -306,7 +292,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         addChild(crop)
     }
 
-    private func addWall(points: [CGPoint],
+    func addWall(points: [CGPoint],
                          friction: CGFloat = NlTableLayout.wallFriction,
                          restitution: CGFloat = NlTableLayout.wallRestitution,
                          z: CGFloat = -19.5) {
@@ -334,7 +320,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         addChild(node)
     }
 
-    private func addPost(at p: CGPoint, radius r: CGFloat, fill: SKColor = SKColor(white: 0.85, alpha: 1)) {
+    func addPost(at p: CGPoint, radius r: CGFloat, fill: SKColor = SKColor(white: 0.85, alpha: 1)) {
         let post = SKShapeNode(circleOfRadius: r)
         post.position = p
         post.fillColor = fill
@@ -352,7 +338,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     }
 
     /// A standup: a thick drawn face with an edge body (category target) along it, and its label behind it.
-    private func addTarget(name: String, face: (CGPoint, CGPoint), normal: CGVector) {
+    func addTarget(name: String, face: (CGPoint, CGPoint), normal: CGVector) {
         let path = CGMutablePath()
         path.addLines(between: [face.0, face.1])
         let node = SKShapeNode(path: path)
@@ -379,79 +365,18 @@ final class NlTableScene: SKScene, RendererHostedScene {
         targets.append((body: node, name: name, face: node))
     }
 
-    /// Drawn only in M1 v1 (they work next round): the ramp's raised part, the turntable, the light-rail ring, the three
-    /// light-rails, the return wires and entry stubs, and the route lamps in the open lower table.
-    private func addDrawnSwitchyard() {
+    /// The kit's wires (drawn; ridden as scripted rides): both return wires (arrivals from above use them), and the entry
+    /// stubs of the sides the room has open.
+    private func addWires() {
         typealias C = NlCellLayout
-        // The ramp's plastic above its solid low end.
-        let ramp = CGMutablePath()
-        let left = C.rampLeftRail.filter { $0.y >= C.rampUTopY }
-        let right = C.rampRightRail.filter { $0.y >= C.rampUTopY }
-        ramp.addLines(between: left + right.reversed())
-        ramp.closeSubpath()
-        let plastic = SKShapeNode(path: ramp)
-        plastic.fillColor = Self.wallColor.withAlphaComponent(0.16)
-        plastic.strokeColor = Self.wallColor.withAlphaComponent(0.5)
-        plastic.lineWidth = 1.5
-        plastic.zPosition = 15
-        addChild(plastic)
-        // Turntable and the light-rail ring.
-        for (r, w, a) in [(C.hubTrackRadius, CGFloat(2.5), CGFloat(0.9)), (C.railRingRadii.0, 1.2, 0.6), (C.railRingRadii.1, 1.2, 0.6)] {
-            let ring = SKShapeNode(circleOfRadius: r)
-            ring.position = C.hubCenter
-            ring.strokeColor = Self.wireColor.withAlphaComponent(a)
-            ring.fillColor = r == C.hubTrackRadius ? SKColor(white: 0.08, alpha: 1) : .clear
-            ring.lineWidth = w
-            ring.zPosition = 16
-            addChild(ring)
-        }
-        // M2 v1: the turntable's pointer and the ring's bridge (drawn pointing east; turned by zRotation).
-        let pointer = CGMutablePath()
-        pointer.addLines(between: [CGPoint(x: -14, y: 9), CGPoint(x: C.hubTrackRadius - 4, y: 0), CGPoint(x: -14, y: -9)])
-        pointer.closeSubpath()
-        let pointerNode = SKShapeNode(path: pointer)
-        pointerNode.position = C.hubCenter
-        pointerNode.lineWidth = 2
-        pointerNode.zPosition = 16.5
-        addChild(pointerNode)
-        turntablePointer = pointerNode
-        let bridgeShape = SKShapeNode(rect: CGRect(x: C.railRingRadii.0 - 2, y: -C.railHalfWidth,
-                                                   width: C.railRingRadii.1 - C.railRingRadii.0 + 6, height: 2 * C.railHalfWidth),
-                                      cornerRadius: 3)
-        bridgeShape.position = C.hubCenter
-        bridgeShape.lineWidth = 2
-        bridgeShape.zPosition = 16.4
-        addChild(bridgeShape)
-        bridgeNode = bridgeShape
-        // Light-rails and return wires: two silver rails each.
-        railNodes = [C.railW, C.railN, C.railE].map { addRails($0, halfWidth: C.railHalfWidth, z: 16) }
-        for wire in [C.returnWireLeft, C.returnWireRight, C.entryStubLeft, C.entryStubRight] {
-            addRails(wire, halfWidth: 17, z: 17)
-        }
-        // Route lamps (◄ ▲ ►) in the open lower table.
-        for (dx, glyph) in [(CGFloat(-46), "◄"), (0, "▲"), (46, "►")] {
-            let lamp = SKShapeNode(circleOfRadius: 15)
-            lamp.position = CGPoint(x: C.centerX + dx, y: 505)
-            lamp.strokeColor = Self.entryColor.withAlphaComponent(0.5)
-            lamp.fillColor = SKColor(white: 0.05, alpha: 1)
-            lamp.lineWidth = 1.5
-            lamp.zPosition = -18
-            addChild(lamp)
-            let label = SKLabelNode(text: glyph)
-            label.fontName = "Menlo-Bold"
-            label.fontSize = 14
-            label.fontColor = Self.entryColor.withAlphaComponent(0.6)
-            label.verticalAlignmentMode = .center
-            label.position = lamp.position
-            label.zPosition = -17.9
-            addChild(label)
-            routeLamps.append((lamp: lamp, label: label))
-        }
-        refreshRoute(snap: true)
+        var wires = [C.returnWireLeft, C.returnWireRight]
+        if room.exits.contains(.left) { wires.append(C.entryStubLeft) }
+        if room.exits.contains(.right) { wires.append(C.entryStubRight) }
+        for wire in wires { addRails(wire, halfWidth: 17, z: 17) }
     }
 
     @discardableResult
-    private func addRails(_ centre: [CGPoint], halfWidth: CGFloat, z: CGFloat) -> [SKShapeNode] {
+    func addRails(_ centre: [CGPoint], halfWidth: CGFloat, z: CGFloat) -> [SKShapeNode] {
         guard centre.count >= 2 else { return [] }
         var sides: [[CGPoint]] = [[], []]
         for (i, p) in centre.enumerated() {
@@ -475,154 +400,56 @@ final class NlTableScene: SKScene, RendererHostedScene {
         return nodes
     }
 
-    // MARK: - The Switchyard (M2 v1)
+    // MARK: - Services for the room (M2 round A)
 
-    /// Colours the route: the turntable's pointer and its route lamp cyan when the bridge lines up (the route is
-    /// open), orange when it doesn't (a ramp shot would derail); the bridge and its lamp's ring magenta; the open
-    /// route's light-rail bright. `snap` puts the drawn angles straight on their headings.
-    private func refreshRoute(snap: Bool = false) {
-        if snap {
-            turntableShown = Self.headingAngle[turntable]
-            bridgeShown = Self.headingAngle[bridge]
-        }
-        let orange = SKColor(red: 1.0, green: 0.55, blue: 0.15, alpha: 1)
-        let aim = routeOpen ? Self.entryColor : orange
-        turntablePointer?.strokeColor = aim
-        turntablePointer?.fillColor = aim.withAlphaComponent(0.35)
-        turntablePointer?.zRotation = turntableShown
-        bridgeNode?.strokeColor = routeOpen ? Self.entryColor : Self.exitColor
-        bridgeNode?.fillColor = (routeOpen ? Self.entryColor : Self.exitColor).withAlphaComponent(0.25)
-        bridgeNode?.zRotation = bridgeShown
-        for (i, nodes) in railNodes.enumerated() {
-            let open = routeOpen && i == turntable
-            for n in nodes {
-                n.strokeColor = open ? Self.entryColor : Self.wireColor
-                n.lineWidth = open ? 2.6 : 1.6
+    /// Whether the table is tilted (dead flippers until the next ball).
+    var isTilted: Bool { nudge.tilted }
+
+    /// Points for the room (the multiplier applies).
+    func score(_ points: Int) {
+        game.add(points)
+    }
+
+    func haptic(_ intensity: CGFloat) {
+        hitHaptic.impactOccurred(intensity: intensity)
+    }
+
+    /// The ball has gone out through `exit`: it's removed, and with no maze yet it comes straight back in 0.8 s later as
+    /// the cell next door would get it (out the left → in from the right, out the top → in from below). Costs nothing.
+    func leave(_ ball: NlBall, by exit: NlExit) {
+        removeBall(ball)
+        room.ballLeft(by: exit)
+        labEvent(exit.labEvent)
+        let back: Arrival = [Arrival.fromRight, .fromBelow, .fromLeft][exit.rawValue]
+        pendingArrival = availableArrivals.contains(back) ? back : nil
+        if balls.isEmpty, nextBallAt == nil { nextBallAt = gameTime + 0.8 }
+    }
+
+    /// The room's way out `exit` is open (lit) or not: its portal glows.
+    func setExitLit(_ exit: NlExit, _ lit: Bool) {
+        if lit { exitsLit.insert(exit) } else { exitsLit.remove(exit) }
+        guard let node = exitPortals[exit] else { return }
+        node.strokeColor = lit ? SKColor(red: 1.0, green: 0.75, blue: 0.95, alpha: 1) : Self.exitColor
+        node.lineWidth = lit ? 9 : 6
+    }
+
+    /// The arrivals that can happen in this cell: below and above always, a side only if the room has that side.
+    private var availableArrivals: [Arrival] {
+        Arrival.allCases.filter { a in
+            switch a {
+            case .fromLeft: return room.exits.contains(.left)
+            case .fromRight: return room.exits.contains(.right)
+            default: return true
             }
         }
-        for (i, l) in routeLamps.enumerated() {
-            let aimed = i == turntable
-            l.lamp.fillColor = aimed ? aim.withAlphaComponent(routeOpen ? 0.85 : 0.45) : SKColor(white: 0.05, alpha: 1)
-            l.lamp.strokeColor = i == bridge ? Self.exitColor : Self.entryColor.withAlphaComponent(0.5)
-            l.lamp.lineWidth = i == bridge ? 3 : 1.5
-            l.label.fontColor = aimed ? .white : Self.entryColor.withAlphaComponent(0.6)
-        }
     }
 
-    /// Eases the drawn turntable and bridge toward their headings (update(), so a pause holds them).
-    private func turnRoute(_ dt: CGFloat) {
-        let step = NlTableLayout.turnRate * dt
-        func ease(_ shown: inout CGFloat, _ target: CGFloat) -> Bool {
-            let d = target - shown
-            guard abs(d) > 0.0001 else { return false }
-            shown = abs(d) <= step ? target : shown + (d > 0 ? step : -step)
-            return true
-        }
-        let a = ease(&turntableShown, Self.headingAngle[turntable])
-        let b = ease(&bridgeShown, Self.headingAngle[bridge])
-        if a || b {
-            turntablePointer?.zRotation = turntableShown
-            bridgeNode?.zRotation = bridgeShown
-        }
-    }
-
-    /// A target turned the turntable (SWITCH ◄ / ►, stepping, stopping at W and E) or stepped the bridge (RAILS).
-    private func switchyardHit(_ name: String) {
-        switch name {
-        case "SWITCH ◄": turntable = max(0, turntable - 1)
-        case "SWITCH ►": turntable = min(2, turntable + 1)
-        case "RAILS": bridge = (bridge + 1) % 3
-        default: return
-        }
-        refreshRoute()
-        sfx(.diverter)
-    }
-
-    /// The banner for a Switchyard target: the route open, or which way the part now points.
-    private func switchyardBanner(_ name: String) -> String {
-        if routeOpen { return "ROUTE OPEN \(Self.headingGlyph[turntable])" }
-        return name == "RAILS" ? "RAILS \(Self.headingGlyph[bridge])" : "TURNTABLE \(Self.headingGlyph[turntable])"
-    }
-
-    /// A floor ball crossing into the ramp's mouth going up fast enough is taken up the ramp to the turntable.
-    private func checkRampEntry(_ ball: NlBall) {
-        let p0 = ball.previousPosition, p = ball.position
-        let entryY = NlCellLayout.rampMouthY + 12
-        guard ball.isOnFloor, p0.y < entryY, p.y >= entryY,
-              abs(p.x - NlCellLayout.centerX) < NlCellLayout.rampMouthPosts[1].x - NlCellLayout.centerX,
-              let v = ball.physicsBody?.velocity, v.dy >= NlTableLayout.rampMinSpeed else { return }
-        let speed = min(max(hypot(v.dx, v.dy) * NlTableLayout.rampRideScale, NlTableLayout.rampRideSpeeds.lowerBound),
-                        NlTableLayout.rampRideSpeeds.upperBound)
-        let c = NlCellLayout.centerX
-        ride(ball, path: [p, CGPoint(x: c, y: NlCellLayout.rampUTopY), CGPoint(x: c, y: NlCellLayout.rampTopY),
-                          NlCellLayout.hubCenter],
-             speed: speed, height: 0, heightEnd: NlTableLayout.rampTopHeight, release: .zero, end: .turntable)
-        game.add(NlPoints.ramp)
-        sfx(.ramp)
-        labEvent("ramp")
-    }
-
-    /// The end of a Switchyard ride (from updateRides, after the ride is removed).
-    private func endSwitchyardRide(_ done: Ride) {
-        typealias C = NlCellLayout
-        let ball = done.ball
-        let hub = C.hubCenter
-        let h = NlTableLayout.rampTopHeight
-        switch done.end {
-        case .release:
-            break
-        case .turntable:
-            ride(ball, path: [hub, hub], speed: 0, height: h, release: .zero, end: .fire,
-                 hold: NlTableLayout.turntableHold)
-            showBanner("SWITCHYARD \(Self.headingGlyph[turntable])")
-            sfx(.scoopIn)
-        case .fire:
-            let k = turntable
-            let a = Self.headingAngle[k]
-            if routeOpen {
-                let rail = [C.railW, C.railN, C.railE][k]
-                ride(ball, path: [hub] + rail, speed: NlTableLayout.railRideSpeed, height: h, release: .zero, end: .exit(k))
-                sfx(.launch)
-            } else {
-                let out = k == 1 ? NlTableLayout.derailNorthOut : NlTableLayout.derailOut
-                let to = CGPoint(x: hub.x + out * cos(a), y: hub.y + out * sin(a))
-                ride(ball, path: [hub, to], speed: NlTableLayout.railRideSpeed, height: h, heightEnd: 0,
-                     release: .zero, end: .derail(k))
-            }
-        case .exit(let k):
-            removeBall(ball)
-            if !nudge.tilted { game.add(NlPoints.exit) }   // a tilted ball still leaves, but scores nothing
-            showBanner("EXIT \(Self.headingGlyph[k]) · \(NlPoints.exit)")
-            labEvent(["exitLeft", "exitTop", "exitRight"][k])
-            sfx(.jackpot)
-            hitHaptic.impactOccurred(intensity: 1)
-            // No maze yet: it comes straight back in as the cell next door would get it.
-            pendingArrival = [Arrival.fromRight, .fromBelow, .fromLeft][k]
-            if balls.isEmpty, nextBallAt == nil { nextBallAt = gameTime + 0.8 }
-        case .derail(let k):
-            let v: CGVector
-            switch k {
-            case 0: v = CGVector(dx: -NlTableLayout.derailSideVelocity.dx, dy: NlTableLayout.derailSideVelocity.dy)
-            case 2: v = NlTableLayout.derailSideVelocity
-            default:
-                let n = NlTableLayout.derailNorthVelocity
-                v = CGVector(dx: nextNorthDerailRight ? n.dx : -n.dx, dy: n.dy)
-                nextNorthDerailRight.toggle()
-            }
-            ball.setLayer(.floor)
-            ball.rampHeight = 0
-            ball.physicsBody?.velocity = v
-            ball.previousPosition = ball.position
-            showBanner("DERAIL")
-            labEvent("derail")
-            sfx(.gate)
-        }
-    }
-
-    /// The portals on the walls: entries (cyan), exits (magenta; all locked by the maze in M1, drawn only).
+    /// The portals on the walls: entries (cyan) and exits (magenta, glowing while the room has that exit open), only on
+    /// the sides the room has (a side's entry comes with its exit).
     private func addPortals() {
         typealias C = NlCellLayout
-        func bar(_ a: CGPoint, _ b: CGPoint, _ color: SKColor) {
+        @discardableResult
+        func bar(_ a: CGPoint, _ b: CGPoint, _ color: SKColor) -> SKShapeNode {
             let path = CGMutablePath()
             path.addLines(between: [a, b])
             let node = SKShapeNode(path: path)
@@ -631,14 +458,25 @@ final class NlTableScene: SKScene, RendererHostedScene {
             node.lineCap = .round
             node.zPosition = -18.5
             addChild(node)
+            return node
         }
         let entryX = C.entryStubLeft.first!.x + 6
-        bar(CGPoint(x: entryX, y: C.entryPortalY.lowerBound), CGPoint(x: entryX, y: C.entryPortalY.upperBound), Self.entryColor)
-        bar(CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.lowerBound),
-            CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.upperBound), Self.entryColor)
-        bar(CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound), CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), Self.exitColor)
-        bar(CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound), CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), Self.exitColor)
-        bar(CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1), CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), Self.exitColor)
+        if room.exits.contains(.left) {
+            bar(CGPoint(x: entryX, y: C.entryPortalY.lowerBound), CGPoint(x: entryX, y: C.entryPortalY.upperBound), Self.entryColor)
+            exitPortals[.left] = bar(CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound),
+                                     CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), Self.exitColor)
+        }
+        if room.exits.contains(.right) {
+            bar(CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.lowerBound),
+                CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.upperBound), Self.entryColor)
+            exitPortals[.right] = bar(CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound),
+                                      CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), Self.exitColor)
+        }
+        if room.exits.contains(.top) {
+            exitPortals[.top] = bar(CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1),
+                                    CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), Self.exitColor)
+        }
+        for exit in NlExit.allCases { setExitLit(exit, exitsLit.contains(exit)) }
     }
 
     // MARK: - Build tag (debug builds)
@@ -691,8 +529,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let route = "\(Self.headingGlyph[turntable])\(routeOpen ? "=" : "≠")\(Self.headingGlyph[bridge])"
-        let text = "\(fps)\(Self.buildTagText) · \(speed) · \(route) · drains \(drains) · next \(nextArrival.banner.lowercased())"
+        let text = "\(fps)\(Self.buildTagText) · \(speed) · \(room.tagText) · drains \(drains) · next \(nextArrival.banner.lowercased())"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -764,8 +601,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
     }
 
     /// Puts a ball (new or in play) on a ride along `path`.
-    private func ride(_ ball: NlBall, path: [CGPoint], speed: CGFloat, height: CGFloat, heightEnd: CGFloat? = nil,
-                      release: CGVector, event: String? = nil, end: RideEnd = .release, hold: CGFloat = 0) {
+    func ride(_ ball: NlBall, path: [CGPoint], speed: CGFloat, height: CGFloat, heightEnd: CGFloat? = nil,
+              release: CGVector, event: String? = nil, end: NlRideEnd = .release, hold: CGFloat = 0) {
         rides.removeAll(where: { $0.ball === ball })
         ball.setLayer(.ride)
         ball.physicsBody?.velocity = .zero
@@ -809,8 +646,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 ride.ball.rampHeight = 0
                 ride.ball.physicsBody?.velocity = ride.release
                 ride.ball.previousPosition = ride.ball.position
-            } else {
-                endSwitchyardRide(ride)
+            } else if case .room(let tag) = ride.end {
+                room.rideEnded(ride.ball, tag: tag)
             }
         }
     }
@@ -831,11 +668,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
         saveLit = false
         targetsHitForSave = []
         refreshKickLamps()
-        turntable = 1                              // M2 v1: the turntable points N, the bridge W (not lined up)
-        bridge = 0
         pendingArrival = nil
-        nextNorthDerailRight = true
-        refreshRoute(snap: true)
+        room.newGame()
         drains = 0
         nextBelowLeft = true
         nextAboveLeft = true
@@ -845,7 +679,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         refreshCamera()
     }
 
-    private func showBanner(_ text: String) {
+    func showBanner(_ text: String) {
         #if DEBUG
         playLab?.banner(text)
         labObjective(forBanner: text)
@@ -854,7 +688,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         bannerClearAt = gameTime + NlTableLayout.bannerSeconds
     }
 
-    private func sfx(_ s: MonSound) {
+    func sfx(_ s: MonSound) {
         #if DEBUG
         if shotLab != nil { return }
         if playLab != nil, playLab?.isWatching != true { return }   // the robot plays silently unless watched
@@ -985,7 +819,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         updateRides(dt)
-        turnRoute(dt)
+        room.update(dt)
+        if game.status != room.status { game.status = room.status }   // the room owns the HUD status line
         handBallsToSwingingFlippers()
         slingshots.forEach { $0.settle() }
         governInlanes()                          // the inlane speed limit (InlaneGovernor, shared)
@@ -1026,9 +861,9 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 pendingArrival = nil
                 arrive(back)
             } else {
-                let arrival = nextArrival
-                let all = Arrival.allCases
-                nextArrival = all[(all.firstIndex(of: arrival)! + 1) % all.count]
+                let all = availableArrivals             // only through the sides the room has
+                let arrival = all.contains(nextArrival) ? nextArrival : .fromBelow
+                nextArrival = all[((all.firstIndex(of: arrival) ?? 0) + 1) % all.count]
                 arrive(arrival)
             }
         }
@@ -1071,8 +906,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
     /// The solid blocks (closed outlines): a floor ball whose centre ends up inside one is put back just outside its
     /// nearest edge, with any velocity into that edge removed (CHOMP! M3 v13).
-    private let solidBlocks: [[CGPoint]] = [NlCellLayout.switchBlockLeft, NlCellLayout.switchBlockRight,
-                                            NlCellLayout.railsBlock]
+    private lazy var solidBlocks: [[CGPoint]] = room.solidBlocks
 
     private func keepOutOfSolids(_ ball: NlBall) {
         let p = ball.position
@@ -1126,7 +960,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 let scale = NlTableLayout.maxBallSpeed / speed
                 body.velocity = CGVector(dx: v.dx * scale, dy: v.dy * scale)
             }
-            checkRampEntry(ball)                   // M2 v1: up the ramp onto the turntable
+            room.ballMoved(ball)                   // the room's line crossings (the Switchyard's ramp entry)
             ball.previousPosition = ball.position
             ball.previousVelocity = body.velocity
             ball.updateLook()
@@ -1210,7 +1044,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 sfx(.sling)
             }
         case NlPhysicsCategory.target:
-            // The Switchyard's targets: placeholder scoring and a flash until they turn the turntable and the rails.
+            // The room's targets: the cell scores and flashes them and counts them for the outlane save; the room says what
+            // they do (the Switchyard: turn the turntable or step the bridge) and what the banner reads.
             guard let t = targets.first(where: { $0.body === node }) else { break }
             if let last = targetLastHit[t.name], gameTime - last < 0.15 { break }
             targetLastHit[t.name] = gameTime
@@ -1224,10 +1059,9 @@ final class NlTableScene: SKScene, RendererHostedScene {
                     labEvent("saveLit")
                 }
             }
-            labEvent(Self.targetEvent[t.name] ?? "target")
+            labEvent(room.targetEvents[t.name] ?? "target")
             game.add(NlPoints.target)
-            switchyardHit(t.name)
-            showBanner(switchyardBanner(t.name))
+            showBanner(room.targetHit(t.name))
             sfx(.standup)
             hitHaptic.impactOccurred(intensity: 0.7)
             t.face.strokeColor = .white                     // back to its colour in update()
@@ -1254,11 +1088,11 @@ private extension SKShapeNode {
 
 extension NlTableScene {
     /// A shot event for the labs (a no-op in play and in Release builds).
-    fileprivate func labEvent(_ name: String) {
+    func labEvent(_ name: String) {
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
         playLab?.shot(name, now: gameTime)
-        if Self.playLabShotObjectives.contains(name) { playLab?.objective(name, now: gameTime) }
+        if playLabShotObjectives.contains(name) { playLab?.objective(name, now: gameTime) }
         #endif
     }
 }
@@ -1269,8 +1103,8 @@ extension NlTableScene {
 extension NlTableScene: ShotLabHost {
     var shotLabTableName: String { "Neon" }
 
-    /// The Switchyard's shots end a trial; slings are noted only.
-    var shotLabMajorEvents: Set<String> { ["ramp", "switchLeft", "switchRight", "rails"] }
+    /// The room's shots end a trial; slings are noted only.
+    var shotLabMajorEvents: Set<String> { room.shotLabMajorEvents }
 
     /// CHOMP!'s gravity (−6.0) rolls a cradled ball slowly; its sweep runs to 0.85 s, so this one does too.
     var shotLabCradleDelays: ClosedRange<Double> { 0.20...0.85 }
@@ -1315,15 +1149,11 @@ extension NlTableScene: ShotLabHost {
         kickbackLit = false                         // the robot measures the bare table: no saves
         saveLit = false
         refreshKickLamps()
-        turntable = 1                               // M2 v1: and the route as a new game has it
-        bridge = 0
-        refreshRoute(snap: true)
+        room.shotLabReset()                         // and the room as a new game has it
     }
 
-    /// Where shots cross the shot line (the ramp mouth and the SWITCH targets, y ~560–610) and the RAILS target's height.
-    var shotLabProbes: [ShotLab.Probe] {
-        [ShotLab.Probe(name: "shotLine", y: 580), ShotLab.Probe(name: "rails", y: 752)]
-    }
+    /// The room's probes (the Switchyard: the shot line and the RAILS target's height).
+    var shotLabProbes: [ShotLab.Probe] { room.shotLabProbes }
 
     var shotLabBall: (position: CGPoint, velocity: CGVector)? {
         guard let ball = balls.first else { return nil }
@@ -1376,28 +1206,19 @@ extension NlTableScene: PlayLabHost {
     var playLabBallRadius: CGFloat { NlTableLayout.ballRadius }
     var playLabVariantCount: Int { 1 }
 
-    /// Shot events that count as objectives the first time each game (labEvent reports them).
-    static let playLabShotObjectives: Set<String> = ["ramp", "switchLeft", "switchRight", "rails",
-                                                      "fromBelow", "fromAbove", "fromLeft", "fromRight",
-                                                      "kickback", "saveLit", "outlaneSave",
-                                                      "exitLeft", "exitTop", "exitRight", "derail"]
+    /// Shot events that count as objectives the first time each game (labEvent reports them): the cell's and the room's.
+    var playLabShotObjectives: Set<String> { cachedShotObjectives }
 
+    /// The room's objectives, then the cell's (the ways in, the saves, tilt).
     var playLabObjectives: [PlayObjective] {
-        [PlayObjective(name: "ramp", text: "Shoot into the ramp's mouth"),
-         PlayObjective(name: "switchLeft", text: "Hit SWITCH ◄"),
-         PlayObjective(name: "switchRight", text: "Hit SWITCH ►"),
-         PlayObjective(name: "rails", text: "Hit RAILS"),
-         PlayObjective(name: "fromBelow", text: "A ball comes in from below"),
+        room.playLabObjectives +
+        [PlayObjective(name: "fromBelow", text: "A ball comes in from below"),
          PlayObjective(name: "fromAbove", text: "A ball comes in from above"),
          PlayObjective(name: "fromLeft", text: "A ball comes in from the left"),
          PlayObjective(name: "fromRight", text: "A ball comes in from the right"),
          PlayObjective(name: "kickback", text: "The kickback saves a ball"),
-         PlayObjective(name: "saveLit", text: "Light the outlane save (all three targets)"),
+         PlayObjective(name: "saveLit", text: "Light the outlane save (all the room's targets)"),
          PlayObjective(name: "outlaneSave", text: "The outlane save saves a ball"),
-         PlayObjective(name: "exitLeft", text: "Out the left exit (turntable and bridge ◄, then the ramp)"),
-         PlayObjective(name: "exitTop", text: "Out the top exit (▲)"),
-         PlayObjective(name: "exitRight", text: "Out the right exit (►)"),
-         PlayObjective(name: "derail", text: "A ramp shot derails"),
          PlayObjective(name: "tilt", text: "Tilt")]
     }
 
@@ -1410,21 +1231,13 @@ extension NlTableScene: PlayLabHost {
         let leftRest = CGPoint(x: NlTableLayout.mirrorSum - rightRest.x, y: rightRest.y)
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: NlTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: leftRest, rightButton: false, upper: false,
-                                 shots: Self.leftShots, inlane: Self.leftInlane, feedCatchSpeed: 300),
+                                 shots: room.leftShots, inlane: room.leftInlane, feedCatchSpeed: 300),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: NlTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: rightRest, rightButton: true, upper: false,
-                                 shots: Self.rightShots, inlane: Self.rightInlane, feedCatchSpeed: 300)]
+                                 shots: room.rightShots, inlane: room.rightInlane, feedCatchSpeed: 300)]
     }
 
-    // Shot delays: the middle of each 120 Hz cradle window, shotlab-neon-2026-11-22T19-47-37Z (FAST=8). Inlane bands:
-    // shotlab-neon-inlane-2026-11-22T19-50-16Z, 4 pt bins of the ball's distance from the pivot at the flip, 3+ trials.
-    static let leftShots: [(name: String, delay: Double)] = [("switchLeft", 0.244), ("ramp", 0.471),
-                                                              ("switchRight", 0.557), ("rails", 0.621)]
-    static let rightShots: [(name: String, delay: Double)] = [("switchRight", 0.252), ("ramp", 0.471),
-                                                               ("switchLeft", 0.558)]
-    static let leftInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("ramp", 28, 31), ("switchRight", 36, 39),
-                                                                          ("rails", 40, 47)]
-    static let rightInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("ramp", 28, 31), ("switchLeft", 36, 39)]
+    // The robot's shot delays and inlane bands are the room's (NlSwitchyardRoom: from its own Shot Lab).
 
     func playLabStartGame(variant: Int) -> String {
         game.isRobot = true
@@ -1523,22 +1336,10 @@ extension NlTableScene: PlayLabHost {
         showBanner("WATCHDOG · \(kind == "stuck" ? "STUCK BALL" : "BALL OFF THE TABLE") AT \(Int(x)), \(Int(y))")
     }
 
-    /// The shots the table wants, most wanted first (no rules yet): the ramp, then the targets.
+    /// The shots the table wants, most wanted first: the room decides, given the targets still needed for the save.
     private func robotWanted() -> [String] {
-        // The targets still needed for the outlane save first, then the ramp and the rest.
-        // M2 v1: then the route: the ramp when it's open, else the target that lines it up soonest.
-        let need = targets.map(\.name).filter { !targetsHitForSave.contains($0) }.compactMap { Self.targetEvent[$0] }
-        var route: [String] = ["ramp"]
-        if !routeOpen {
-            let switchHits = abs(turntable - bridge)
-            let railsHits = (turntable - bridge + 3) % 3
-            route = railsHits <= switchHits ? ["rails"] : [turntable > bridge ? "switchLeft" : "switchRight"]
-        }
-        var out: [String] = []
-        for s in route + (saveLit ? [] : need) + ["ramp", "switchLeft", "switchRight", "rails"] where !out.contains(s) {
-            out.append(s)
-        }
-        return out
+        let need = targets.map(\.name).filter { !targetsHitForSave.contains($0) }.compactMap { room.targetEvents[$0] }
+        return room.robotWanted(saveNeeds: saveLit ? [] : need)
     }
 
     /// Banners that double as objectives.

@@ -100,6 +100,15 @@ extension LabTable {
                 LabStat(label: "Code", value: "About 8,400 lines in 24 files"),
                 LabStat(label: "Testing", value: "Shot Lab robot and the Play Lab, robots that play whole tours"),
             ]
+        case .quest:
+            // T9 M1: the Haunted Forest in grey box.
+            return [
+                LabStat(label: "Table size", value: "640 × 1360 points at real ball size"),
+                LabStat(label: "Camera", value: "Flies with the ball, a Wide view, or Top-Down"),
+                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones"),
+                LabStat(label: "Goal", value: "Fight the Haunted Forest's monsters, loot what you can, and leave before your HP runs out"),
+                LabStat(label: "Art", value: "Coming later: dark pixel art lit only by lanterns"),
+            ]
         case .chomp:
             // T7 M1: a grey box so far.
             return [
@@ -175,6 +184,11 @@ extension LabTable {
                 LabNote(title: "Ramps with height", detail: "The ramps, the Moon and Saturn shift against the floor as the camera moves, so the raised parts read as raised."),
                 LabNote(title: "A hidden planet", detail: "Finish a tour and Pluto lights for that one ball."),
             ]
+        case .quest:
+            return [
+                LabNote(title: "Drains cost HP", detail: "There are no balls to lose. Each drain costs HP from your run, and zero HP ends it."),
+                LabNote(title: "Damage from speed", detail: "A hit's damage is how fast the ball was going times its strength, so clean, hard shots hurt more."),
+            ]
         case .chomp:
             return [
                 LabNote(title: "A fourth flipper", detail: "A small pier flipper on the right wall, on the right button, shoots back across the table."),
@@ -233,6 +247,10 @@ extension LabTable {
                 LabNote(title: "Count where points come from", detail: "Combos first made half of every score. Tracking each award's share brought them down to about a fifth, so the tour matters most."),
                 LabNote(title: "Stop the game for the show", detail: "The camera followed the ball and missed the launch. Now play freezes, keeps the ball's speed and carries on after."),
                 LabNote(title: "Picture it from the game", detail: "The How to Play pictures are the game itself, posed in each goal, with the shots drawn on."),
+            ]
+        case .quest:
+            return [
+                LabNote(title: "Numbers the table reads", detail: "HP, ball strength and armour come from the run, so the map, classes and gear can change them later without touching the table."),
             ]
         case .chomp:
             return [

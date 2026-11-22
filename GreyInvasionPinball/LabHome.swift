@@ -6,7 +6,7 @@ import Foundation
 /// tables evolve as we get better at making them. The home screen lists the tables; tapping one plays it,
 /// and each table's own menu has a "Tables" button back here.
 enum LabTable: String, CaseIterable, Identifiable {
-    case orbit, greyInvasion, cthulhu, monsoon, lamplight, grandTour, chomp
+    case orbit, greyInvasion, cthulhu, monsoon, lamplight, grandTour, chomp, quest
 
     var id: String { rawValue }
 
@@ -19,6 +19,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .lamplight: return 5
         case .grandTour: return 6
         case .chomp: return 7
+        case .quest: return 9
         }
     }
 
@@ -31,6 +32,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .lamplight: return "The Lamplight"
         case .grandTour: return "Orbit: Grand Tour"
         case .chomp: return "CHOMP!"
+        case .quest: return "Quest & Flipper"
         }
     }
 
@@ -43,6 +45,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .lamplight: return "Oct 2026 · table five"
         case .grandTour: return "Nov 2026 · table six"
         case .chomp: return "Nov 2026 · table seven"
+        case .quest: return "Nov 2026 · table nine"
         }
     }
 
@@ -60,6 +63,8 @@ enum LabTable: String, CaseIterable, Identifiable {
             return "A cozy bookshop-café on a rainy evening. Nothing to beat: every game fills the shelves, furnishes the shop and brings back the regulars."
         case .grandTour:
             return "Orbit grown up: count down to liftoff and fly a rocket tour of the planets, a timed mode at every stop, then slingshot round the Sun."
+        case .quest:
+            return "A pixel-art fantasy roguelite. Fight the Haunted Forest's monsters, search for loot and choose when to leave. Drains cost HP. Being built now."
         case .chomp:
             return "A shark with an ego terrorizes Calamity Island, and the mayor won't close the beach. A summer-movie spoof, being built now."
         }
@@ -75,6 +80,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .lamplight: return ["Cozy", "Collections", "The loft", "A cat", "Seasons"]
         case .grandTour: return ["Liftoff", "Planet window", "Timed tour", "Parallax ramps", "Pluto"]
         case .chomp: return ["Four flippers", "Up-posts", "Action button", "In progress"]
+        case .quest: return ["Monsters with HP", "Drains cost HP", "Pixel art", "In progress"]
         }
     }
 
@@ -87,6 +93,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .lamplight: return Color(red: 1.0, green: 0.74, blue: 0.40)
         case .grandTour: return Color(red: 1.0, green: 0.70, blue: 0.32)
         case .chomp: return Color(red: 1.0, green: 0.82, blue: 0.30)
+        case .quest: return Color(red: 1.0, green: 0.72, blue: 0.30)
         }
     }
 
@@ -100,6 +107,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .lamplight: return "lmp_lab_thumb"     // the shop on a festival evening (tools/lmp_howto.py)
         case .grandTour: return "tour_lab_thumb"    // T6 M10 r4: the table mid-tour (Jupiter Storm), a posed TOP capture
         case .chomp: return nil                     // grey box until the art milestone
+        case .quest: return nil                     // grey box until the art milestone
         }
     }
 
@@ -121,6 +129,7 @@ struct PinballLabRoot: View {
         case "orbit": return .orbit
         case "grandtour": return .grandTour          // Table 06 (its view starts the Shot Lab on -shotlab grandtour)
         case "chomp": return .chomp                  // Table 07 (opens the table; no labs yet)
+        case "quest": return .quest                  // Table 09 (opens the table; no labs yet)
         default: return nil
         }
         #else
@@ -145,6 +154,8 @@ struct PinballLabRoot: View {
                 TourTableView(onExit: { playing = nil })
             case .some(.chomp):
                 ChompTableView(onExit: { playing = nil })
+            case .some(.quest):
+                QfTableView(onExit: { playing = nil })
             case .none:
                 LabHomeView { table in playing = table }
             }

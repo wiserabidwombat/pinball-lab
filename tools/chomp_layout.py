@@ -592,3 +592,127 @@ def right_path():
 RP = right_path()
 rightApexDistance = 10 + 60 * math.radians(50) + 28 * math.radians(40)
 rightLowLength = 60   # M3 v14d
+
+# ======================================================================================================================
+# ---- Catch-up (2026-11-22): M3 v15 -> M4 v5, ported from ChompTableLayout.swift at 311b9e9. Everything below
+# overrides the blocks above, so this file again matches the game. Checked by tools/chomp_render_m4.py and
+# tools/chomp_layout_check.py (the latter compares these numbers with the Swift file directly).
+# ======================================================================================================================
+
+# M3 v20: the world grows to 1360 for the real playfield's straight top edge at y 1305.
+W, H = 600, 1360
+topEdgeY = 1305
+
+# M3 v15: the fin's slot (p. 40's white slot in the cyan kidney right of centre), its blade and roam range.
+finSlot = [(313, 841), (329, 848), (349.5, 854.6), (369.7, 858.7), (394, 860), (407.6, 857), (421, 853), (445, 843.7),
+           (459, 833), (472, 818), (483, 802), (490, 785), (494.6, 769)]
+finMinS, finMaxS, finLength, finThickness = 15, 215, 40, 10
+def fin_at(s):
+    """Centre and tangent heading of the fin's blade at distance s along the slot."""
+    for a, b in zip(finSlot, finSlot[1:]):
+        L = math.dist(a, b)
+        if s <= L:
+            f = s / L; return (a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])), math.atan2(b[1] - a[1], b[0] - a[0])
+        s -= L
+    a, b = finSlot[-2], finSlot[-1]; return b, math.atan2(b[1] - a[1], b[0] - a[0])
+
+# M3 v16: the chum bucket hangs over the wave block's rounded nose, 1 pt wider than it.
+chumBucketCentre, chumBucketRadius = waveEndCentre, waveEndRadius + 1
+
+# M3 v17 + v24: the shark tower standups (switches 45 / 47 / 48), Tgt1 tilted 18.3 deg toward the right flipper.
+sharkTargetAngles = [math.radians(18.3), 0, 0]
+sharkTargetCentres = [(155.5, 816.6), (414, 931), (494, 931)]
+sharkTargetSize = (22, 8)
+sharkBacks = [
+    [(143.8, 816.9), (164.7, 823.9), (151, 870), (143, 863), (143.8, 816.9)],
+    [(403, 935), (425, 935), (426, 978), (395, 978), (403, 935)],
+    [(483, 935), (505, 935), (505, 983), (500, 983), (483, 935)],
+]
+def shark_target_face(i):
+    """The target's face as a segment (its width along the rotated x axis)."""
+    (cx, cy), a, w = sharkTargetCentres[i], sharkTargetAngles[i], sharkTargetSize[0] / 2
+    return (cx - w * math.cos(a), cy - w * math.sin(a)), (cx + w * math.cos(a), cy + w * math.sin(a))
+
+# M3 v18 / v22 / v24: the left loop re-traced -- a thin tongue x 60-70 from y 925 (rounded) to 1108 (rounded), the
+# post between the loop and the wave lane a closed solid with its traced left side, the U-turn over them at y 1160.
+tongueRightX, tongueBottomY, tongueTopY = 70, 925, 1108
+loopUCentre, loopURadius = (63, 1117), 43
+def _tongue_v22():
+    r = (tongueRightX - harpoonX) / 2; cx = harpoonX + r
+    pts = [(harpoonX, tongueBottomY), (harpoonX, tongueTopY)]
+    pts += [(cx + r * math.cos(math.pi - math.pi * i / 12), tongueTopY + r * math.sin(math.pi - math.pi * i / 12)) for i in range(1, 12)]
+    pts += [(tongueRightX, tongueTopY), (tongueRightX, tongueBottomY)]
+    pts += [(cx + r * math.cos(-math.pi * i / 12), tongueBottomY + r * math.sin(-math.pi * i / 12)) for i in range(1, 12)]
+    return pts + [(harpoonX, tongueBottomY)]
+tongue = _tongue_v22()
+loopPostEdge = [(143, 863), (133, 868), (127.5, 884), (125, 900), (123, 908), (112.6, 940), (106, 996), (106, 1060)]
+def loopPostLeftX(y):
+    e = loopPostEdge
+    if y <= e[0][1]: return e[0][0]
+    for a, b in zip(e, e[1:]):
+        if y <= b[1]: return a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])
+    return e[-1][0]
+loopRight = [(147, 872), (147, 1180), _arch_point_at_x(157), _arch_point_at_x(106)] + list(reversed(loopPostEdge)) + [(147, 872)]
+harpoonInner = [(harpoonX, 580), (harpoonX, 720)]
+quickshotGate = ((harpoonX, 720), (harpoonX, tongueBottomY))
+spinnerLine = ((tongueRightX, 960), (loopPostLeftX(960), 960))
+loopEntranceSwitch = ((tongueRightX, 1020), (loopPostLeftX(1020), 1020))
+
+# M3 v19: the mid flipper lane switch (32) at the real spot, right of the bumper.
+miniLaneSensor = (530, 650)
+# M2 v15 (missed in that block): the pier block's lower-left corner moved in to (511, 548).
+pierPlastic = [(519, 615), (laneWallX, 618), (laneWallX, 470), (514, 470), (528, 530), (522, 548), (511, 548), (519, 615)]
+
+# M3 v11 (as built): the wave wire's last line is 412.6 (ends at y ~640, below the bumper).
+def wave_path():
+    p = RampPath(waveMouth, math.pi / 2)
+    p.line(100); p.arc(70, -math.radians(55)); p.line(110); p.arc(55, -math.radians(75))
+    p.line(185); p.arc(60, -math.radians(50)); p.line(412.6)
+    return p
+WP = wave_path()
+
+# M3 v21: the right turn raised 50 pt (centre (482, 1200)); the reel lane's top corner (522, 1200).
+laneWallTop = 1200
+turnCentre, turnInnerR, turnOuterR = (482, 1200), 80, 116
+def _pt(r, deg): return (turnCentre[0] + r * math.cos(math.radians(deg)), turnCentre[1] + r * math.sin(math.radians(deg)))
+reelRightBlock = _a60 + [(499, 1043), (500, 983), (505, 983), (522, 1200), _a60[0]]
+rightRampBase = reelRightBlock
+rightMouth = (480, 1261)
+RP = right_path()            # the v14c path from the raised mouth
+
+# M4 v4: the real right side (p. 17 registered). The shooter lane x 548-589 ends at y 645 beside the bumper (its inner
+# wall stops there); the lane's right side above y 700 curves in from the shooter lane's outer wall to the lane right of
+# the reel (548, 900); no plunger lane up the side, no spiral, no launch gate (the turn is one solid r 80 curve).
+rightWallX = 589
+shooterInnerTopY = 645
+laneBendY = 900
+rightLaneCurve = [(548, 900), (549, 865), (555, 830), (562, 800), (570, 775), (578, 750), (585, 725), (589, 700)]
+bumperCenter, bumperRadius = (513, 686), 22
+midLaneGuide = [(513, 765), (513, 665)]     # M4 v3b, no longer used (kept for the history)
+# M4 v4b / v4c: the plunge pin (p. 17's post) and the barrel's rounded end (p. 40) that deflect hard plunges.
+plungePin, plungePinRadius = (527, 857), 5
+barrelEnd = [(552 + 15 * math.cos(math.radians(d)), 870 + 15 * math.sin(math.radians(d))) for d in range(90, 271, 15)] \
+    + [(566, 855), (566, 885)]
+barrelEnd = barrelEnd + [barrelEnd[0]]
+# M4 v5: the plunger -- the soft end of the pull eased in so a gentle plunge (1,060-1,120 pt/s) lands on the bumper.
+minLaunchSpeed, maxLaunchSpeed, plungePowerExponent, tapLaunchPower = 1050, 2310, 1.4, 0.6
+def launch_speed(pull): return minLaunchSpeed + pull ** plungePowerExponent * (maxLaunchSpeed - minLaunchSpeed)
+
+def _quad(p0, c, p1, n=16):
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * c[0] + t * t * p1[0],
+             (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * c[1] + t * t * p1[1]) for t in (i / n for i in range(1, n + 1))]
+def outer_wall():
+    """ChompTableLayout.outerWall as built (M4 v4): drain lip -> left wall -> the loop's U-turn -> the arch -> the top
+    wall -> the r 80 turn -> the reel-right lane's wall -> the curve beside the bumper -> the shooter lane."""
+    pts = [(drainEdgeX, drainLipY), (drainEdgeX, drainEdgeY), (leftWallX, apronTopY), (leftWallX, 540)]
+    pts += _quad((leftWallX, 540), (leftWallX, 660), (leftWallX, 780))
+    pts.append((leftWallX, archStartY))
+    u, ur = loopUCentre, loopURadius
+    pts.append((leftWallX, u[1]))
+    pts += [(u[0] + ur * math.cos(math.pi - math.pi * i / 16), u[1] + ur * math.sin(math.pi - math.pi * i / 16)) for i in range(1, 17)]
+    pts += [p for p in _quad((leftWallX, archStartY), (leftWallX, topY), (W / 2, topY)) if p[0] > u[0] + ur]
+    pts += [_pt(turnInnerR, a) for a in range(90, -1, -5)]
+    pts.append((laneWallX, laneBendY))
+    pts += rightLaneCurve[1:]
+    pts += [(rightWallX, laneFloorY), (laneWallX, laneFloorY), (laneWallX, 540), (laneWallX, shooterInnerTopY)]
+    return pts

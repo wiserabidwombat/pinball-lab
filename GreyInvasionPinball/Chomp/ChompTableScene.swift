@@ -177,7 +177,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M4 v5"
+    static let buildTagText = "T7 M4 v6"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -2198,6 +2198,14 @@ extension ChompTableScene: PlayLabHost {
         guard let cmd = lab.frame(view) else { return }
         if let direction = cmd.nudge { applyNudge(direction) }
         if cmd.left != robotLeft || cmd.right != robotRight {
+            // M4 v6: log each robot press with the lower balls, to match against the report's drains.
+            if (cmd.left && !robotLeft) || (cmd.right && !robotRight) {
+                let side = cmd.left && !robotLeft ? (cmd.right && !robotRight ? "both" : "left") : "right"
+                let lows = view.balls.filter { !$0.onPlunger && $0.position.y < 480 }.map {
+                    String(format: "%.0f %.0f %.0f %.0f", $0.position.x, $0.position.y, $0.velocity.dx, $0.velocity.dy)
+                }
+                print(String(format: "LAB: RFLIP %.3f ", lab.elapsed(now: now)) + side + " | " + lows.joined(separator: " | "))
+            }
             robotLeft = cmd.left
             robotRight = cmd.right
             updateFlippers()

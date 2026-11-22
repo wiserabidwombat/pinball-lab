@@ -3,39 +3,35 @@
   "Chomp": {
    "advanced": {
     "date": "2026-11-22",
-    "game": 6,
-    "minutes": 1.0,
+    "game": 12,
+    "minutes": 2.1,
     "pass": "hz120",
-    "picture": null,
-    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
-    "score": 22560
+    "report": "playlab-chomp-2026-11-22T22-31-55Z.json",
+    "score": 44763210
    },
    "beginner": {
     "date": "2026-11-22",
     "game": 1,
-    "minutes": 1.3,
+    "minutes": 1.9,
     "pass": "hz120",
-    "picture": null,
-    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
-    "score": 35440
+    "report": "playlab-chomp-2026-11-22T22-31-55Z.json",
+    "score": 18063670
    },
    "expert": {
     "date": "2026-11-22",
-    "game": 8,
-    "minutes": 1.7,
+    "game": 13,
+    "minutes": 6.1,
     "pass": "hz120",
-    "picture": "hof-chomp.jpg",
-    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
-    "score": 66050
+    "report": "playlab-chomp-2026-11-22T22-31-55Z.json",
+    "score": 95443180
    },
    "intermediate": {
     "date": "2026-11-22",
-    "game": 4,
-    "minutes": 0.8,
+    "game": 7,
+    "minutes": 2.3,
     "pass": "hz120",
-    "picture": null,
-    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
-    "score": 21470
+    "report": "playlab-chomp-2026-11-22T22-31-55Z.json",
+    "score": 18099070
    }
   },
   "Cthulhu Rising": {
@@ -146,6 +142,40 @@
     "picture": null,
     "report": "playlab-monsoon-2026-11-01T10-30-01Z.json",
     "score": 4548310
+   }
+  },
+  "Neon": {
+   "advanced": {
+    "date": "2026-11-22",
+    "game": 18,
+    "minutes": 8.0,
+    "pass": "hz120",
+    "report": "playlab-neon-2026-11-22T22-03-10Z.json",
+    "score": 130310
+   },
+   "beginner": {
+    "date": "2026-11-22",
+    "game": 5,
+    "minutes": 4.2,
+    "pass": "hz120",
+    "report": "playlab-neon-2026-11-22T22-39-05Z.json",
+    "score": 50390
+   },
+   "expert": {
+    "date": "2026-11-22",
+    "game": 20,
+    "minutes": 6.3,
+    "pass": "hz120",
+    "report": "playlab-neon-2026-11-22T22-03-10Z.json",
+    "score": 128080
+   },
+   "intermediate": {
+    "date": "2026-11-22",
+    "game": 8,
+    "minutes": 5.8,
+    "pass": "hz120",
+    "report": "playlab-neon-2026-11-22T22-39-05Z.json",
+    "score": 116510
    }
   },
   "The Lamplight": {

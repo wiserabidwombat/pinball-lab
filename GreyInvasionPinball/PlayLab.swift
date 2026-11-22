@@ -205,6 +205,11 @@ struct PlayRobotFlipper {
     /// under 300 pt/s but 32% at 300–400 and almost never above (740 raises, 2026-11-22): its host should give ~300.
     /// A faster feed is flipped live instead. `-override "Lab.feedCatchSpeed=300"` tries a value on any table.
     var feedCatchSpeed: CGFloat = 900
+    /// The tip lead (seconds): for a ball falling just past this flipper's tip, the reactive flip comes this long before
+    /// the ball reaches pivot height, where the swinging tip reaches furthest. 0 = the old rule only (timed to the
+    /// resting face). About the flipper's stroke time works: CHOMP! measured best at 0.05 (its stroke is ~47 ms;
+    /// drains/min 2.23 → 1.59). `-override "Lab.tipLead=0.03"` tries a value on any table.
+    var tipLead: Double = 0
 
     /// The shots the robot can aim at on a pass.
     func shots(for pass: PlayPass) -> [(name: String, delay: Double)] {
@@ -676,7 +681,7 @@ final class PlayRobot {
             // pivot height — well above the resting tip. Measured on CHOMP! (2026-11-22): the rule above pressed when
             // such a ball was level with the resting tip, and 59–88% of those were lost. With a tip lead (seconds;
             // `-override "Lab.tipLead=0.04"`, 0 = off) the press comes that long before the ball reaches pivot height.
-            let tipLead = Double(LabOverrides.cg("Lab.tipLead", 0))
+            let tipLead = Double(LabOverrides.cg("Lab.tipLead", CGFloat(f.tipLead)))
             let pastTip = (b.position.x - f.restTip.x) * (f.pointsLeft ? -1 : 1)
             if tipLead > 0, pastTip > 0, b.velocity.dy < -40 {
                 let toPivotHeight = Double(max(0, b.position.y - ballRadius - f.pivot.y) / -b.velocity.dy)

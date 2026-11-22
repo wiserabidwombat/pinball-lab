@@ -1,5 +1,43 @@
 {
  "tables": {
+  "Chomp": {
+   "advanced": {
+    "date": "2026-11-22",
+    "game": 6,
+    "minutes": 1.0,
+    "pass": "hz120",
+    "picture": null,
+    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
+    "score": 22560
+   },
+   "beginner": {
+    "date": "2026-11-22",
+    "game": 1,
+    "minutes": 1.3,
+    "pass": "hz120",
+    "picture": null,
+    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
+    "score": 35440
+   },
+   "expert": {
+    "date": "2026-11-22",
+    "game": 8,
+    "minutes": 1.7,
+    "pass": "hz120",
+    "picture": "hof-chomp.jpg",
+    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
+    "score": 66050
+   },
+   "intermediate": {
+    "date": "2026-11-22",
+    "game": 4,
+    "minutes": 0.8,
+    "pass": "hz120",
+    "picture": null,
+    "report": "playlab-chomp-2026-11-22T02-45-50Z.json",
+    "score": 21470
+   }
+  },
   "Cthulhu Rising": {
    "advanced": {
     "date": "2026-10-28",
@@ -20,13 +58,12 @@
     "score": 1447880
    },
    "expert": {
-    "date": "2026-10-28",
-    "game": 16,
+    "date": "2026-11-22",
+    "game": 43,
     "minutes": 8.0,
-    "pass": "hz60",
-    "picture": null,
-    "report": "playlab-cthulhu-rising-2026-10-28T17-25-10Z.json",
-    "score": 12839090
+    "pass": "hz120",
+    "report": "playlab-cthulhu-rising-2026-11-22T01-54-02Z.json",
+    "score": 16430840
    },
    "intermediate": {
     "date": "2026-10-28",
@@ -58,13 +95,12 @@
     "score": 6349090
    },
    "expert": {
-    "date": "2026-11-03",
-    "game": 21,
+    "date": "2026-11-22",
+    "game": 40,
     "minutes": 8.0,
     "pass": "hz120",
-    "picture": null,
-    "report": "playlab-grey-invasion-2026-11-03T12-16-54Z.json",
-    "score": 6474340
+    "report": "playlab-grey-invasion-2026-11-22T00-45-23Z.json",
+    "score": 6725620
    },
    "intermediate": {
     "date": "2026-11-03",
@@ -78,13 +114,12 @@
   },
   "Monsoon": {
    "advanced": {
-    "date": "2026-11-01",
-    "game": 7,
+    "date": "2026-11-22",
+    "game": 34,
     "minutes": 8.0,
-    "pass": "hz60",
-    "picture": "hof-monsoon.jpg",
-    "report": "playlab-monsoon-2026-11-01T12-55-23Z.json",
-    "score": 6305930
+    "pass": "hz120",
+    "report": "playlab-monsoon-2026-11-22T02-38-50Z.json",
+    "score": 6913380
    },
    "beginner": {
     "date": "2026-10-31",
@@ -96,13 +131,12 @@
     "score": 3055010
    },
    "expert": {
-    "date": "2026-10-31",
-    "game": 7,
+    "date": "2026-11-22",
+    "game": 48,
     "minutes": 8.0,
     "pass": "hz120",
-    "picture": null,
-    "report": "playlab-monsoon-2026-10-31T12-51-49Z.json",
-    "score": 1710970
+    "report": "playlab-monsoon-2026-11-22T02-38-50Z.json",
+    "score": 4422010
    },
    "intermediate": {
     "date": "2026-11-01",
@@ -134,13 +168,12 @@
     "score": 1635040
    },
    "expert": {
-    "date": "2026-11-01",
-    "game": 8,
-    "minutes": 8.0,
+    "date": "2026-11-21",
+    "game": 16,
+    "minutes": 7.2,
     "pass": "hz120",
-    "picture": null,
-    "report": "playlab-the-lamplight-2026-11-01T00-10-49Z.json",
-    "score": 556710
+    "report": "playlab-the-lamplight-2026-11-21T18-41-00Z.json",
+    "score": 751260
    },
    "intermediate": {
     "date": "2026-11-03",
@@ -152,5 +185,5 @@
    }
   }
  },
- "updated": "2026-11-04"
+ "updated": "2026-11-22"
 }

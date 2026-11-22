@@ -22,6 +22,15 @@ SKILLS = ["beginner", "intermediate", "advanced", "expert"]
 # (up to 60 is the casual-friendly band), intermediate 1-2 min, advanced 2-5 min, expert 10+ min on a forgiving table.
 BALL_TARGETS = {"beginner": (20, 60), "intermediate": (60, 120), "advanced": (120, 300), "expert": (600, None)}
 BALL_TARGET_TEXT = {"beginner": "20-40 s (casual 30-60 s)", "intermediate": "1-2 min", "advanced": "2-5 min", "expert": "10+ min"}
+# A table's own targets where its design calls for them. The Lamplight is meant to be easier and cozy (Aaron,
+# 2026-11-21): about double the standard ball times.
+TABLE_BALL_TARGETS = {
+    "The Lamplight": {"beginner": (60, 120), "intermediate": (120, 240), "advanced": (240, 600), "expert": (600, None)},
+}
+TABLE_BALL_TARGET_TEXT = {
+    "The Lamplight": {"beginner": "1-2 min (cozy table)", "intermediate": "2-4 min (cozy table)",
+                      "advanced": "4-10 min (cozy table)", "expert": "10+ min"},
+}
 
 
 def ball_time_rows(d, by, passes):
@@ -38,7 +47,7 @@ def ball_time_rows(d, by, passes):
             capped = sum(1 for g in gs if g.get("endedBy") != "gameOver")
             limit = cap / max(1.0, mean([g["ballsPlayed"] for g in gs]))   # the longest ball the cap lets a game show
             med = median(v)
-            lo, hi = BALL_TARGETS.get(sk, (None, None))
+            lo, hi = TABLE_BALL_TARGETS.get(d.get("table"), BALL_TARGETS).get(sk, (None, None))
             if lo is None:
                 verdict, level = "no target", "mid"
             elif lo > limit:
@@ -52,7 +61,8 @@ def ball_time_rows(d, by, passes):
             else:
                 verdict, level = "in range", "good"
             out.append(dict(pass_=p, skill=sk, games=len(gs), median=med, q1=q(0.25), q3=q(0.75), capped=capped,
-                            target=BALL_TARGET_TEXT.get(sk, "-"), verdict=verdict, level=level))
+                            target=TABLE_BALL_TARGET_TEXT.get(d.get("table"), BALL_TARGET_TEXT).get(sk, "-"),
+                            verdict=verdict, level=level))
     return out
 OUTCOME_COLOR = {"made": "#2e9e4e", "miss": "#8a8a8a", "drain": "#d1403a"}
 
@@ -836,7 +846,7 @@ def write_html(d, a, report_path, out_path, checks, map_file=None, map_rect=(-40
     # Time per ball against the design targets
     if a["ball_rows"]:
         h.append("<h2>Time per ball</h2><div class='panel small'>game seconds / balls played, against the design targets "
-                 "(beginner and expert from published sources, the middle two estimates). A game that hit the cap was "
+                 "(beginner and expert from published sources, the middle two estimates; a table can have its own). A game that hit the cap was "
                  "still going, so its balls would have run longer.</div>"
                  "<div class='panel'><table><tr><th>pass</th><th>skill</th><th>median</th><th>middle half</th>"
                  "<th>games at the cap</th><th>target</th><th>verdict</th></tr>")

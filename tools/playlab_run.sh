@@ -140,7 +140,16 @@ while kill -0 "$WATCH" 2>/dev/null; do
 done
 wait "$WATCH" 2>/dev/null || true
 
-AFTER=$(find ShotLab -maxdepth 1 -name "$PAT" ! -name "*-sweep.json" -newer "$MARKER" 2>/dev/null | head -1 || true)
+# 2026-11-22: another session may be playing the same table on another Simulator (its report matched too and was read
+# instead of ours): of the new reports, take the one whose build names this device; else the first.
+AFTER=$(find ShotLab -maxdepth 1 -name "$PAT" ! -name "*-sweep.json" -newer "$MARKER" 2>/dev/null | sort | python3 -c "
+import json, sys
+files = [l.strip() for l in sys.stdin if l.strip()]
+def device(f):
+    try: return (json.load(open(f)).get('build') or {}).get('device', '')
+    except Exception: return ''
+mine = [f for f in files if device(f) == 'simulator ' + sys.argv[1]]
+print((mine or files or [''])[0])" "$DEVICE" || true)
 if [ -n "$AFTER" ]; then
   echo "▶ Report: $AFTER"
   STEM="${AFTER%.json}"

@@ -200,6 +200,11 @@ struct PlayRobotFlipper {
     /// flips a feed at mid-face without aiming).
     var inlane: [(name: String, lo: CGFloat, hi: CGFloat)] = []
     var inlane60: [(name: String, lo: CGFloat, hi: CGFloat)] = []
+    /// The fastest inlane feed (pt/s) a raise-and-hold still cradles on this flipper. 900 on the 18 pt-ball tables
+    /// (sweep 10-30: caught 117 of 143 below it). On CHOMP! (real scale, weaker gravity) raises were caught 91–98%
+    /// under 300 pt/s but 32% at 300–400 and almost never above (740 raises, 2026-11-22): its host should give ~300.
+    /// A faster feed is flipped live instead. `-override "Lab.feedCatchSpeed=300"` tries a value on any table.
+    var feedCatchSpeed: CGFloat = 900
 
     /// The shots the robot can aim at on a pass.
     func shots(for pass: PlayPass) -> [(name: String, delay: Double)] {
@@ -593,7 +598,7 @@ final class PlayRobot {
                 if catchRoll, feedSpeed >= 900, along > 80 {
                     let at = min(85, max(55, 70 + CGFloat(gauss(skill.timingSigma)) * feedSpeed))
                     inlaneTarget[i] = ("hotcatch", at)
-                } else if catchRoll, along >= 55, feedSpeed < 900 {
+                } else if catchRoll, along >= 55, feedSpeed < LabOverrides.cg("Lab.feedCatchSpeed", f.feedCatchSpeed) {
                     // 9c′: 55 (was 45) — the lab cradles from 40 pt, but a 60 Hz feed moves 14–20 pt a frame and the
                     // flipper has to get up, so the press has to be decided with margin.
                     mode = .catching(flipper: i, since: now, steadySince: nil)

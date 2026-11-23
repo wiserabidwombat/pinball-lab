@@ -6,7 +6,7 @@ import Foundation
 /// tables evolve as we get better at making them. The home screen lists the tables; tapping one plays it,
 /// and each table's own menu has a "Tables" button back here.
 enum LabTable: String, CaseIterable, Identifiable {
-    case orbit, greyInvasion, cthulhu, monsoon, lamplight, grandTour, chomp, neon, quest
+    case orbit, greyInvasion, cthulhu, monsoon, lamplight, grandTour, chomp, neon, quest, alive
 
     var id: String { rawValue }
 
@@ -21,6 +21,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .chomp: return 7
         case .neon: return 8
         case .quest: return 9
+        case .alive: return 10
         }
     }
 
@@ -35,6 +36,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .chomp: return "CHOMP!"
         case .neon: return "Neon Labyrinth"
         case .quest: return "Quest & Flipper"
+        case .alive: return "9 to Alive"
         }
     }
 
@@ -49,6 +51,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .chomp: return "Nov 2026 · table seven"
         case .neon: return "Nov 2026 · table eight"
         case .quest: return "Nov 2026 · table nine"
+        case .alive: return "Nov 2026 · table ten"
         }
     }
 
@@ -72,6 +75,8 @@ enum LabTable: String, CaseIterable, Identifiable {
             return "A program breaks into a neon grid of one-screen tables. Solve each sector's lock to move through the maze to the Core. Being built now."
         case .quest:
             return "A pixel-art fantasy roguelite. Fight the Haunted Forest's monsters, search for loot and choose when to leave. Drains cost HP. Being built now."
+        case .alive:
+            return "Goofy office zombies are climbing the tower. Solve each floor to reach the stairs and climb to the roof before the horde catches up. Being built now."
         }
     }
 
@@ -87,6 +92,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .chomp: return ["Four flippers", "Up-posts", "Action button", "In progress"]
         case .neon: return ["A maze of tables", "One-screen cells", "In progress"]
         case .quest: return ["Monsters with HP", "Drains cost HP", "Pixel art", "In progress"]
+        case .alive: return ["A tower of tables", "Built on Neon's cells", "In progress"]
         }
     }
 
@@ -101,6 +107,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .chomp: return Color(red: 1.0, green: 0.82, blue: 0.30)
         case .neon: return Color(red: 0.10, green: 0.85, blue: 1.0)
         case .quest: return Color(red: 1.0, green: 0.72, blue: 0.30)
+        case .alive: return Color(red: 0.65, green: 0.79, blue: 0.34)
         }
     }
 
@@ -116,6 +123,7 @@ enum LabTable: String, CaseIterable, Identifiable {
         case .chomp: return nil                     // grey box until the art milestone
         case .neon: return nil                      // grey box until the art milestone
         case .quest: return nil                     // grey box until the art milestone
+        case .alive: return nil                     // grey box until the art milestone
         }
     }
 
@@ -139,6 +147,7 @@ struct PinballLabRoot: View {
         case "chomp": return .chomp                  // Table 07 (opens the table; no labs yet)
         case "neon": return .neon                    // Table 08 (opens the table; no labs yet)
         case "quest": return .quest                  // Table 09 (opens the table; no labs yet)
+        case "alive": return .alive                  // Table 10 (opens the table; -playlab / -shotlab alive start the labs)
         default: return nil
         }
         #else
@@ -167,6 +176,8 @@ struct PinballLabRoot: View {
                 NlTableView(onExit: { playing = nil })
             case .some(.quest):
                 QfTableView(onExit: { playing = nil })
+            case .some(.alive):
+                NtaTableView(onExit: { playing = nil })
             case .none:
                 LabHomeView { table in playing = table }
             }

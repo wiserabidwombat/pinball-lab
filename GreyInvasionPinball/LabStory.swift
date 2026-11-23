@@ -109,6 +109,15 @@ extension LabTable {
                 LabStat(label: "Goal", value: "Fight the Haunted Forest's monsters, loot what you can, and leave before your HP runs out"),
                 LabStat(label: "Art", value: "Coming later: dark pixel art lit only by lanterns"),
             ]
+        case .alive:
+            // T10 M1: the Lobby in grey box, on Neon Labyrinth's cells.
+            return [
+                LabStat(label: "Table size", value: "600 × 1060 points a floor, one screen each, at real ball size"),
+                LabStat(label: "Camera", value: "The whole floor on screen; it pans up and down the tower"),
+                LabStat(label: "Frame rate", value: "Built for 120 fps on ProMotion iPhones"),
+                LabStat(label: "Goal", value: "Climb eight floors of an office tower to the roof before the zombie horde catches up"),
+                LabStat(label: "Art", value: "Coming later: flat cartoon art drawn in code"),
+            ]
         case .neon:
             // T8 M1: one cell in grey box so far.
             return [
@@ -193,6 +202,10 @@ extension LabTable {
                 LabNote(title: "Ramps with height", detail: "The ramps, the Moon and Saturn shift against the floor as the camera moves, so the raised parts read as raised."),
                 LabNote(title: "A hidden planet", detail: "Finish a tour and Pluto lights for that one ball."),
             ]
+        case .alive:
+            return [
+                LabNote(title: "A tower of tables", detail: "Each floor is its own one-screen table. Solve the floor to open the stairs; a drain drops you a floor."),
+            ]
         case .quest:
             return [
                 LabNote(title: "Drains cost HP", detail: "There are no balls to lose. Each drain costs HP from your run, and zero HP ends it."),
@@ -261,6 +274,10 @@ extension LabTable {
                 LabNote(title: "Count where points come from", detail: "Combos first made half of every score. Tracking each award's share brought them down to about a fifth, so the tour matters most."),
                 LabNote(title: "Stop the game for the show", detail: "The camera followed the ball and missed the launch. Now play freezes, keeps the ball's speed and carries on after."),
                 LabNote(title: "Picture it from the game", detail: "The How to Play pictures are the game itself, posed in each goal, with the shots drawn on."),
+            ]
+        case .alive:
+            return [
+                LabNote(title: "Share the engine, not a copy", detail: "The tower runs on Neon Labyrinth's cells. The Lobby is a second room on the same engine, so fixes to the cells reach both tables."),
             ]
         case .quest:
             return [

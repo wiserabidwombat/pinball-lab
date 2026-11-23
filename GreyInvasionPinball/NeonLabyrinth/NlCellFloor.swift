@@ -21,6 +21,12 @@ final class NlCellFloor: SKNode {
     private(set) var targets: [(body: SKNode, name: String, face: SKShapeNode)] = []
     var targetFlashUntil: [String: TimeInterval] = [:]
     private(set) var kickLamps: [SKShapeNode] = []
+    // T8 M2 round C (Aaron: "Per floor"): this floor's outlane saves. The kickback (left) is lit on every floor at the
+    // start of each new ball; the outlane save (right) is lit by hitting all of this floor's room's targets. Each fires
+    // once, and moving between floors doesn't relight either.
+    var kickbackLit = true
+    var saveLit = false
+    var targetsHitForSave: Set<String> = []
     private var exitPortals: [NlExit: SKShapeNode] = [:]
     private var exitsLit: Set<NlExit> = []
     /// The room's solid blocks (a floor ball inside one is pushed back out).
@@ -79,6 +85,17 @@ final class NlCellFloor: SKNode {
             lamp.zPosition = -18
             addChild(lamp)
             kickLamps.append(lamp)
+        }
+    }
+
+    /// This floor's two save lamps (left = kickback, right = outlane save): green when lit.
+    func refreshKickLamps() {
+        let on = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
+        let off = SKColor(red: 0.14, green: 0.28, blue: 0.18, alpha: 0.9)
+        for (i, lamp) in kickLamps.enumerated() {
+            let lit = i == 0 ? kickbackLit : saveLit
+            lamp.fillColor = lit ? on : off
+            lamp.strokeColor = lit ? .white : on.withAlphaComponent(0.4)
         }
     }
 

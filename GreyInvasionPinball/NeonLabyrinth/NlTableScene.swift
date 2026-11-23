@@ -128,11 +128,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private var drains = 0
     /// Drains that dropped the ball to the floor below (not counted in `drains`, which are balls lost).
     private var floorDrops = 0
-    // M1 v4: the outlane saves. Left = the kickback, lit at the start of every ball; right = the outlane save, lit by
-    // hitting all three Switchyard targets (placeholder goal until the room's rules). Each fires once.
-    private var kickbackLit = true
-    private var saveLit = false
-    private var targetsHitForSave: Set<String> = []
+    // The outlane saves (M1 v4) are each floor's own since M2 round C: NlCellFloor.kickbackLit / saveLit.
     #if DEBUG
     /// The lab events that count as Play Lab objectives: the room's and the cell's (built once).
     fileprivate lazy var cachedShotObjectives: Set<String> =
@@ -206,7 +202,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M2 B"
+    static let buildTagText = "T8 M2 C"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -391,11 +387,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
     /// Brings a ball onto floor `on` by `arrival` (that floor becomes the ball's; the camera pans to it). The alternating
     /// ones (below, above) take the next side.
-    private func arrive(_ arrival: Arrival, on floorIndex: Int) {
+    private func arrive(_ arrival: Arrival, on floorIndex: Int, newBall: Bool = false) {
         typealias C = NlCellLayout
         setActiveFloor(floorIndex)
-        kickbackLit = true                          // every ball starts with the kickback lit
-        refreshKickLamps()
+        if newBall {                                // every ball starts with every floor's kickback lit
+            floors.forEach { $0.kickbackLit = true }
+            refreshKickLamps()
+        }
         if nudge.tilted { nudge.newBall(); updateFlippers() } else { nudge.newBall() }   // a tilt ends here
         switch arrival {
         case .fromBelow:
@@ -510,9 +508,11 @@ final class NlTableScene: SKScene, RendererHostedScene {
         nextBallAt = nil
         bannerClearAt = nil
         targetLastHit = [:]
-        kickbackLit = true
-        saveLit = false
-        targetsHitForSave = []
+        for f in floors {
+            f.kickbackLit = true
+            f.saveLit = false
+            f.targetsHitForSave = []
+        }
         refreshKickLamps()
         pendingArrival = nil
         floors.forEach { $0.room.newGame() }
@@ -521,7 +521,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         nextBelowLeft = true
         nextAboveLeft = true
         game.reset()
-        arrive(.fromBelow, on: 0)                  // a new ball comes up from below on the bottom floor
+        arrive(.fromBelow, on: 0, newBall: true)   // a new ball comes up from below on the bottom floor
         cameraRig.origin = floor.position
         refreshCamera()
     }
@@ -702,7 +702,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
                     cameraRig.shake(strength: 3, duration: 0.25)
                     sfx(.drain)
                     game.ballDrained()
-                    pendingArrival = (.fromBelow, 0)
+                    pendingArrival = nil            // a new ball (FROM BELOW on the bottom floor)
                     if !game.isGameOver { nextBallAt = now + 0.8 }
                 } else {
                     pendingArrival = (.fromAbove, from - 1)
@@ -717,9 +717,11 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
         if let due = nextBallAt, now >= due {
             nextBallAt = nil
+            // No pending arrival = a new ball (after a lost ball or a watchdog rescue): up from below on the bottom floor.
+            let isNewBall = pendingArrival == nil
             let next = pendingArrival ?? (.fromBelow, 0)
             pendingArrival = nil
-            arrive(next.arrival, on: next.floor)
+            arrive(next.arrival, on: next.floor, newBall: isNewBall)
         }
         #if DEBUG
         checkPlayLabGame(now)
@@ -827,37 +829,33 @@ final class NlTableScene: SKScene, RendererHostedScene {
         guard p0.y >= y, p.y < y else { return }
         let left = p.x < NlTableLayout.outlaneMaxX
         let right = p.x > NlTableLayout.mirrorSum - NlTableLayout.outlaneMaxX
-        guard (left && kickbackLit) || (right && saveLit), let body = ball.physicsBody else { return }
+        guard let f = ball.parent as? NlCellFloor ?? floor,
+              (left && f.kickbackLit) || (right && f.saveLit), let body = ball.physicsBody else { return }
         let a = NlTableLayout.kickAngle, k = NlTableLayout.kickSpeed
         let from = NlTableLayout.kickFromLeft
         if left {
-            kickbackLit = false
+            f.kickbackLit = false
             ball.position = from
             body.velocity = CGVector(dx: k * cos(a), dy: k * sin(a))
             showBanner("KICKBACK")
             labEvent("kickback")
         } else {
-            saveLit = false
+            f.saveLit = false
             ball.position = CGPoint(x: NlTableLayout.mirrorSum - from.x, y: from.y)
             body.velocity = CGVector(dx: -k * cos(a), dy: k * sin(a))
             showBanner("OUTLANE SAVE")
             labEvent("outlaneSave")
         }
         ball.previousPosition = ball.position
-        refreshKickLamps()
+        f.refreshKickLamps()
         sfx(.kickback)
         hitHaptic.impactOccurred(intensity: 0.9)
         cameraRig.shake(strength: 3, duration: 0.2)
     }
 
+    /// Every floor's save lamps (each shows its own floor's saves).
     private func refreshKickLamps() {
-        let on = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
-        let off = SKColor(red: 0.14, green: 0.28, blue: 0.18, alpha: 0.9)
-        for (i, lamp) in floors.flatMap({ $0.kickLamps.enumerated().map { $0 } }) {
-            let lit = i == 0 ? kickbackLit : saveLit
-            lamp.fillColor = lit ? on : off
-            lamp.strokeColor = lit ? .white : on.withAlphaComponent(0.4)
-        }
+        floors.forEach { $0.refreshKickLamps() }
     }
 
     // MARK: - Contacts
@@ -894,12 +892,12 @@ final class NlTableScene: SKScene, RendererHostedScene {
                   let t = tf.targets.first(where: { $0.body === node }) else { break }
             if let last = targetLastHit[t.name], gameTime - last < 0.15 { break }
             targetLastHit[t.name] = gameTime
-            if !saveLit {
-                targetsHitForSave.insert(t.name)
-                if targetsHitForSave.count == tf.targets.count {   // all the room's targets: light the right outlane save
-                    saveLit = true
-                    targetsHitForSave = []
-                    refreshKickLamps()
+            if !tf.saveLit {
+                tf.targetsHitForSave.insert(t.name)
+                if tf.targetsHitForSave.count == tf.targets.count {   // all this floor's targets: light its outlane save
+                    tf.saveLit = true
+                    tf.targetsHitForSave = []
+                    tf.refreshKickLamps()
                     showBanner("OUTLANE SAVE LIT")
                     labEvent("saveLit")
                 }
@@ -991,8 +989,10 @@ extension NlTableScene: ShotLabHost {
     func shotLabResetTable() {
         removeAllBalls()
         nextBallAt = nil
-        kickbackLit = false                         // the robot measures the bare table: no saves
-        saveLit = false
+        for f in floors {                           // the robot measures the bare table: no saves
+            f.kickbackLit = false
+            f.saveLit = false
+        }
         refreshKickLamps()
         floors.forEach { $0.room.shotLabReset() }   // and the rooms as a new game has them
     }
@@ -1012,8 +1012,10 @@ extension NlTableScene: ShotLabHost {
         setActiveFloor(0)                          // the robot plays the bottom floor
         cameraRig.origin = floor.position
         shotLabTime = 0
-        kickbackLit = false
-        saveLit = false
+        for f in floors {
+            f.kickbackLit = false
+            f.saveLit = false
+        }
         refreshKickLamps()
         shotLab = ShotLab(host: self)
         refreshCamera()
@@ -1187,8 +1189,8 @@ extension NlTableScene: PlayLabHost {
 
     /// The shots the table wants, most wanted first: the room decides, given the targets still needed for the save.
     private func robotWanted() -> [String] {
-        let need = floor.targets.map(\.name).filter { !targetsHitForSave.contains($0) }.compactMap { room.targetEvents[$0] }
-        return room.robotWanted(saveNeeds: saveLit ? [] : need)
+        let need = floor.targets.map(\.name).filter { !floor.targetsHitForSave.contains($0) }.compactMap { room.targetEvents[$0] }
+        return room.robotWanted(saveNeeds: floor.saveLit ? [] : need)
     }
 
     /// Banners that double as objectives.

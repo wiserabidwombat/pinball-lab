@@ -139,6 +139,15 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var mbLaunchesPending = 0
     private var mbNextLaunchAt: TimeInterval = 0
     private var mbSaveUntil: TimeInterval = -1
+    /// M5 v5: flip-lock — in a multiball, ACTION while a ball sits on the raised pier flipper keeps it raised 20 s.
+    private var flipLockUntil: TimeInterval = -1
+    private var flipLockUsed = false
+    #if DEBUG
+    private var pierCatchUntil: TimeInterval = -1           // M5 v5c: the robot holding right for a flip-lock catch
+    #endif
+    private var flipLocked: Bool { flipLockUntil > gameTime }
+    static let flipLockSeconds: TimeInterval = 20
+    static let flipLockSpot = CGPoint(x: 490, y: 562)       // where a held ball rests on the raised pier flipper
     private var touristDots: [ChompShot: [SKShapeNode]] = [:]
     private var sharkHitAt: [TimeInterval] = [-1, -1, -1]
     private var shotLamps: [ChompShot: SKShapeNode] = [:]
@@ -200,7 +209,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M5 v4e"
+    static let buildTagText = "T7 M5 v5d"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -772,8 +781,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         let flamingoGlow: SKColor? = kevin.stage == .finUp ? (Int(now * 4) % 2 == 0 ? Self.flamingoPink : .white) : nil
         fin?.setGlow(lampColor(cameos.lamp(.fin), now) ?? flamingoGlow)
         updateTouristDots(now)
+        if flipLockUntil > 0, now >= flipLockUntil { endFlipLock() }        // M5 v5
         if !skillShotLive {
-            let kmb = kevin.multiballActive ? kevin.statusText() : nil
+            let kmb = flipLocked ? "FLIP-LOCK · \(Int((flipLockUntil - now).rounded(.up)))s · ACTION TO LET GO"
+                : kevin.multiballActive ? kevin.statusText() : nil
             game.status = beaches.statusText() ?? kmb ?? cameos.statusText(now: now) ?? kevin.statusText()
         }
     }
@@ -805,6 +816,12 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 mbSaveUntil = gameTime + ChompKevin.multiballSaveSeconds
                 sfx(.skillShot)
                 bigHaptic.impactOccurred()
+            case .addBall:                                       // M5 v5: the Stink Line refilled
+                if balls.count + mbLaunchesPending < ChompKevin.maxBalls {
+                    mbLaunchesPending += 1
+                    mbNextLaunchAt = max(mbNextLaunchAt, gameTime + 0.5)
+                    sfx(.skillShot)
+                }
             case .multiballOver:
                 mbLaunchesPending = 0
                 mbSaveUntil = -1
@@ -1230,9 +1247,16 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// ~29 pt a 120 Hz step at top speed, almost a whole ball, and SpriteKit's edge chain can let its centre through.
     /// If a floor ball's centre crossed the outer wall this step, it goes back to the playfield side, one radius off
     /// the wall, with its velocity into the wall bounced (wall restitution).
+    /// M5 v5d (Play Lab 13-58-20Z: a ~3,000 pt/s left-flipper shot straight up at x 321 went through the boat's
+    /// channel and stuck inside the housing at (321, 1058)): the same guard for the boat — its housing, the captive
+    /// ball's channel (sides and end cap) and the v4d funnel.
     private lazy var outerWallSegments: [(CGPoint, CGPoint)] = {
-        let w = ChompTableLayout.outerWall
-        return zip(w, w.dropFirst()).map { ($0, $1) }
+        let m = ChompTableLayout.boatMouth, hw = ChompTableLayout.boatHalfWidth, l = ChompTableLayout.boatChannelLength
+        let channel = [CGPoint(x: m.x - hw, y: m.y), CGPoint(x: m.x - hw, y: m.y + l),
+                       CGPoint(x: m.x + hw, y: m.y + l), CGPoint(x: m.x + hw, y: m.y)]
+        let chains = [ChompTableLayout.outerWall, ChompTableLayout.boatHousing, channel,
+                      ChompTableLayout.boatFunnelLeft, ChompTableLayout.boatFunnelRight]
+        return chains.flatMap { w in zip(w, w.dropFirst()).map { ($0, $1) } }
     }()
 
     private func keepInsideOuterWall(_ ball: ChompBall, _ body: SKPhysicsBody) {
@@ -1309,10 +1333,37 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// The action button (the view's ACTION button): arms the inner tube for a moment, once per cooldown. A press
     /// with the inner tube unlit does nothing yet (flip-lock and the wheel use it in later milestones).
     func actionPressed() {
-        guard isBuilt, !isAttractMode, !isGamePaused, !game.isGameOver, kickbackLit, gameTime >= innerTubeReadyAt else { return }
+        guard isBuilt, !isAttractMode, !isGamePaused, !game.isGameOver else { return }
+        if flipLockAction() { return }                          // M5 v5: flip-lock first, in a multiball
+        guard kickbackLit, gameTime >= innerTubeReadyAt else { return }
         innerTubeArmedUntil = gameTime + ChompTableLayout.innerTubeArmSeconds
         innerTubeReadyAt = gameTime + ChompTableLayout.innerTubeCooldown
         hitHaptic.impactOccurred(intensity: 0.5)
+    }
+
+    /// M5 v5 flip-lock (rulesheet: "while a ball is held at the flipper, press the action button; the mini-flipper stays
+    /// raised" 20 s; once per ball; releasing early: we use a second press). Returns true if ACTION was used for it.
+    private func flipLockAction() -> Bool {
+        if flipLocked {                                         // a second press lets it go
+            endFlipLock()
+            return true
+        }
+        guard kevin.multiballActive, !flipLockUsed, !nudge.tilted, miniFlipper?.isPressed == true else { return false }
+        let held = balls.contains { $0.isOnFloor && hypot($0.position.x - Self.flipLockSpot.x, $0.position.y - Self.flipLockSpot.y) < 24 }
+        guard held else { return false }
+        flipLockUsed = true
+        flipLockUntil = gameTime + Self.flipLockSeconds
+        updateFlippers()
+        showBanner("FLIP-LOCK · \(Int(Self.flipLockSeconds))s", hold: true)
+        hitHaptic.impactOccurred(intensity: 0.7)
+        return true
+    }
+
+    private func endFlipLock() {
+        guard flipLockUntil > 0 else { return }
+        flipLockUntil = -1
+        updateFlippers()
+        showBanner("FLIP-LOCK OFF")
     }
 
     // MARK: - Build tag (debug builds)
@@ -1509,6 +1560,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         cameos.newGame()                           // M5 v2
         beaches.newGame()                          // M5 v3
         kevin.newGame()                            // M5 v4
+        flipLockUntil = -1                         // M5 v5
+        flipLockUsed = false
+        if leftFlipper != nil { updateFlippers() } // v5b: a lock from the last game doesn't hold the pier flipper up
         mbLaunchesPending = 0
         mbSaveUntil = -1
         sharkHitAt = [-1, -1, -1]
@@ -1612,7 +1666,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         if right && !rightFlipper.isPressed { sfx(.flipper) }
         leftFlipper.isPressed = left
         rightFlipper.isPressed = right
-        miniFlipper?.isPressed = right                       // the pier mini-flipper shares the right button
+        miniFlipper?.isPressed = right || (flipLocked && !nudge.tilted)   // shares the right button (v5: or flip-lock)
     }
 
     private func applyNudge(_ direction: Nudge.Direction) {
@@ -1633,6 +1687,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             cameraRig.jolt(direction.unit, strength: Nudge.joltTilt, duration: 0.35)
             cameraRig.shake(strength: 8, duration: 0.7)
             showBanner("TILT")
+            flipLockUntil = -1                               // M5 v5b: a tilt ends a flip-lock
             updateFlippers()                                 // the flippers drop
         }
     }
@@ -1805,6 +1860,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                     nextBallAt = now + 0.8
                 } else {
                     ballSaveUsed = false             // the next ball gets its own save
+                    flipLockUsed = false             // M5 v5: and its own flip-lock
+                    if flipLockUntil > 0 { flipLockUntil = -1; updateFlippers() }
                     cameraRig.shake(strength: 4, duration: 0.3)
                     sfx(.drain)
                     applyCameo(cameos.ballLost())    // M5 v2: a cameo ends with the ball
@@ -2392,6 +2449,9 @@ extension ChompTableScene {
             [2500, 3500].map { (v: CGFloat) in
                 let a = CGFloat(deg) * CGFloat.pi / 180
                 return (CGPoint(x: 150, y: 790), CGVector(dx: v * cos(a), dy: v * sin(a))) } }
+        // M5 v5d: straight-up shots at the boat's left post / funnel (Play Lab 13-58-20Z stuck at (321, 1058)).
+        + stride(from: 316, through: 330, by: 2).flatMap { (x: Int) in
+            [2500, 3200].map { (v: CGFloat) in (CGPoint(x: CGFloat(x), y: 900), CGVector(dx: -20, dy: v)) } }
 
     func debugDropProbe() {
         isAttractMode = false
@@ -2507,7 +2567,9 @@ extension ChompTableScene: PlayLabHost {
          PlayObjective(name: "stinkLineFull", text: "Fill the Stink Line"),
          PlayObjective(name: "flamingo", text: "Harpoon a flamingo at the fin"),
          PlayObjective(name: "kmbStarted", text: "Start Kevin Multiball"),
-         PlayObjective(name: "kmbJackpot", text: "Collect a Kevin jackpot")]
+         PlayObjective(name: "kmbJackpot", text: "Collect a Kevin jackpot"),
+         PlayObjective(name: "flipLock", text: "Flip-lock a ball on the pier flipper"),
+         PlayObjective(name: "addABall", text: "Refill the Stink Line in a multiball: add-a-ball")]
     }
 
     /// Flip delays = the middle of each Shot Lab window, 120 Hz (the default pass; the 60 Hz pass now only models the
@@ -2567,6 +2629,47 @@ extension ChompTableScene: PlayLabHost {
     }
 
     /// Everything the robot needs to know this frame, and its buttons and plunger applied.
+    /// M5 v5c: the robot's ACTION button (Aaron: "add an action button logic to Play Lab"; in the CHOMP! host, so the
+    /// shared PlayLab.swift is untouched). Beginners never press it; intermediates use the inner tube; advanced and
+    /// experts also flip-lock in Kevin Multiball:
+    /// - inner tube: lit and ready, a floor ball falling down the left outlane will reach the kicker's trigger within
+    ///   the 0.6 s armed window → ACTION;
+    /// - flip-lock: in the multiball, not used this ball, a floor ball rolling down onto the pier block → hold right
+    ///   (up to 1.5 s) so the pier flipper catches it; once it rests at the held spot → ACTION.
+    fileprivate func robotActions(_ now: TimeInterval, _ lab: PlayLab) {
+        guard let skill = lab.robot?.skill, skill != .beginner, !nudge.tilted else { pierCatchUntil = -1; return }
+        let floor = balls.filter { $0.isOnFloor && !isOnPlunger($0) }
+        if kickbackLit, !flipLocked, gameTime >= innerTubeReadyAt, gameTime > innerTubeArmedUntil {   // (a press would end a lock)
+            for b in floor {
+                let p = b.position, vy = b.physicsBody?.velocity.dy ?? 0
+                guard p.x < ChompTableLayout.kickbackMaxX, vy < -50 else { continue }
+                let toTrigger = p.y - ChompTableLayout.kickbackTriggerY
+                if toTrigger > 0, toTrigger < -vy * 0.4 {
+                    print(String(format: "LAB: RACTION %.3f innerTube | %.0f %.0f %.0f", lab.elapsed(now: now), p.x, p.y, vy))
+                    actionPressed()
+                    break
+                }
+            }
+        }
+        guard skill == .advanced || skill == .expert, kevin.multiballActive, !flipLockUsed, !flipLocked else {
+            pierCatchUntil = -1
+            return
+        }
+        if pierCatchUntil < now, floor.contains(where: { b in
+            let p = b.position, vy = b.physicsBody?.velocity.dy ?? 0
+            return p.x > 470 && p.x < 548 && p.y > 570 && p.y < 720 && vy < 0
+        }) {
+            pierCatchUntil = now + 1.5
+        }
+        if pierCatchUntil >= now, miniFlipper?.isPressed == true, floor.contains(where: { b in
+            let v = b.physicsBody?.velocity ?? .zero
+            return hypot(b.position.x - Self.flipLockSpot.x, b.position.y - Self.flipLockSpot.y) < 24 && hypot(v.dx, v.dy) < 120
+        }) {
+            print(String(format: "LAB: RACTION %.3f flipLock", lab.elapsed(now: now)))
+            if flipLockAction() { pierCatchUntil = -1 }
+        }
+    }
+
     fileprivate func updatePlayLab(_ now: TimeInterval) {
         guard let lab = playLab else { return }
         if game.isGameOver || playLabNextAt != nil {
@@ -2581,17 +2684,19 @@ extension ChompTableScene: PlayLabHost {
         runWatchdog(now, lab)
         guard let cmd = lab.frame(view) else { return }
         if let direction = cmd.nudge { applyNudge(direction) }
-        if cmd.left != robotLeft || cmd.right != robotRight {
+        robotActions(now, lab)                                         // M5 v5c: the host's ACTION button
+        let cmdRight = cmd.right || pierCatchUntil >= now              // a pier catch for a flip-lock holds right
+        if cmd.left != robotLeft || cmdRight != robotRight {
             // M4 v6: log each robot press with the lower balls, to match against the report's drains.
-            if (cmd.left && !robotLeft) || (cmd.right && !robotRight) {
-                let side = cmd.left && !robotLeft ? (cmd.right && !robotRight ? "both" : "left") : "right"
+            if (cmd.left && !robotLeft) || (cmdRight && !robotRight) {
+                let side = cmd.left && !robotLeft ? (cmdRight && !robotRight ? "both" : "left") : "right"
                 let lows = view.balls.filter { !$0.onPlunger && $0.position.y < 480 }.map {
                     String(format: "%.0f %.0f %.0f %.0f", $0.position.x, $0.position.y, $0.velocity.dx, $0.velocity.dy)
                 }
                 print(String(format: "LAB: RFLIP %.3f ", lab.elapsed(now: now)) + side + " | " + lows.joined(separator: " | "))
             }
             robotLeft = cmd.left
-            robotRight = cmd.right
+            robotRight = cmdRight
             updateFlippers()
         }
         if let power = cmd.plunge, isBallOnPlunger {
@@ -2693,6 +2798,8 @@ extension ChompTableScene: PlayLabHost {
         case _ where text.hasPrefix("MAYOR MELTDOWN ·"): name = "meltdownStarted"
         case _ where text.hasPrefix("BEACH CLOSED"): name = "beachClosed"
         case "EXTRA BALL": name = "extraBall"
+        case _ where text.hasPrefix("FLIP-LOCK ·"): name = "flipLock"
+        case "ADD-A-BALL": name = "addABall"
         case _ where text.hasPrefix("STINK LINE FULL"): name = "stinkLineFull"
         case _ where text.hasPrefix("FLAMINGO ") && text.contains("/"): name = "flamingo"
         case _ where ChompKevin.titles.contains(text): name = "kmbStarted"

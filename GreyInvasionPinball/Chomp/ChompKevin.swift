@@ -18,6 +18,7 @@ final class ChompKevin {
     enum Effect {
         case score(Int, String?)          // points and an optional banner (held over the shot names)
         case startMultiball(Int)          // balls in play wanted
+        case addBall                      // M5 v5: the Stink Line refilled during the multiball
         case multiballOver
     }
     enum Stage { case idle, line, yellow, finUp, ready, multiball }
@@ -40,6 +41,9 @@ final class ChompKevin {
     static let launchSpeed: CGFloat = 1_800      // an auto-launched ball: off the pin, down to the flippers
     static let redValue = 2_500_000
     static let jackpotBase = 10_000_000
+    /// M5 v5: chum bucket hits that refill the line during KMB 1 / 2 / 3 and add a ball (rulesheet: 3, 8, 5).
+    static let refillHits = [3, 8, 5]
+    static let maxBalls = 4                        // placeholder cap on add-a-balls
 
     private(set) var stage: Stage = .idle
     private(set) var level = 1                     // the next / running KMB (1–3)
@@ -54,6 +58,8 @@ final class ChompKevin {
     private var jackpotShot: ChompShot?
     private var jackpotMult = 1
     private(set) var jackpots = 0
+    private(set) var refill = 0                    // M5 v5: bucket hits toward the next add-a-ball
+    var refillNeeded: Int { Self.refillHits[min(level, 3) - 1] }
 
     var multiballActive: Bool { stage == .multiball }
     var title: String { Self.titles[min(level, 3) - 1] }
@@ -81,7 +87,7 @@ final class ChompKevin {
         case .multiball:
             let jp = jackpotShot != nil ? " · JACKPOT \(ChompCameos.millions(jackpotValue))" : ""
             let count = jackpots >= Self.jackpotsToFinish ? "COMPLETE · JACKPOTS \(jackpots)" : "JACKPOTS \(jackpots)/\(Self.jackpotsToFinish)"
-            return "\(title) · \(count)\(jp)"
+            return "\(title) · \(count)\(jp) · ADD-A-BALL \(refill)/\(refillNeeded)"
         }
     }
 
@@ -108,6 +114,11 @@ final class ChompKevin {
             return [.score(0, "STINK LINE · CHASE THE RED ARROWS")]
         case .line:
             return advance(now: now)
+        case .multiball:
+            refill += 1
+            guard refill >= refillNeeded else { return [.score(Self.lineBase, "ADD-A-BALL \(refill)/\(refillNeeded)")] }
+            refill = 0
+            return [.score(Self.lineBase, "ADD-A-BALL"), .addBall]
         default:
             return []
         }
@@ -139,7 +150,7 @@ final class ChompKevin {
         case .ready:
             guard Self.startShots.contains(s) else { return [] }
             stage = .multiball
-            reds = []; awards = 0; jackpotShot = nil; jackpotMult = 1; jackpots = 0
+            reds = []; awards = 0; jackpotShot = nil; jackpotMult = 1; jackpots = 0; refill = 0
             topUpReds()
             return [.score(0, title), .startMultiball(Self.multiballBalls)]
         case .multiball:

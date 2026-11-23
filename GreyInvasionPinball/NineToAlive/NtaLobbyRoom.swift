@@ -8,6 +8,9 @@
 //   STAIRS — the ramp up the middle, the floor's only exit. Shut, a shot in rolls back out ("STAIRS LOCKED"); open,
 //     the ball rides up the stairs and out the top, and comes up from below on the floor above.
 //   RECEPTION DESK — targets B · A · R. All three: "BARRICADE!" (it will stall the horde once there is a horde).
+//   ZOMBIES (T10 M2 v2) — GARY under the revolving door's block and PAM on the right wall below the desk, where the
+//     Lobby's Shot Lab found steep cross shots that hit nothing. A hit bonks the zombie: points, a groan, a wobble.
+//     (The horde rules will have them block a lane until they're bonked.)
 import SpriteKit
 import CoreGraphics
 
@@ -18,6 +21,7 @@ enum NtaPoints {
     static let stairsOpen = 5000
     static let upstairs = 5000
     static let barricade = 10000
+    static let zombie = 2500
 }
 
 @MainActor
@@ -44,6 +48,10 @@ final class NtaLobbyRoom: NlRoom {
     private var stairsOpen = false
     private var deskHit: Set<String> = []
     private var barricades = 0
+    private var bonks = 0
+    /// Each zombie's drawn head, and when its wobble (after a bonk) ends.
+    private var zombieHeads: [String: SKNode] = [:]
+    private var wobbleLeft: [String: CGFloat] = [:]
     private var lockedBannerCooldown: CGFloat = 0
     // Drawn state
     private var stairDoor: SKShapeNode?
@@ -58,15 +66,19 @@ final class NtaLobbyRoom: NlRoom {
     // MARK: NlRoom
 
     let exits: Set<NlExit> = [.top]
-    let solidBlocks: [[CGPoint]] = [Y.doorBlock, Y.deskBlock]
-    let targetEvents = ["B": "deskB", "A": "deskA", "R": "deskR"]
+    let solidBlocks: [[CGPoint]] = [Y.doorBlock, Y.deskBlock, Y.zombieWallBlock]
+    let targetEvents = ["B": "deskB", "A": "deskA", "R": "deskR", "GARY": "zombieGary", "PAM": "zombiePam"]
+    /// How long a bonked zombie wobbles (s), and how far (rad).
+    static let wobbleTime: CGFloat = 0.6
+    static let wobbleAngle: CGFloat = 0.45
 
     func build(in cell: NlCellFloor) {
         self.cell = cell
-        for pts in [Y.doorBlock, Y.doorInnerWall, Y.deskBlock, Y.stairsU] { cell.addWall(points: pts) }
+        for pts in [Y.doorBlock, Y.doorInnerWall, Y.deskBlock, Y.zombieWallBlock, Y.stairsU] { cell.addWall(points: pts) }
         for p in Y.stairsMouthPosts { cell.addPost(at: p, radius: Y.stairsPostRadius) }
         cell.addPost(at: Y.doorMouthPost, radius: Y.doorPostRadius)
         for t in Y.deskTargets { cell.addTarget(name: t.name, face: t.face, normal: t.normal) }
+        for z in Y.zombies { cell.addTarget(name: z.name, face: z.face, normal: z.normal) }
         addDrawnParts(cell)
         refreshLook()
     }
@@ -76,6 +88,11 @@ final class NtaLobbyRoom: NlRoom {
         stairsOpen = false
         deskHit = []
         barricades = 0
+        bonks = 0
+        for (name, head) in zombieHeads {
+            head.zRotation = 0
+            wobbleLeft[name] = nil
+        }
         lockedBannerCooldown = 0
         spinner?.stop()                            // a door still turning from the last game (or Shot Lab trial) stops
         refreshLook()
@@ -84,6 +101,12 @@ final class NtaLobbyRoom: NlRoom {
     func update(_ dt: CGFloat) {
         lockedBannerCooldown = max(0, lockedBannerCooldown - dt)
         tickCooldown = max(0, tickCooldown - dt)
+        for (name, left) in wobbleLeft {              // a bonked zombie wobbles, then stands back up
+            let t = max(0, left - dt)
+            wobbleLeft[name] = t > 0 ? t : nil
+            let k = t / Self.wobbleTime
+            zombieHeads[name]?.zRotation = Self.wobbleAngle * k * sin((1 - k) * 18)
+        }
         if let spinner {
             let n = spinner.update(dt: dt)
             if n > 0 { addSpins(n) }
@@ -108,6 +131,12 @@ final class NtaLobbyRoom: NlRoom {
     }
 
     func targetHit(_ name: String) -> String {
+        if Y.zombies.contains(where: { $0.name == name }) {
+            bonks += 1
+            if !(cell?.isTilted ?? true) { cell?.score(NtaPoints.zombie) }   // the cell plays the hit sound and haptic
+            wobbleLeft[name] = Self.wobbleTime
+            return "BONK! \(name)"
+        }
         guard Y.deskTargets.contains(where: { $0.name == name }) else { return name }
         deskHit.insert(name)
         if deskHit.count == Y.deskTargets.count {
@@ -137,7 +166,7 @@ final class NtaLobbyRoom: NlRoom {
         cell.haptic(1)
     }
 
-    var tagText: String { "T10 M1 v2 · spins \(spins)/\(Self.spinsToOpen)\(stairsOpen ? " · OPEN" : "") · bar \(barricades)" }
+    var tagText: String { "T10 M2 v2 · spins \(spins)/\(Self.spinsToOpen)\(stairsOpen ? " · OPEN" : "") · bar \(barricades) · bonk \(bonks)" }
 
     var status: String? {
         stairsOpen ? "STAIRS OPEN ▲  ·  GO UP!" : "REVOLVING DOOR \(min(spins, Self.spinsToOpen))/\(Self.spinsToOpen)"
@@ -276,6 +305,24 @@ final class NtaLobbyRoom: NlRoom {
         arrowNode.zPosition = -18
         cell.addChild(arrowNode)
         stairsArrow = arrowNode
+        // The zombies (grey box): a green head behind each face, tilted by the wobble after a bonk.
+        for z in Y.zombies {
+            let head = SKShapeNode(circleOfRadius: 13)
+            head.position = CGPoint(x: z.center.x - z.normal.dx * 42, y: z.center.y - z.normal.dy * 42)   // behind the name label
+            head.fillColor = SKColor(red: 0.65, green: 0.79, blue: 0.34, alpha: 1)
+            head.strokeColor = SKColor(red: 0.17, green: 0.13, blue: 0.20, alpha: 1)
+            head.lineWidth = 2.5
+            head.zPosition = 3
+            for (dx, r) in [(CGFloat(-5), CGFloat(3.5)), (5, 2.5)] {       // goofy mismatched eyes
+                let eye = SKShapeNode(circleOfRadius: r)
+                eye.position = CGPoint(x: dx, y: 3)
+                eye.fillColor = .white
+                eye.strokeColor = .clear
+                head.addChild(eye)
+            }
+            cell.addChild(head)
+            zombieHeads[z.name] = head
+        }
         // Desk lamps: one under each target, lit when hit.
         for t in Y.deskTargets {
             let lamp = SKShapeNode(circleOfRadius: 7)
@@ -331,7 +378,7 @@ final class NtaLobbyRoom: NlRoom {
     // MARK: Labs
 
     #if DEBUG
-    var shotLabMajorEvents: Set<String> { ["stairs", "door", "deskB", "deskA", "deskR"] }
+    var shotLabMajorEvents: Set<String> { ["stairs", "door", "deskB", "deskA", "deskR", "zombieGary", "zombiePam"] }
 
     /// The shot line (the stairs' mouth, y 580) and the door's and desk's height (~800).
     var shotLabProbes: [ShotLab.Probe] {
@@ -351,25 +398,33 @@ final class NtaLobbyRoom: NlRoom {
          PlayObjective(name: "deskB", text: "Hit B"),
          PlayObjective(name: "deskA", text: "Hit A"),
          PlayObjective(name: "deskR", text: "Hit R"),
-         PlayObjective(name: "barricade", text: "B · A · R: a barricade")]
+         PlayObjective(name: "barricade", text: "B · A · R: a barricade"),
+         PlayObjective(name: "zombieGary", text: "Bonk GARY (the right flipper's steep cross shot)"),
+         PlayObjective(name: "zombiePam", text: "Bonk PAM (the left flipper's steep cross shot)")]
     }
 
     var playLabShotObjectives: Set<String> {
-        ["door", "doorWire", "stairsOpen", "stairs", "exitTop", "deskB", "deskA", "deskR", "barricade"]
+        ["door", "doorWire", "stairsOpen", "stairs", "exitTop", "deskB", "deskA", "deskR", "barricade", "zombieGary",
+         "zombiePam"]
     }
 
-    // PLACEHOLDER timings until the Lobby's own Shot Lab run: borrowed from the Switchyard's measured windows for shots
-    // at about the same angles (the stairs = its ramp; the door ≈ SWITCH ◄ from the right flipper, ~108°; the desk ≈
-    // between SWITCH ► and RAILS from the left flipper, ~69°, and earlier than SWITCH ► from the right, ~78°).
-    let leftShots: [(name: String, delay: Double)] = [("door", 0.244), ("stairs", 0.471), ("deskB", 0.565)]
-    let rightShots: [(name: String, delay: Double)] = [("deskR", 0.22), ("stairs", 0.471), ("door", 0.558)]
-    let leftInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("stairs", 28, 31), ("deskA", 40, 47)]
+    // T10 M2 v1: the Lobby's own Shot Lab (120 Hz, FAST=8). Cradle: shotlab-alive-2026-11-23T14-00-48Z, the middle of each
+    // window (single-trial flukes left out). Inlane: shotlab-alive-inlane-2026-11-23T14-04-16Z, 4 pt bins of the ball's
+    // distance from the pivot at the flip, 3+ hits.
+    // The zombies (T10 M2 v2): the cradle delays whose measured launches the layout sims send into each zombie (PAM
+    // 61–64°, GARY 111–116°), until the next Shot Lab run measures them.
+    let leftShots: [(name: String, delay: Double)] = [("door", 0.221), ("stairs", 0.467), ("deskB", 0.562),
+                                                       ("deskA", 0.583), ("deskR", 0.600), ("zombiePam", 0.620)]
+    let rightShots: [(name: String, delay: Double)] = [("stairs", 0.468), ("door", 0.557), ("zombieGary", 0.600)]
+    let leftInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("stairs", 28, 31), ("deskB", 68, 71)]
     let rightInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("stairs", 28, 31), ("door", 36, 39)]
 
     /// The door until the stairs open, then the stairs; then the desk targets still needed for the outlane save.
     func robotWanted(saveNeeds: [String]) -> [String] {
         var out: [String] = stairsOpen ? ["stairs"] : ["door"]
-        for s in saveNeeds + ["deskB", "deskA", "deskR", "door", "stairs"] where !out.contains(s) { out.append(s) }
+        for s in saveNeeds + ["deskB", "deskA", "deskR", "zombieGary", "zombiePam", "door", "stairs"] where !out.contains(s) {
+            out.append(s)
+        }
         return out
     }
     #endif

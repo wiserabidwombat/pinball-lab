@@ -115,7 +115,8 @@ def door_block():
     outer = [door_pt(t, "out") for t in (DOOR_LEN, DOOR_FLARE_LEN, 0.0)]
     knee = (_knee_x(700.0), 700.0)
     arch = (ARCH_JOIN_X, arch_y(ARCH_JOIN_X) - 1)
-    pts = [cap[0]] + [arch] + [(WALL_L, ARCH_START), (WALL_L, 760.0), knee] + list(reversed(outer)) + list(reversed(cap))
+    fa, fb = ZOMBIE_DOOR[1], ZOMBIE_DOOR[2]
+    pts = [cap[0]] + [arch] + [(WALL_L, ARCH_START), (WALL_L, 760.0), knee, fa, fb] + list(reversed(outer)) + list(reversed(cap))
     return pts + [pts[0]]
 
 def door_inner_wall():
@@ -163,6 +164,49 @@ def desk():
 def barricade():
     return [(l, c, n, [fa, fb]) for l, fa, fb, c, n in desk()[1]]
 
+# ---------------------------------------------------------------- ZOMBIES (T10 M2 v2: the two dead zones)
+# The Lobby's Shot Lab (shotlab-alive-2026-11-23T14-00-48Z) found a span of each flipper's sweep that hit nothing:
+#  - right flipper, launched 110-117 deg from (~290-303, ~250-265): first contact the door block's flat underside,
+#    x 53-134, y ~705-712;
+#  - left flipper, launched 61-63 deg from (~309, ~250): the right wall, y ~630-700 (the knee's upper slope).
+# A zombie standup goes where each lands, facing the flipper that makes the shot (aimed at the measured launch point).
+ZOMBIE_AIM_R = (296.0, 258.0)       # the right flipper's launch point for these shots (measured)
+ZOMBIE_AIM_L = (309.0, 250.0)       # the left flipper's
+ZOMBIE_W = 40.0
+
+def _face(c, aim, w=ZOMBIE_W):
+    n = unit(c, aim)
+    t = (-n[1], n[0])
+    return add(c, t, w / 2), add(c, t, -w / 2), n
+
+def _zombie_door():
+    """On the door block's underside: (name, a, b, normal, centre). a is the end nearer the wall."""
+    c = (105.0, 705.0)               # placed with the measured launches (/tmp search, T10 M2 v2): catches 111-116 deg
+    a, b, n = _face(c, ZOMBIE_AIM_R, 50.0)
+    if a[0] > b[0]:
+        a, b = b, a
+    return ("GARY", a, b, n, c)
+
+def _zombie_wall():
+    """On a small block on the right wall below the desk, facing the left flipper. a = lower end (on the wall)."""
+    # on the 61 deg ray from the left flipper's launch point, its lower end ~4 pt off the wall: catches 61-64 deg and
+    # leaves the desk's R (65.7 deg) clear (placed with the measured launches, T10 M2 v2)
+    r = 455.0
+    c = (ZOMBIE_AIM_L[0] + math.cos(math.radians(61)) * r, ZOMBIE_AIM_L[1] + math.sin(math.radians(61)) * r)
+    a, b, n = _face(c, ZOMBIE_AIM_L)
+    lo, hi = (a, b) if a[1] < b[1] else (b, a)
+    return ("PAM", lo, hi, n, c)
+
+ZOMBIE_DOOR = _zombie_door()
+ZOMBIE_WALL = _zombie_wall()
+
+def zombie_wall_block():
+    """Closed: the face's lower end onto the wall, the face, then a roof sloping down to the left from the wall."""
+    _, lo, hi, n, c = ZOMBIE_WALL
+    wall_lo = (_right_wall_x(lo[1] - 4) + 2, lo[1] - 4)
+    roof = (_right_wall_x(hi[1] + 30) + 2, hi[1] + 30)
+    return [wall_lo, lo, hi, roof, wall_lo]
+
 # ---------------------------------------------------------------- parts for the checks
 def room_parts():
     P = {}
@@ -176,13 +220,15 @@ def room_parts():
     P["door inner wall"] = ("poly", door_inner_wall())
     P["door mouth post"] = ("circle", door_pt(0.0, "in"), DOOR_POST_R)
     P["reception desk"] = ("poly", desk()[2])
+    P["zombie wall block"] = ("poly", zombie_wall_block())
     return P
 
 JOINED = [("stairs U (floor-solid)", "stairs mouth post L"), ("stairs U (floor-solid)", "stairs mouth post R"),
-          ("reception desk", "outer wall"),
+          ("reception desk", "outer wall"), ("zombie wall block", "outer wall"),
           ("door block", "door inner wall"), ("door inner wall", "door mouth post"), ("door block", "outer wall")]
 
 # The room's shots, aimed at: name -> (point, which flipper makes it)
 SHOTS = {"STAIRS": ((CX, STAIR_MOUTH_Y + 20), "both"),
          "REVOLVING DOOR": (door_pt(DOOR_SPINNER_T + 10, "in", 0.0), "right"),
+         "GARY": (ZOMBIE_DOOR[4], "right"), "PAM": (ZOMBIE_WALL[4], "left"),
          "B": (barricade()[0][1], "left"), "A": (barricade()[1][1], "left"), "R": (barricade()[2][1], "left")}

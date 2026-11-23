@@ -96,6 +96,9 @@ def named_passages():
     add("reception desk to top lane wall R", "reception desk", "top lane wall R")
     add("reception desk to stairs U", "reception desk", "stairs U (floor-solid)")
     add("reception desk to lane guide post R", "reception desk", "lane guide post R")
+    add("zombie wall block to reception desk (slot by the wall)", "zombie wall block", "reception desk")
+    add("zombie wall block to outlane post R", "zombie wall block", "outlane post R")
+    add("zombie wall block to lane guide post R", "zombie wall block", "lane guide post R")
     return out
 
 def scan_pairs(limit=60.0):
@@ -120,7 +123,8 @@ def shot_fan():
 def shot_clearance():
     """Straight ball path from the sweet spot to each shot, clearance to the nearest part not belonging to the shot."""
     P = floor_parts()
-    own = {"STAIRS": ("stairs",), "REVOLVING DOOR": ("door",), "B": ("reception",), "A": ("reception",), "R": ("reception",)}
+    own = {"STAIRS": ("stairs",), "REVOLVING DOOR": ("door",), "B": ("reception",), "A": ("reception",), "R": ("reception",),
+           "GARY": ("door block",), "PAM": ("zombie wall",)}
     rows = []
     for k, (tgt, who) in R.SHOTS.items():
         for fl, sp in (("left", R.SWEET_L), ("right", R.SWEET_R)):

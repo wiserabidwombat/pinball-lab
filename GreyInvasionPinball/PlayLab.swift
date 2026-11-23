@@ -81,7 +81,7 @@ nonisolated enum PlaySkill: String, CaseIterable, Codable {
     var deadBounces: Bool { style == .expert && LabOverrides.on("Lab.deadBounce") }
 
     /// Round 10: whether they pass a cradled ball to the other flipper when the wanted shot is over there.
-    var passes: Bool { style == .expert && LabOverrides.on("Lab.postPass") }
+    var passes: Bool { style == .expert && LabOverrides.on("Lab.postPass") }   // and see PlayRobotFlipper.passDelay
 
     /// Round 11: whether they trap one ball on a flipper during multiball and play the other.
     var trapsInMultiball: Bool { style == .expert && LabOverrides.on("Lab.mbTrap") }
@@ -210,6 +210,11 @@ struct PlayRobotFlipper {
     /// resting face). About the flipper's stroke time works: CHOMP! measured best at 0.05 (its stroke is ~47 ms;
     /// drains/min 2.23 → 1.59). `-override "Lab.tipLead=0.03"` tries a value on any table.
     var tipLead: Double = 0
+    /// 2026-11-23: the post-pass timing measured for THIS flipper on this table (seconds after the drop), or nil = the
+    /// robot doesn't pass from here and takes its best shot instead. nil everywhere by default: on the four older
+    /// tables no timing from 0.46 to 0.66 s passed reliably (Lab.passExplore runs) and games with passes off drained
+    /// no faster and scored the same or higher. `-override "Lab.postPass=1"` brings the old guessed ladder back.
+    var passDelay: Double? = nil
 
     /// The shots the robot can aim at on a pass.
     func shots(for pass: PlayPass) -> [(name: String, delay: Double)] {
@@ -800,8 +805,11 @@ final class PlayRobot {
                     passExploreIndex += 1
                     return ("pass@" + String(format: "%.2f", d) + "/" + f.name, d)
                 }
-                let d = nextPassDelay()
-                return ("pass@" + String(format: "%.2f", d), d)
+                if let d = f.passDelay { return ("pass@" + String(format: "%.2f", d), d) }
+                if LabOverrides.cg("Lab.postPass", 0) > 0 {      // set explicitly: the old guessed ladder, for A/B runs
+                    let d = nextPassDelay()
+                    return ("pass@" + String(format: "%.2f", d), d)
+                }
             }
             for w in wanted { if let s = shots.first(where: { $0.name == w }) { return (s.name, s.delay) } }
         }

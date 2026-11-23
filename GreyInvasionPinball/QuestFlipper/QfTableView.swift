@@ -167,6 +167,15 @@ struct QfTableView: View {
                         .foregroundStyle(hpColor)
                 }
                 .accessibilityLabel("Health \(game.hp) of \(game.maxHP)")
+                HStack(spacing: 3) {
+                    Image(systemName: "diamond.fill")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("\(game.run.gold)")
+                        .font(.orbitron(13, .bold))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.40))
+                .accessibilityLabel("Gold \(game.run.gold)")
                 if game.multiplier > 1 {
                     Text("\(game.multiplier)X")
                         .font(.orbitron(14, .black))

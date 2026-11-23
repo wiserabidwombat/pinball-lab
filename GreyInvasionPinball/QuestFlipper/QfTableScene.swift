@@ -9,7 +9,10 @@
 //     show their damage (impact speed × the run's ball strength); the trunk only takes damage once all the bark is down.
 // M1 v2: the Old Road is a real ramp (QfRamp, CHOMP!'s ramp layer): up through the island, over the hook, down its wire
 // into the right inlane. Felling the Treant lights the exit: then a made Old Road rides into the Forest Gate and the visit
-// ends ("You Escaped"). Drawn only (they work later): the wisps in the glade.
+// ends ("You Escaped").
+// M1 v3: the monsters that fight back. Three wisps drift on their glade loops (moving toys, one hit each, 5 gold); a
+// ghost fades in at one of the two haunts between the shot paths and can only be hit while it's visible (20 HP, 10
+// gold). Wisps, ghosts and the Treant all count toward the exit (3 to open the Forest Gate).
 // Geometry: QfForestLayout.swift (generated from tools/qf_layout.py, checked by qf_checks.py / qf_sim.py).
 import SpriteKit
 import UIKit
@@ -44,6 +47,36 @@ final class QfTableScene: SKScene, RendererHostedScene {
         var releaseAt: TimeInterval = 0
         var ignored: QfBall? = nil
         var ignoreUntil: TimeInterval = 0
+    }
+
+    /// A wisp: a drifting toy on its glade loop (Cthulhu's moving-toy pattern: a heavy body whose velocity is set every
+    /// frame so it lands exactly on its path, so a ball meeting it is batted with its real speed). One hit beats it.
+    private struct Wisp {
+        let node: SKShapeNode
+        let center: CGPoint
+        let amplitude: CGVector
+        let period: Double
+        var alive = true
+        var respawnAt: TimeInterval = 0
+        var hitPending = false
+
+        func position(at t: TimeInterval) -> CGPoint {
+            let a = 2 * Double.pi * t / period
+            return CGPoint(x: center.x + amplitude.dx * CGFloat(sin(a)), y: center.y + amplitude.dy * CGFloat(sin(2 * a)))
+        }
+    }
+
+    /// The ghost: fades in at a haunt, solid only while visible, fades out, comes back at the other haunt.
+    private struct Ghost {
+        enum Phase { case gone, fadingIn, visible, fadingOut }
+        let node: SKShapeNode
+        var haunt = 1
+        var phase: Phase = .gone
+        var phaseEnds: TimeInterval = 0
+        var hp = QfMonsterHP.ghost
+        var solid = false
+        var lastHit: TimeInterval = -1
+        var banished = false
     }
 
     /// One drop target of the Treant's bark.
@@ -99,6 +132,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private var defeats = 0
     private var exitLit = false
     private var forestGate: SKShapeNode!
+    private var wisps: [Wisp] = []
+    private var ghost: Ghost!
+    static let ghostColor = SKColor(red: 0.80, green: 0.90, blue: 0.95, alpha: 1)
     #if DEBUG
     /// DEBUG `-questRampProbe`: balls fired up the Old Road's mouth at rising speeds; prints what each one does.
     private var probeSpeeds: [CGFloat] = []
@@ -159,7 +195,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M1 v2"
+    static let buildTagText = "T9 M1 v3"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -242,7 +278,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         addSpinner()
         addOldRoad()
         addForestGate()
-        addDrawnGlade()
+        addWisps()
+        addGhost()
         addAreaLabels()
     }
 
@@ -429,17 +466,52 @@ final class QfTableScene: SKScene, RendererHostedScene {
         forestGate = gate
     }
 
-    /// The wisps' home in the glade (drawn only until the wisps move, next rounds).
-    private func addDrawnGlade() {
+    private func addWisps() {
         for w in QfForestLayout.wisps {
-            let dot = SKShapeNode(circleOfRadius: QfForestLayout.wispRadius)
-            dot.position = w.0
-            dot.fillColor = Self.wispColor.withAlphaComponent(0.18)
-            dot.strokeColor = Self.wispColor.withAlphaComponent(0.5)
-            dot.lineWidth = 1
-            dot.zPosition = -18.5
-            addChild(dot)
+            let r = QfForestLayout.wispRadius
+            let node = SKShapeNode(circleOfRadius: r)
+            node.fillColor = Self.wispColor.withAlphaComponent(0.85)
+            node.strokeColor = Self.wispColor
+            node.glowWidth = 4
+            node.lineWidth = 2
+            node.zPosition = -17
+            let body = SKPhysicsBody(circleOfRadius: r)
+            body.isDynamic = true
+            body.mass = 500
+            body.affectedByGravity = false
+            body.allowsRotation = false
+            body.friction = 0
+            body.restitution = 0.6
+            body.linearDamping = 0
+            body.categoryBitMask = QfPhysicsCategory.target
+            body.collisionBitMask = QfPhysicsCategory.ball
+            body.contactTestBitMask = 0
+            node.physicsBody = body
+            let wisp = Wisp(node: node, center: w.0, amplitude: w.1, period: w.2)
+            node.position = wisp.position(at: gameTime)
+            addChild(node)
+            wisps.append(wisp)
         }
+    }
+
+    private func addGhost() {
+        let r = QfForestLayout.ghostRadius
+        let node = SKShapeNode(circleOfRadius: r)
+        node.fillColor = Self.ghostColor.withAlphaComponent(0.85)
+        node.strokeColor = .white
+        node.lineWidth = 2
+        node.zPosition = -17
+        node.alpha = 0
+        node.position = QfForestLayout.ghostHaunts[1]
+        let body = SKPhysicsBody(circleOfRadius: r)
+        body.isDynamic = false
+        body.restitution = 0.4
+        body.friction = 0.1
+        body.categoryBitMask = QfPhysicsCategory.none
+        body.collisionBitMask = QfPhysicsCategory.none
+        node.physicsBody = body
+        addChild(node)
+        ghost = Ghost(node: node, phaseEnds: gameTime + 2)
     }
 
     private func addAreaLabels() {
@@ -513,7 +585,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)\(Self.buildTagText) · \(speed) · treant \(treantHP) · dig \(Int(digSpins))"
+        let text = "\(fps)\(Self.buildTagText) · \(speed) · treant \(treantHP) · dig \(Int(digSpins)) · beaten \(defeats)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -634,7 +706,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
         treantHP = QfMonsterHP.treant
         digSpins = 0
         defeats = 0
+        removeAction(forKey: "gateBanner")
         setExitLit(false)
+        resetMonsters()
         raiseBark()
         game.reset()
         updateStatus()
@@ -654,7 +728,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         if exitLit {
             game.status = "EXIT LIT · THE OLD ROAD LEAVES THE FOREST"
         } else {
-            game.status = "TREANT \(treantHP)/\(QfMonsterHP.treant) · BREAK THE BARK"
+            game.status = "MONSTERS \(defeats)/\(QfTableLayout.exitAfterDefeats) · THEN THE OLD ROAD OUT"
         }
     }
 
@@ -833,6 +907,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         governInlanes()
         updateScoops(now)
         updateBark(now)
+        updateWisps(now, dt: step)
+        updateGhost(now)
         let onPlunger = isBallOnPlunger
         if game.ballOnPlunger != onPlunger { game.ballOnPlunger = onPlunger }
 
@@ -988,6 +1064,138 @@ final class QfTableScene: SKScene, RendererHostedScene {
         return true
     }
 
+    // MARK: - Wisps and the ghost
+
+    private func resetMonsters() {
+        for i in wisps.indices {
+            wisps[i].hitPending = false
+            reviveWisp(i)                                      // every wisp back on its loop (review: after the menu)
+        }
+        ghost.node.removeAllActions()
+        ghost.node.alpha = 0
+        setGhostSolid(false)
+        ghost.phase = .gone
+        ghost.phaseEnds = gameTime + 2
+        ghost.hp = QfMonsterHP.ghost
+        ghost.banished = false
+    }
+
+    private func reviveWisp(_ i: Int) {
+        wisps[i].alive = true
+        wisps[i].hitPending = false
+        let node = wisps[i].node
+        node.position = wisps[i].position(at: gameTime)
+        node.physicsBody?.velocity = .zero
+        node.physicsBody?.categoryBitMask = QfPhysicsCategory.target
+        node.physicsBody?.collisionBitMask = QfPhysicsCategory.ball
+        node.removeAllActions()
+        node.run(.fadeIn(withDuration: 0.4))
+    }
+
+    /// Every frame: live wisps follow their loops; a hit wisp bursts (gold, a defeat); a beaten one drifts back later,
+    /// once no ball is where it would appear.
+    private func updateWisps(_ now: TimeInterval, dt: TimeInterval) {
+        for i in wisps.indices {
+            let node = wisps[i].node
+            guard let body = node.physicsBody else { continue }
+            if wisps[i].hitPending {
+                wisps[i].hitPending = false
+                wisps[i].alive = false
+                wisps[i].respawnAt = now + QfTableLayout.wispRespawn
+                body.categoryBitMask = QfPhysicsCategory.none
+                body.collisionBitMask = QfPhysicsCategory.none
+                body.velocity = .zero
+                Effects.burst(in: self, at: node.position, color: Self.wispColor, count: 14, speed: 200,
+                              lifetime: 0.4, size: 0.3)
+                node.removeAllActions()
+                node.run(.fadeOut(withDuration: 0.15))
+                game.add(QfPoints.target)
+                game.run.gold += QfGold.wisp
+                sfx(.standup)
+                showBanner("WISP · +\(QfGold.wisp) GOLD")
+                monsterDefeated()
+                continue
+            }
+            if !wisps[i].alive {
+                body.velocity = .zero
+                guard now >= wisps[i].respawnAt else { continue }
+                let p = wisps[i].position(at: now)
+                if ballNear(p, clear: QfForestLayout.wispRadius + QfTableLayout.ballRadius + 10) { continue }
+                reviveWisp(i)
+                continue
+            }
+            let target = wisps[i].position(at: now + dt)
+            let d = CGFloat(max(dt, 1.0 / 240))
+            body.velocity = CGVector(dx: (target.x - node.position.x) / d, dy: (target.y - node.position.y) / d)
+        }
+    }
+
+    private func ballNear(_ p: CGPoint, clear: CGFloat) -> Bool {
+        balls.contains { $0.isOnFloor && hypot($0.position.x - p.x, $0.position.y - p.y) < clear }
+    }
+
+    /// The ghost (body changes in update() only). Solid while visible; the Lantern ball (run.lightBall) also hits it
+    /// while it fades.
+    private func setGhostSolid(_ solid: Bool) {
+        ghost.solid = solid
+        ghost.node.physicsBody?.categoryBitMask = solid ? QfPhysicsCategory.target : QfPhysicsCategory.none
+        ghost.node.physicsBody?.collisionBitMask = solid ? QfPhysicsCategory.ball : QfPhysicsCategory.none
+    }
+
+    private func updateGhost(_ now: TimeInterval) {
+        let node = ghost.node
+        if ghost.banished, ghost.phase != .gone {
+            setGhostSolid(false)
+            Effects.burst(in: self, at: node.position, color: Self.ghostColor, count: 16, speed: 180,
+                          lifetime: 0.5, size: 0.3)
+            node.removeAllActions()
+            node.run(.fadeOut(withDuration: 0.25))
+            game.run.gold += QfGold.ghost
+            showBanner("GHOST BANISHED · +\(QfGold.ghost) GOLD")
+            monsterDefeated()
+            ghost.phase = .gone
+            ghost.phaseEnds = now + QfTableLayout.ghostRespawn
+            return
+        }
+        let light = game.run.lightBall
+        guard now >= ghost.phaseEnds else { return }
+        switch ghost.phase {
+        case .gone:
+            let next = 1 - ghost.haunt
+            let p = QfForestLayout.ghostHaunts[next]
+            // never appear on top of a ball: wait until the haunt is clear
+            if ballNear(p, clear: QfForestLayout.ghostRadius + QfTableLayout.ballRadius + 6) { return }
+            ghost.haunt = next
+            ghost.hp = QfMonsterHP.ghost
+            ghost.banished = false
+            node.position = p
+            node.removeAllActions()
+            node.run(.fadeAlpha(to: 0.4, duration: QfTableLayout.ghostFade))
+            ghost.phase = .fadingIn
+            ghost.phaseEnds = now + QfTableLayout.ghostFade
+            if light { setGhostSolid(true) }
+        case .fadingIn:
+            if ballNear(node.position, clear: QfForestLayout.ghostRadius + QfTableLayout.ballRadius + 1) { return }
+            node.removeAllActions()
+            node.run(.fadeAlpha(to: 1, duration: 0.12))
+            setGhostSolid(true)
+            ghost.phase = .visible
+            ghost.phaseEnds = now + QfTableLayout.ghostVisible
+        case .visible:
+            node.removeAllActions()
+            node.run(.fadeAlpha(to: 0.4, duration: 0.12))
+            setGhostSolid(light)
+            ghost.phase = .fadingOut
+            ghost.phaseEnds = now + QfTableLayout.ghostFade
+        case .fadingOut:
+            node.removeAllActions()
+            node.run(.fadeOut(withDuration: 0.2))
+            setGhostSolid(false)
+            ghost.phase = .gone
+            ghost.phaseEnds = now + QfTableLayout.ghostGone
+        }
+    }
+
     // MARK: - The Old Road and the Forest Gate
 
     /// The ramps' switches, from the ball's move this frame (CHOMP!'s updateRampLayer): the entry puts a floor ball on
@@ -1053,7 +1261,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         if !exitLit, defeats >= QfTableLayout.exitAfterDefeats {
             setExitLit(true)
             // after the defeat's own banner (review: TREANT FELLED was overwritten at once)
-            run(.sequence([.wait(forDuration: 1.2), .run { [weak self] in self?.showBanner("THE FOREST GATE OPENS") }]))
+            run(.sequence([.wait(forDuration: 1.2), .run { [weak self] in self?.showBanner("THE FOREST GATE OPENS") }]),
+                withKey: "gateBanner")
         }
         updateStatus()
     }
@@ -1264,6 +1473,25 @@ final class QfTableScene: SKScene, RendererHostedScene {
         case QfPhysicsCategory.target:
             let impact = hypot(ballNode.previousVelocity.dx, ballNode.previousVelocity.dy)
             let damage = QfDamage.of(impactSpeed: impact, strength: game.run.ballStrength)
+            if let i = wisps.firstIndex(where: { $0.node === node }) {
+                guard wisps[i].alive, !wisps[i].hitPending else { break }
+                wisps[i].hitPending = true                    // beaten in update()
+                break
+            }
+            if node === ghost.node {
+                guard ghost.solid, !ghost.banished, gameTime - ghost.lastHit > 0.15 else { break }
+                ghost.lastHit = gameTime
+                ghost.hp = max(0, ghost.hp - damage)
+                sfx(.standup)
+                hitHaptic.impactOccurred(intensity: 0.8)
+                game.add(QfPoints.target)
+                if ghost.hp == 0 {
+                    ghost.banished = true                      // vanishes in update()
+                } else {
+                    showBanner("GHOST −\(damage) · \(ghost.hp) HP LEFT")
+                }
+                break
+            }
             if let i = bark.firstIndex(where: { $0.node === node }) {
                 guard !bark[i].isDown, !bark[i].hitPending else { break }
                 bark[i].hitPending = true                     // drops in update()
@@ -1289,6 +1517,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 if treantHP == 0 {
                     showBanner("TREANT FELLED")
                     game.add(QfPoints.treantFelled)
+                    game.run.gold += QfGold.treant
                     monsterDefeated()
                     cameraRig.shake(strength: 6, duration: 0.5)
                     treantHP = QfMonsterHP.treant              // M1 placeholder: a new Treant takes its place

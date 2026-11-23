@@ -101,9 +101,18 @@ enum QfTableLayout {
     }
     /// The Forest Gate: a ball made up the Old Road while the exit is lit rides into it at this speed.
     static let gateRideSpeed: CGFloat = 500
-    /// Monsters to defeat before the exit lights. Placeholder: 1 while the Treant is the only monster; ~3 once the
-    /// wisps and ghosts fight back.
-    static let exitAfterDefeats = 1
+    /// Monsters to defeat before the exit lights (wisps, ghosts and the Treant all count). T9 M1 v3: 3.
+    static let exitAfterDefeats = 3
+
+    // MARK: Monsters (T9 M1 v3)
+    /// A beaten wisp drifts back after this long (if no ball is in its way).
+    static let wispRespawn: TimeInterval = 12
+    /// A ghost's cycle at its haunt: gone, fading in (not hittable yet), visible (solid), fading out.
+    static let ghostGone: TimeInterval = 4
+    static let ghostFade: TimeInterval = 0.6
+    static let ghostVisible: TimeInterval = 5
+    /// A beaten ghost stays away this long before the next one comes.
+    static let ghostRespawn: TimeInterval = 10
 
     // MARK: Game
     static let bannerSeconds: TimeInterval = 1.6

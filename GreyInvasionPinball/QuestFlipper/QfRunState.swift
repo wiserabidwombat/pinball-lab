@@ -17,6 +17,8 @@ struct QfRunState {
     var drainDamage: Int
     var gold: Int = 0
     var loot: [String] = []
+    /// The Lantern ball (Haunted Forest loot, later): its light hits ghosts even while they're faded.
+    var lightBall = false
 
     /// The Knight (the starting class): the most HP, a hard-hitting ball. Placeholder numbers: 3 drains, like 3 balls.
     nonisolated static let knight = QfRunState(className: "Knight", maxHP: 30, hp: 30, ballStrength: 1.0, armour: 0, drainDamage: 10)
@@ -34,4 +36,13 @@ enum QfDamage {
 /// The Haunted Forest's monsters' HP (placeholders until the rules milestone; tougher regions get bigger numbers).
 enum QfMonsterHP {
     static let treant = 60
+    /// T9 M1 v3: a ghost takes about two good hits.
+    static let ghost = 20
+}
+
+/// Gold each monster drops (placeholders; spent at merchants on the map later).
+enum QfGold {
+    static let wisp = 5
+    static let ghost = 10
+    static let treant = 25
 }

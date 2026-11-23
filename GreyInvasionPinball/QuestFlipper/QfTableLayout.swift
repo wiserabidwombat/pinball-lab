@@ -114,6 +114,26 @@ enum QfTableLayout {
     /// A beaten ghost stays away this long before the next one comes.
     static let ghostRespawn: TimeInterval = 10
 
+    // MARK: The drifting ghost and the roots (T9 M1 v4)
+    /// The drifting ghost crosses the lower table (sides alternate) along y = base + amp sin(waves π f), f 0 → 1;
+    /// the ball passes through it. A touch while it's visible deals bonus damage (×1.5).
+    static let drifterFromX: CGFloat = 70
+    static let drifterToX: CGFloat = 530
+    static let drifterBaseY: CGFloat = 600
+    static let drifterAmplitude: CGFloat = 40
+    static let drifterWaves: CGFloat = 2.5
+    static let drifterRadius: CGFloat = 16
+    static let drifterCross: TimeInterval = 7
+    static let drifterPause: TimeInterval = 14
+    static let drifterFade: TimeInterval = 0.6
+    static let drifterBonus: CGFloat = 1.5
+    /// The Treant fight's roots on the right sling's top: a slower ball than this is grabbed; faster knocks them back.
+    static let rootsGrabSpeed: CGFloat = 350
+    static let rootsHold: TimeInterval = 1.0
+    static let rootsKnockedBack: TimeInterval = 8
+    /// After letting a ball go, the roots ignore it this long.
+    static let rootsIgnore: TimeInterval = 1.5
+
     // MARK: Game
     static let bannerSeconds: TimeInterval = 1.6
     /// The bark rises again this long after it all fell, if the Treant hasn't been felled.

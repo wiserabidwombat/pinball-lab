@@ -38,11 +38,14 @@ enum QfMonsterHP {
     static let treant = 60
     /// T9 M1 v3: a ghost takes about two good hits.
     static let ghost = 20
+    /// T9 M1 v4: the drifting ghost in the lower table; one good touch while it's visible.
+    static let drifter = 15
 }
 
 /// Gold each monster drops (placeholders; spent at merchants on the map later).
 enum QfGold {
     static let wisp = 5
     static let ghost = 10
+    static let drifter = 10
     static let treant = 25
 }

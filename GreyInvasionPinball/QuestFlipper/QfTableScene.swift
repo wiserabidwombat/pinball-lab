@@ -13,6 +13,9 @@
 // M1 v3: the monsters that fight back. Three wisps drift on their glade loops (moving toys, one hit each, 5 gold); a
 // ghost fades in at one of the two haunts between the shot paths and can only be hit while it's visible (20 HP, 10
 // gold). Wisps, ghosts and the Treant all count toward the exit (3 to open the Forest Gate).
+// M1 v4: a drifting ghost crosses the lower table every so often; the ball passes through it, and a touch while it's
+// visible deals bonus damage (15 HP, 10 gold, a defeat). During the Treant fight (any bark down, or the Treant hurt)
+// roots rise on the right sling's top: a slow ball is grabbed for a second; a fast hit knocks them back for 8 s.
 // Geometry: QfForestLayout.swift (generated from tools/qf_layout.py, checked by qf_checks.py / qf_sim.py).
 import SpriteKit
 import UIKit
@@ -133,6 +136,23 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private var exitLit = false
     private var forestGate: SKShapeNode!
     private var wisps: [Wisp] = []
+    // The drifting ghost (no physics body: touches are found by distance, the ball passes through).
+    private var drifter: SKShapeNode!
+    private var drifterStart: TimeInterval = 0
+    private var drifterLeftToRight = true
+    private var drifterActive = false
+    private var drifterHP = QfMonsterHP.drifter
+    private var drifterLastTouch: TimeInterval = -1
+    // The roots (a pop-up on the right sling's top during the Treant fight).
+    private var roots: SKShapeNode!
+    private var rootsUp = false
+    private var rootsDownUntil: TimeInterval = 0
+    private var rootsKnockPending = false
+    private var rootsHeld: QfBall?
+    private var rootsReleaseAt: TimeInterval = 0
+    private var rootsIgnored: QfBall?
+    private var rootsIgnoreUntil: TimeInterval = 0
+    static let rootsColor = SKColor(red: 0.45, green: 0.30, blue: 0.18, alpha: 1)
     private var ghost: Ghost!
     static let ghostColor = SKColor(red: 0.80, green: 0.90, blue: 0.95, alpha: 1)
     #if DEBUG
@@ -195,7 +215,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M1 v3"
+    static let buildTagText = "T9 M1 v4"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -280,6 +300,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         addForestGate()
         addWisps()
         addGhost()
+        addDrifter()
+        addRoots()
         addAreaLabels()
     }
 
@@ -494,6 +516,38 @@ final class QfTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    private func addDrifter() {
+        let node = SKShapeNode(circleOfRadius: QfTableLayout.drifterRadius)
+        node.fillColor = Self.ghostColor.withAlphaComponent(0.45)
+        node.strokeColor = Self.ghostColor
+        node.lineWidth = 1.5
+        node.glowWidth = 3
+        node.zPosition = 12                                   // over the floor ball: it passes through
+        node.alpha = 0
+        addChild(node)
+        drifter = node
+        drifterStart = gameTime + QfTableLayout.drifterPause / 2
+    }
+
+    private func addRoots() {
+        let node = SKShapeNode(circleOfRadius: QfForestLayout.rootsRadius)
+        node.position = QfForestLayout.roots
+        node.fillColor = Self.rootsColor
+        node.strokeColor = SKColor(red: 0.70, green: 0.50, blue: 0.30, alpha: 1)
+        node.lineWidth = 2
+        node.zPosition = -17
+        node.alpha = 0
+        let body = SKPhysicsBody(circleOfRadius: QfForestLayout.rootsRadius)
+        body.isDynamic = false
+        body.restitution = 0.2
+        body.friction = 0.4
+        body.categoryBitMask = QfPhysicsCategory.none
+        body.collisionBitMask = QfPhysicsCategory.none
+        node.physicsBody = body
+        addChild(node)
+        roots = node
+    }
+
     private func addGhost() {
         let r = QfForestLayout.ghostRadius
         let node = SKShapeNode(circleOfRadius: r)
@@ -601,6 +655,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     private func removeBall(_ ball: QfBall) {
+        if rootsHeld === ball { rootsHeld = nil }
         rides.removeAll(where: { $0.ball === ball })
         for i in scoops.indices where scoops[i].held === ball { scoops[i].held = nil }
         ball.removeFromParent()
@@ -608,6 +663,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     private func removeAllBalls() {
+        rootsHeld = nil
         rides.removeAll()
         for i in scoops.indices { scoops[i].held = nil; scoops[i].ignored = nil }
         balls.forEach { $0.removeFromParent() }
@@ -709,6 +765,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         removeAction(forKey: "gateBanner")
         setExitLit(false)
         resetMonsters()
+        resetDrifterAndRoots()
         raiseBark()
         game.reset()
         updateStatus()
@@ -909,6 +966,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         updateBark(now)
         updateWisps(now, dt: step)
         updateGhost(now)
+        updateDrifter(now)
+        updateRoots(now)
         let onPlunger = isBallOnPlunger
         if game.ballOnPlunger != onPlunger { game.ballOnPlunger = onPlunger }
 
@@ -1196,6 +1255,147 @@ final class QfTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    // MARK: - The drifting ghost and the roots
+
+    private func resetDrifterAndRoots() {
+        drifterActive = false
+        drifter.removeAllActions()
+        drifter.alpha = 0
+        drifterStart = gameTime + QfTableLayout.drifterPause / 2
+        drifterHP = QfMonsterHP.drifter
+        if let b = rootsHeld { b.setLayer(.floor) }
+        rootsHeld = nil
+        rootsIgnored = nil
+        rootsIgnoreUntil = 0
+        rootsKnockPending = false
+        rootsDownUntil = 0
+        setRootsUp(false)
+    }
+
+    private func drifterPosition(_ f: CGFloat) -> CGPoint {
+        let ff = drifterLeftToRight ? f : 1 - f
+        let x = QfTableLayout.drifterFromX + (QfTableLayout.drifterToX - QfTableLayout.drifterFromX) * ff
+        let y = QfTableLayout.drifterBaseY + QfTableLayout.drifterAmplitude * sin(QfTableLayout.drifterWaves * .pi * ff)
+        return CGPoint(x: x, y: y)
+    }
+
+    /// The drifting ghost: waits, fades in at one side, crosses, fades out at the other; sides alternate. A floor
+    /// ball touching it while it's fully visible deals bonus damage; it has no body, so the ball passes through.
+    private func updateDrifter(_ now: TimeInterval) {
+        let cross = QfTableLayout.drifterCross, fade = QfTableLayout.drifterFade
+        if !drifterActive {
+            guard now >= drifterStart else { return }
+            drifterActive = true
+            drifterHP = QfMonsterHP.drifter
+            drifter.position = drifterPosition(0)
+            drifter.removeAllActions()
+        }
+        let t = now - drifterStart
+        guard t < cross else {
+            drifterActive = false
+            drifterLeftToRight.toggle()
+            drifterStart = now + QfTableLayout.drifterPause
+            return
+        }
+        drifter.position = drifterPosition(CGFloat(t / cross))
+        drifter.alpha = max(0, min(1, CGFloat(t / fade), CGFloat((cross - t) / fade)))   // on game time (review)
+        guard t > fade, t < cross - fade, now - drifterLastTouch > 0.4 else { return }
+        let reach = QfTableLayout.drifterRadius + QfTableLayout.ballRadius
+        for ball in balls where ball.isOnFloor {
+            guard hypot(ball.position.x - drifter.position.x, ball.position.y - drifter.position.y) < reach,
+                  let v = ball.physicsBody?.velocity else { continue }
+            drifterLastTouch = now
+            let damage = QfDamage.of(impactSpeed: hypot(v.dx, v.dy) * QfTableLayout.drifterBonus,
+                                     strength: game.run.ballStrength)
+            drifterHP = max(0, drifterHP - damage)
+            game.add(QfPoints.target)
+            sfx(.standup)
+            if drifterHP == 0 {
+                Effects.burst(in: self, at: drifter.position, color: Self.ghostColor, count: 16, speed: 180,
+                              lifetime: 0.5, size: 0.3)
+                drifter.removeAllActions()
+                drifter.run(.fadeOut(withDuration: 0.2))
+                drifterActive = false
+                drifterLeftToRight.toggle()
+                drifterStart = now + QfTableLayout.drifterPause
+                game.run.gold += QfGold.drifter
+                showBanner("DRIFTING GHOST BANISHED · +\(QfGold.drifter) GOLD")
+                monsterDefeated()
+            } else {
+                showBanner("DRIFTING GHOST −\(damage) · \(drifterHP) HP LEFT")
+            }
+            return
+        }
+    }
+
+    /// The Treant fight: any bark down, or the Treant already hurt.
+    private var treantFight: Bool {
+        bark.contains(where: { $0.isDown }) || treantHP < QfMonsterHP.treant
+    }
+
+    private func setRootsUp(_ up: Bool) {
+        rootsUp = up
+        roots.physicsBody?.categoryBitMask = up ? QfPhysicsCategory.target : QfPhysicsCategory.none
+        roots.physicsBody?.collisionBitMask = up ? QfPhysicsCategory.ball : QfPhysicsCategory.none
+        roots.removeAllActions()
+        roots.run(up ? .fadeIn(withDuration: 0.3) : .fadeOut(withDuration: 0.3))
+    }
+
+    /// The roots (body changes here only): up during the Treant fight unless knocked back; a slow ball near them is
+    /// grabbed (held on the ride layer) for a moment, then dropped.
+    private func updateRoots(_ now: TimeInterval) {
+        if let held = rootsHeld {
+            held.physicsBody?.velocity = .zero
+            if now >= rootsReleaseAt {
+                rootsHeld = nil
+                held.setLayer(.floor)
+                // pushed off to its side so it can't balance on top of the roots (review)
+                let side: CGFloat = held.position.x < QfForestLayout.roots.x ? -1 : 1
+                held.physicsBody?.velocity = CGVector(dx: side * 110, dy: -120)
+                held.previousPosition = held.position
+                rootsIgnored = held
+                rootsIgnoreUntil = now + QfTableLayout.rootsIgnore
+            }
+            return
+        }
+        if rootsKnockPending {
+            rootsKnockPending = false
+            if rootsUp {
+                setRootsUp(false)
+                rootsDownUntil = now + QfTableLayout.rootsKnockedBack
+                game.add(QfPoints.target)
+                sfx(.standup)
+                showBanner("ROOTS KNOCKED BACK")
+                return
+            }
+        }
+        let want = treantFight && now >= rootsDownUntil && !game.isGameOver
+        if want && !rootsUp {
+            // never rise into a ball
+            if !ballNear(QfForestLayout.roots, clear: QfForestLayout.rootsRadius + QfTableLayout.ballRadius + 6) {
+                setRootsUp(true)
+                showBanner("ROOTS RISE")
+            }
+        } else if !want && rootsUp {
+            setRootsUp(false)
+        }
+        guard rootsUp else { return }
+        let reach = QfForestLayout.rootsRadius + QfTableLayout.ballRadius + 6
+        for ball in balls where ball.isOnFloor {
+            if ball === rootsIgnored, now < rootsIgnoreUntil { continue }
+            guard let v = ball.physicsBody?.velocity, hypot(v.dx, v.dy) < QfTableLayout.rootsGrabSpeed,
+                  hypot(ball.position.x - QfForestLayout.roots.x, ball.position.y - QfForestLayout.roots.y) < reach
+            else { continue }
+            rootsHeld = ball
+            rootsReleaseAt = now + QfTableLayout.rootsHold
+            ball.setLayer(.ride)
+            ball.physicsBody?.velocity = .zero
+            hitHaptic.impactOccurred(intensity: 0.5)
+            showBanner("THE ROOTS GRAB YOU")
+            return
+        }
+    }
+
     // MARK: - The Old Road and the Forest Gate
 
     /// The ramps' switches, from the ball's move this frame (CHOMP!'s updateRampLayer): the entry puts a floor ball on
@@ -1473,6 +1673,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
         case QfPhysicsCategory.target:
             let impact = hypot(ballNode.previousVelocity.dx, ballNode.previousVelocity.dy)
             let damage = QfDamage.of(impactSpeed: impact, strength: game.run.ballStrength)
+            if node === roots {
+                if impact >= QfTableLayout.rootsGrabSpeed { rootsKnockPending = true }   // sinks in update()
+                break
+            }
             if let i = wisps.firstIndex(where: { $0.node === node }) {
                 guard wisps[i].alive, !wisps[i].hitPending else { break }
                 wisps[i].hitPending = true                    // beaten in update()

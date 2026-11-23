@@ -276,7 +276,9 @@ def main():
             checks.append(("FAIL", f"{k.split('_')[0]} step produced nothing: {summary[k]}"))
     rc = show(name or args.table, checks, path)
     print(f"  took {summary['minutes']} min" + ("" if old else " · no accepted results yet: rerun with --accept to save these"))
-    if args.accept:
+    if args.accept and any(k in summary for k in ("stuck_error", "windows_error", "play_error")):
+        print("  NOT accepted: a step produced nothing (an incomplete reference would hide later problems)")
+    elif args.accept:
         os.makedirs(ACCEPTED, exist_ok=True)
         json.dump(summary, open(acc_path, "w"), indent=1)
         print(f"  accepted → {os.path.relpath(acc_path, ROOT)}")

@@ -1,0 +1,205 @@
+{
+ "table": "cthulhu",
+ "date": "2026-11-23T03-10-24Z",
+ "fast": "8",
+ "stuck": {
+  "drops": 80,
+  "stuck": 1,
+  "moving": 0,
+  "freed": 0,
+  "spots": [
+   [
+    558,
+    129,
+    1,
+    367
+   ]
+  ],
+  "file": "shotlab-cthulhu-rising-scatter-2026-11-23T03-11-29Z.json"
+ },
+ "windows": {
+  "trials": 288,
+  "shots": {
+   "left": {
+    "library": {
+     "trials": 13,
+     "mid": 0.308,
+     "lo": 0.283,
+     "hi": 0.408
+    },
+    "sigil": {
+     "trials": 15,
+     "mid": 0.525,
+     "lo": 0.333,
+     "hi": 0.55
+    },
+    "lagoon": {
+     "trials": 9,
+     "mid": 0.383,
+     "lo": 0.35,
+     "hi": 0.4
+    },
+    "lane": {
+     "trials": 2,
+     "mid": 0.392,
+     "lo": 0.392,
+     "hi": 0.392
+    },
+    "rightRamp": {
+     "trials": 8,
+     "mid": 0.454,
+     "lo": 0.442,
+     "hi": 0.475
+    }
+   },
+   "right": {
+    "library": {
+     "trials": 16,
+     "mid": 0.313,
+     "lo": 0.283,
+     "hi": 0.575
+    },
+    "lane": {
+     "trials": 4,
+     "mid": 0.383,
+     "lo": 0.375,
+     "hi": 0.475
+    },
+    "lagoon": {
+     "trials": 5,
+     "mid": 0.417,
+     "lo": 0.417,
+     "hi": 0.45
+    },
+    "orbit": {
+     "trials": 9,
+     "mid": 0.5,
+     "lo": 0.483,
+     "hi": 0.508
+    }
+   },
+   "upper": {
+    "lagoon": {
+     "trials": 34,
+     "mid": 0.358,
+     "lo": 0.292,
+     "hi": 0.533
+    },
+    "lane": {
+     "trials": 12,
+     "mid": 0.442,
+     "lo": 0.417,
+     "hi": 0.533
+    },
+    "library": {
+     "trials": 5,
+     "mid": 0.458,
+     "lo": 0.458,
+     "hi": 0.542
+    }
+   }
+  },
+  "drains": {
+   "left": 2,
+   "right": 2
+  },
+  "file": "shotlab-cthulhu-rising-2026-11-23T03-16-13Z.json"
+ },
+ "play": {
+  "games": 8,
+  "drains_per_min": 1.46,
+  "lo": 1.0,
+  "hi": 1.93,
+  "skills": {
+   "beginner": {
+    "games": 2,
+    "drains_per_min": 2.48,
+    "lo": 0.5,
+    "hi": 4.47,
+    "seconds_per_ball": 24,
+    "verdict": "in range",
+    "median_score": 81075.0
+   },
+   "intermediate": {
+    "games": 2,
+    "drains_per_min": 1.8,
+    "lo": 0.55,
+    "hi": 3.04,
+    "seconds_per_ball": 44,
+    "verdict": "short",
+    "median_score": 99620.0
+   },
+   "advanced": {
+    "games": 2,
+    "drains_per_min": 1.0,
+    "lo": 0.31,
+    "hi": 1.7,
+    "seconds_per_ball": 80,
+    "verdict": "short",
+    "median_score": 825895.0
+   },
+   "expert": {
+    "games": 2,
+    "drains_per_min": 1.44,
+    "lo": 0.73,
+    "hi": 2.14,
+    "seconds_per_ball": 111,
+    "verdict": "cap too low to tell (a ball can show at most ~160 s; raise CAP)",
+    "median_score": 8393145.0
+   }
+  },
+  "incidents": [],
+  "objectives": [
+   "clue",
+   "libraryLit",
+   "tome1",
+   "tome1Read",
+   "tome2",
+   "tome2Read",
+   "tome3",
+   "tome3Read",
+   "ritualLit",
+   "ritual",
+   "candle",
+   "summoning",
+   "awakening",
+   "tentacleCut",
+   "eyeOpen",
+   "eyeStruck",
+   "banished",
+   "candlesLit",
+   "sigilsBroken",
+   "kickback",
+   "skillShot"
+  ],
+  "reached": [
+   "awakening",
+   "banished",
+   "candle",
+   "candlesLit",
+   "clue",
+   "eyeOpen",
+   "eyeStruck",
+   "kickback",
+   "libraryLit",
+   "ritual",
+   "ritualLit",
+   "sigilsBroken",
+   "skillShot",
+   "summoning",
+   "tentacleCut",
+   "tome1",
+   "tome1Read",
+   "tome2",
+   "tome2Read",
+   "tome3",
+   "tome3Read"
+  ],
+  "flags": [
+   "no 60 Hz window in the Shot Lab for lagoon from the left flipper (the robot doesn't aim at them on that pass)"
+  ],
+  "file": "playlab-cthulhu-rising-2026-11-23T03-17-04Z.json"
+ },
+ "table_name": "Cthulhu Rising",
+ "minutes": 15.0
+}

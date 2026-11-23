@@ -1,0 +1,228 @@
+{
+ "table": "grandtour",
+ "date": "2026-11-23T07-07-13Z",
+ "fast": "8",
+ "stuck": {
+  "drops": 80,
+  "stuck": 4,
+  "moving": 0,
+  "freed": 0,
+  "spots": [
+   [
+    570,
+    129,
+    3,
+    547
+   ],
+   [
+    558,
+    50,
+    1,
+    26
+   ]
+  ],
+  "file": "shotlab-grand-tour-scatter-2026-11-23T07-08-30Z.json"
+ },
+ "windows": {
+  "trials": 192,
+  "shots": {
+   "left": {
+    "rocket": {
+     "trials": 25,
+     "mid": 0.342,
+     "lo": 0.3,
+     "hi": 0.583
+    },
+    "ketK": {
+     "trials": 9,
+     "mid": 0.392,
+     "lo": 0.383,
+     "hi": 0.408
+    },
+    "ketE": {
+     "trials": 16,
+     "mid": 0.446,
+     "lo": 0.417,
+     "hi": 0.475
+    },
+    "ketT": {
+     "trials": 2,
+     "mid": 0.483,
+     "lo": 0.483,
+     "hi": 0.483
+    },
+    "saturn": {
+     "trials": 9,
+     "mid": 0.508,
+     "lo": 0.492,
+     "hi": 0.517
+    },
+    "rightOrbit": {
+     "trials": 6,
+     "mid": 0.538,
+     "lo": 0.525,
+     "hi": 0.542
+    },
+    "sample": {
+     "trials": 2,
+     "mid": 0.558,
+     "lo": 0.558,
+     "hi": 0.558
+    }
+   },
+   "right": {
+    "rocket": {
+     "trials": 22,
+     "mid": 0.342,
+     "lo": 0.3,
+     "hi": 0.4
+    },
+    "roc": {
+     "trials": 14,
+     "mid": 0.533,
+     "lo": 0.392,
+     "hi": 0.558
+    },
+    "moon": {
+     "trials": 18,
+     "mid": 0.467,
+     "lo": 0.433,
+     "hi": 0.583
+    },
+    "leftOrbit": {
+     "trials": 8,
+     "mid": 0.504,
+     "lo": 0.492,
+     "hi": 0.517
+    },
+    "sample": {
+     "trials": 1,
+     "mid": 0.567,
+     "lo": 0.567,
+     "hi": 0.567
+    }
+   }
+  },
+  "drains": {},
+  "file": "shotlab-grand-tour-2026-11-23T07-11-23Z.json"
+ },
+ "play": {
+  "games": 8,
+  "drains_per_min": 0.84,
+  "lo": 0.54,
+  "hi": 1.18,
+  "skills": {
+   "beginner": {
+    "games": 2,
+    "drains_per_min": 1.15,
+    "lo": 0.4,
+    "hi": 1.9,
+    "seconds_per_ball": 78,
+    "verdict": "long",
+    "median_score": 519185.0
+   },
+   "intermediate": {
+    "games": 2,
+    "drains_per_min": 0.46,
+    "lo": 0.12,
+    "hi": 0.8,
+    "seconds_per_ball": 192,
+    "verdict": "long",
+    "median_score": 2713125.0
+   },
+   "advanced": {
+    "games": 2,
+    "drains_per_min": 0.9,
+    "lo": 0.28,
+    "hi": 1.52,
+    "seconds_per_ball": 89,
+    "verdict": "short",
+    "median_score": 1046350.0
+   },
+   "expert": {
+    "games": 2,
+    "drains_per_min": 1.39,
+    "lo": 0.36,
+    "hi": 2.41,
+    "seconds_per_ball": 50,
+    "verdict": "cap too low to tell (a ball can show at most ~160 s; raise CAP)",
+    "median_score": 442460.0
+   }
+  },
+  "incidents": [],
+  "objectives": [
+   "orbt",
+   "multiplier",
+   "star",
+   "countdown",
+   "liftoff",
+   "missionControl",
+   "rocketWord",
+   "moon",
+   "saturn",
+   "leftOrbit",
+   "rightOrbit",
+   "samples",
+   "rover",
+   "kickback",
+   "rocketPostSave",
+   "ballSaved",
+   "stopStarted",
+   "mercuryVisited",
+   "venusVisited",
+   "marsVisited",
+   "moonVisited",
+   "jackpot",
+   "jupiterVisited",
+   "saturnVisited",
+   "uranusVisited",
+   "neptuneVisited",
+   "sunVisited",
+   "combo",
+   "extraBall",
+   "bonus",
+   "stopTimedOut",
+   "stopDrained"
+  ],
+  "reached": [
+   "bonus",
+   "combo",
+   "countdown",
+   "extraBall",
+   "kickback",
+   "leftOrbit",
+   "liftoff",
+   "mercuryVisited",
+   "missionControl",
+   "moon",
+   "multiplier",
+   "orbt",
+   "rightOrbit",
+   "rocketPostSave",
+   "rocketWord",
+   "rover",
+   "samples",
+   "saturn",
+   "star",
+   "stopStarted"
+  ],
+  "flags": [
+   "no 60 Hz window in the Shot Lab for ketE, ketK, saturn from the left flipper (the robot doesn't aim at them on that pass)",
+   "objective 'ballSaved' was never reached by an advanced or expert robot",
+   "objective 'venusVisited' was never reached by an advanced or expert robot",
+   "objective 'marsVisited' was never reached by an advanced or expert robot",
+   "objective 'moonVisited' was never reached by an advanced or expert robot",
+   "objective 'jackpot' was never reached by an advanced or expert robot",
+   "objective 'jupiterVisited' was never reached by an advanced or expert robot",
+   "objective 'saturnVisited' was never reached by an advanced or expert robot",
+   "objective 'uranusVisited' was never reached by an advanced or expert robot",
+   "objective 'neptuneVisited' was never reached by an advanced or expert robot",
+   "objective 'sunVisited' was never reached by an advanced or expert robot",
+   "objective 'stopTimedOut' was never reached by an advanced or expert robot",
+   "objective 'stopDrained' was never reached by an advanced or expert robot"
+  ],
+  "file": "playlab-grand-tour-2026-11-23T07-12-05Z.json"
+ },
+ "table_name": "Grand Tour",
+ "minutes": 16.8
+}

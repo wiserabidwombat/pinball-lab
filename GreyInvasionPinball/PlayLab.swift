@@ -293,6 +293,8 @@ final class PlayRobot {
     /// Round 10: post passes — the late-flip delays tried (seconds after the drop), the one in flight (which flipper
     /// should receive it, by when, under which name) and the tally per delay: "pass@0.54" → [tried, made].
     static let passLadder = [0.52, 0.54, 0.56]
+    static let passExploreLadder: [Double] = [0.46, 0.48, 0.50, 0.52, 0.54, 0.56, 0.58, 0.60, 0.62, 0.64, 0.66]
+    private var passExploreIndex = Int.random(in: 0..<11)
     private var pendingPass: (flipper: Int, until: TimeInterval, target: String)?
     private(set) var passResults: [String: [Int]] = [:]
     /// Round 11: multiball traps — whether the cradle in hand is being held because another ball is loose, and how
@@ -789,6 +791,15 @@ final class PlayRobot {
             if skill.passes, !f.upper, let w = wanted.first, !shots.contains(where: { $0.name == w }),
                let other = flippers.first(where: { $0.name != f.name && !$0.upper }),
                other.shots(for: pass).contains(where: { $0.name == w }) {
+                // 2026-11-22: `-override "Lab.passExplore=1"` measures the pass instead of playing it: every pass takes
+                // the next delay of a wide ladder in turn and is tallied per delay AND flipper ("pass@0.58/left"), so a
+                // run shows which delay passes from which flipper on this table (the 0.52–0.56 ladder was a guess:
+                // 18–29% made on the four older tables).
+                if LabOverrides.on("Lab.passExplore", false) {
+                    let d = PlayRobot.passExploreLadder[passExploreIndex % PlayRobot.passExploreLadder.count]
+                    passExploreIndex += 1
+                    return ("pass@" + String(format: "%.2f", d) + "/" + f.name, d)
+                }
                 let d = nextPassDelay()
                 return ("pass@" + String(format: "%.2f", d), d)
             }

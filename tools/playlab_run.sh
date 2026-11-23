@@ -99,6 +99,7 @@ case "$TABLE" in
   lamplight)    PAT="playlab-the-lamplight-*.json";;
   greyinvasion) PAT="playlab-grey-invasion-*.json";;
   cthulhu)      PAT="playlab-cthulhu-rising-*.json";;
+  grandtour)    PAT="playlab-grand-tour-*.json";;    # was missing: every Grand Tour run ended "No new report"
   *)            PAT="playlab-$TABLE-*.json";;
 esac
 MARKER="$DERIVED/launch-$TABLE.marker"

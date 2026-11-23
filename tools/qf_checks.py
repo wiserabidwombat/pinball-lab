@@ -81,7 +81,11 @@ JOINED_OK |= J(("well lower rim", "well post lo"), ("well roof", "well post hi")
                ("bark 1", "bark 3"), ("bark 2", "island"), ("bark 1", "trunk"), ("bark 2", "trunk"), ("bark 3", "trunk"),
                # on opposite sides of the shooter lane's inner wall
                ("lantern E block", "outer wall"),
-               ("roots (mode)", "sling top post R"), ("roots (mode)", "sling R"))
+               ("roots (mode)", "sling top post R"), ("roots (mode)", "sling R"),
+               ("upper flipper", "upper flipper pivot"), ("upper flipper", "upper flipper tip"),
+               ("upper flipper pivot", "upper flipper tip"),
+               ("diverter (mode)", "outer wall"), ("diverter (mode)", "upper flipper pivot"),
+               ("diverter (mode)", "upper flipper"))
 
 def named_passages():
     P = L.floor_parts()
@@ -128,7 +132,35 @@ def named_passages():
     add("gravestone to raised flipper L (mode)", "gravestone (mode)", ("poly", L.flipper_poly(L.PIVOT_L, "L", L.FLIP_TRAVEL)[1] + [L.flipper_poly(L.PIVOT_L, "L", L.FLIP_TRAVEL)[1][0]]))
     add("sling tip post L to raised flipper", "sling tip post L",
         ("poly", L.flipper_poly(L.PIVOT_L, "L", L.FLIP_TRAVEL)[1] + [L.flipper_poly(L.PIVOT_L, "L", L.FLIP_TRAVEL)[1][0]]))
+    # M1 round 2: the upper flipper
+    uf_rest = ("poly", L.uf_poly()[1] + [L.uf_poly()[1][0]])
+    uf_up = ("poly", L.uf_poly(L.FLIP_TRAVEL)[1] + [L.uf_poly(L.FLIP_TRAVEL)[1][0]])
+    add("UF: pivot to the arch (orbits ride past)", "upper flipper pivot", "outer wall")
+    add("UF: resting tip to the island roof", ("circle", L.uf_poly()[0], L.UF_RT), P["island"])
+    add("UF: resting flipper to the island roof", uf_rest, P["island"])
+    add("UF: diverter end to the pivot (closed)", "diverter (mode)", "upper flipper pivot", "auto")
+    add("UF: launch gate to the flipper", "launch gate", uf_rest)
+    add("UF: raised flipper to the arch", uf_up, P["outer wall"])
+    for i in range(len(L.WISPS)):
+        g = min(gap(uf_up, ("circle", p, L.WISP_R))[0] for p in L.wisp_path(i))
+        out.append((f"UF: raised flipper to wisp {i + 1}'s loop", g, verdict(g, "passage"), None, None))
     return out
+
+def uf_shots():
+    """Straight lines from the upper flipper's sweet spot to each wisp's loop centre: angle and clearance."""
+    P = L.floor_parts(mode_parts=False)
+    rows = []
+    for i, (c, _, _) in enumerate(L.WISPS):
+        a = math.degrees(math.atan2(c[1] - L.UF_SWEET[1], c[0] - L.UF_SWEET[0]))
+        u = (c[0] - L.UF_SWEET[0], c[1] - L.UF_SWEET[1]); n = math.hypot(*u)
+        end = (c[0] - u[0] / n * (L.WISP_R + L.BALL_R), c[1] - u[1] / n * (L.WISP_R + L.BALL_R))
+        best = (1e9, "")
+        for nm in ("island", "outer wall"):
+            g, *_ = gap(("poly", [L.UF_SWEET, end]), P[nm])
+            if g - L.BALL_R < best[0]:
+                best = (g - L.BALL_R, nm)
+        rows.append((f"wisp {i + 1}", a, best[0], best[1]))
+    return rows
 
 def scan_pairs(limit=60.0):
     P = L.floor_parts()
@@ -227,6 +259,9 @@ if __name__ == "__main__":
     print("SHOT LINES, with every mode part up")
     for fl, k, c, nm in shot_clearance(True):
         print(f"  {fl:5s} -> {k:16s} {c:7.1f}  ({nm})  {'clear' if c > 0 else 'BLOCKED'}")
+    print("UPPER FLIPPER SHOTS (from its sweet spot)")
+    for nm, a, c, w in uf_shots():
+        print(f"  {nm:8s} {a:6.1f} deg  clearance {c:6.1f} ({w})  {'clear' if c > 0 else 'BLOCKED'}")
     print("PLACEMENT (% of flipper tips -> top)")
     for nm, v in placement():
         print(f"  {nm:28s} {v:5.1f}%")

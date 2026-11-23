@@ -183,6 +183,17 @@ enum QfForestLayout {{
 {chr(10).join(f"        ({pt(c)}, CGVector(dx: {f(a[0])}, dy: {f(a[1])}), {per}),"  for c, a, per in L.WISPS)}
     ]
     static let wispRadius: CGFloat = {f(L.WISP_R)}
+    // MARK: round 2b: the upper flipper on the forest block's top, and its one-way diverter from the arch
+    /// A right-hand flipper (rest and travel as the main flippers), shooting up into the glade.
+    static let upperFlipperPivot = {pt(L.UF_PIVOT)}
+    static let upperFlipperLength: CGFloat = {f(L.UF_LEN)}
+    static let upperFlipperPivotRadius: CGFloat = {f(L.UF_RP)}
+    static let upperFlipperTipRadius: CGFloat = {f(L.UF_RT)}
+    /// From the arch's right side down-left to just above the pivot: solid per ball (only above it), and only while raised.
+    static let diverter: (CGPoint, CGPoint) = ({pt(L.DIVERTER_A)}, {pt(L.DIVERTER_B)})
+    /// M1 v6: the one-way orbit stop, hanging from the arch just right of the top (arch end first). Raised with the
+    /// diverter; solid per ball only on its right side (counterclockwise orbits and plunges), so they drop onto the diverter.
+    static let orbitStop: (CGPoint, CGPoint) = ({pt(L.STOP_A)}, {pt(L.STOP_B)})
     static let ghostHaunts: [CGPoint] = [{", ".join(pt(h) for h in L.GHOST_HAUNTS)}]
     static let ghostRadius: CGFloat = {f(L.GHOST_R)}
     static let roots = {pt(L.ROOTS)}

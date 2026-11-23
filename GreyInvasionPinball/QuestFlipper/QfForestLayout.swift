@@ -158,10 +158,11 @@ enum QfForestLayout {
         CGPoint(x: 250.00, y: 880.00), CGPoint(x: 250.00, y: 1030.00), CGPoint(x: 350.00, y: 1030.00),
         CGPoint(x: 350.00, y: 880.00), CGPoint(x: 399.00, y: 805.00), CGPoint(x: 409.00, y: 885.00),
         CGPoint(x: 432.00, y: 901.00), CGPoint(x: 455.00, y: 885.00), CGPoint(x: 465.00, y: 805.00),
-        CGPoint(x: 482.00, y: 835.00), CGPoint(x: 482.00, y: 1106.00), CGPoint(x: 72.00, y: 1168.00),
+        CGPoint(x: 482.00, y: 835.00), CGPoint(x: 482.00, y: 1106.00), CGPoint(x: 408.19, y: 1117.26),
+        CGPoint(x: 406.00, y: 1114.61), CGPoint(x: 350.57, y: 1082.61), CGPoint(x: 72.00, y: 1040.00),
         CGPoint(x: 72.00, y: 790.00),
     ]
-    static let roofLeft = CGPoint(x: 72.00, y: 1168.00)
+    static let roofLeft = CGPoint(x: 72.00, y: 1040.00)
     static let roofRight = CGPoint(x: 482.00, y: 1106.00)
     static let orbitPost = CGPoint(x: 72.00, y: 790.00)
     static let laneMouthPosts: [CGPoint] = [
@@ -270,11 +271,22 @@ enum QfForestLayout {
     // MARK: the Witch's Glade, and the mode-only parts (later rounds)
     /// (centre, amplitude, period s): x = cx + ax sin(2πt/P), y = cy + ay sin(4πt/P).
     static let wisps: [(CGPoint, CGVector, Double)] = [
-        (CGPoint(x: 196.00, y: 1236.00), CGVector(dx: 22.00, dy: 8.00), 7.0),
-        (CGPoint(x: 318.00, y: 1238.00), CGVector(dx: 24.00, dy: 8.00), 9.0),
-        (CGPoint(x: 440.00, y: 1212.00), CGVector(dx: 22.00, dy: 8.00), 8.0),
+        (CGPoint(x: 110.00, y: 1122.00), CGVector(dx: 18.00, dy: 8.00), 7.0),
+        (CGPoint(x: 280.00, y: 1246.00), CGVector(dx: 18.00, dy: 8.00), 9.0),
+        (CGPoint(x: 400.00, y: 1230.00), CGVector(dx: 18.00, dy: 8.00), 8.0),
     ]
     static let wispRadius: CGFloat = 13.00
+    // MARK: round 2b: the upper flipper on the forest block's top, and its one-way diverter from the arch
+    /// A right-hand flipper (rest and travel as the main flippers), shooting up into the glade.
+    static let upperFlipperPivot = CGPoint(x: 400.00, y: 1125.00)
+    static let upperFlipperLength: CGFloat = 64.00
+    static let upperFlipperPivotRadius: CGFloat = 10.00
+    static let upperFlipperTipRadius: CGFloat = 5.00
+    /// From the arch's right side down-left to just above the pivot: solid per ball (only above it), and only while raised.
+    static let diverter: (CGPoint, CGPoint) = (CGPoint(x: 606.00, y: 1228.92), CGPoint(x: 394.50, y: 1134.53))
+    /// M1 v6: the one-way orbit stop, hanging from the arch just right of the top (arch end first). Raised with the
+    /// diverter; solid per ball only on its right side (counterclockwise orbits and plunges), so they drop onto the diverter.
+    static let orbitStop: (CGPoint, CGPoint) = (CGPoint(x: 500.00, y: 1307.04), CGPoint(x: 487.38, y: 1269.08))
     static let ghostHaunts: [CGPoint] = [CGPoint(x: 250.00, y: 738.00), CGPoint(x: 360.00, y: 738.00)]
     static let ghostRadius: CGFloat = 16.00
     static let roots = CGPoint(x: 454.00, y: 474.00)

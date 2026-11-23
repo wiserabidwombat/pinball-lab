@@ -160,7 +160,7 @@ def well_roof():
     return [WELL_POST_HI, WELL_ROOF_TOP]  # upper rim / roof, sloping down-right so wall-sliders come back into play
 
 # ================================================================ REGION: the forest island (blocks across the back)
-ROOF_L = (72.0, 1168.0)          # the island's roof: one line from the orbit wall's top ...
+ROOF_L = (72.0, 1040.0)          # the island's roof: round 2b lowers its left end (misses roll left, down the Graveyard lane)
 ROOF_R = (482.0, 1106.0)         # ... down to the right lane, so glade balls roll right and down the right lane
 def roof_y(x):
     return ROOF_L[1] + (ROOF_R[1] - ROOF_L[1]) * (x - ROOF_L[0]) / (ROOF_R[0] - ROOF_L[0])
@@ -219,9 +219,24 @@ def island():
            # the stone face up-right to the ramp's left post; the ramp's U (floor-solid) with its gable back
            rml, (RAMP_C_X - ramp_half_at(u_top), u_top), (RAMP_C_X, u_top + 16), (RAMP_C_X + ramp_half_at(u_top), u_top), rmr,
            # the right flank of the ramp out to the island's right edge, then up it
-           (ISLAND_R_X, RAMP_MOUTH_Y + 30), (ISLAND_R_X, ROOF_R[1]),
+           (ISLAND_R_X, RAMP_MOUTH_Y + 30), (ISLAND_R_X, ROOF_R[1])] + island_top() + [
            ROOF_L, (ORBIT_INNER_X, ORBIT_BOTTOM_Y)]
     return pts
+
+def island_top():
+    """Round 2b: the island's top between its right corner and ROOF_L, round the upper flipper — the roof right of the
+    pivot slopes down to the right lane; under the flipper it runs 2-8 pt below its underside (closed); from under the
+    tip it slopes down-left to the Graveyard lane, so a ball rolling off the tip rolls on left."""
+    p = UF_PIVOT
+    tip = flipper_tip_len(p, UF_LEN)
+    a = FLIP_REST
+    under = lambda q, off: (q[0] + math.sin(a) * off, q[1] - math.cos(a) * off)   # below the centreline (right-hand normal)
+    return [(p[0] + UF_RP * math.cos(math.radians(-35)), p[1] + UF_RP * math.sin(math.radians(-35)) - 2),
+            under(p, UF_RP + 2), under(tip, UF_RT + 7)]
+
+def flipper_tip_len(pivot, length, raised=0.0):
+    a = FLIP_REST - raised
+    return (pivot[0] - length * math.cos(a), pivot[1] - length * math.sin(a))
 
 def ramp_half_at(y):
     f = min(1.0, max(0.0, (y - RAMP_MOUTH_Y) / RAMP_FLARE))
@@ -290,11 +305,57 @@ def lantern_block():
 
 # ================================================================ REGION: the Witch's Glade (above the island)
 # Wisps drift here on slow loops; plunges (over the launch gate) and Graveyard orbits pass through it.
-WISPS = [((196.0, 1236.0), (22.0, 8.0), 7.0), ((318.0, 1238.0), (24.0, 8.0), 9.0), ((440.0, 1212.0), (22.0, 8.0), 8.0)]
+WISPS = [((110.0, 1122.0), (18.0, 8.0), 7.0), ((280.0, 1246.0), (18.0, 8.0), 9.0), ((400.0, 1230.0), (18.0, 8.0), 8.0)]
+# (M1 round 2b: re-placed by a search: two in the upper flipper's shot fan (121 deg and 72 deg from its sweet spot),
+#  one low in the glade's left; every loop >= 46 clear of the arch, the island, the diverter, the upper flipper at
+#  rest and raised, and the next loop)
 WISP_R = 13.0                    # (centre, (ax, ay), period s): x = cx + ax sin(2 pi t / P), y = cy + ay sin(4 pi t / P)
 def wisp_path(i, n=48):
     (cx, cy), (ax, ay), _ = WISPS[i]
     return [(cx + ax * math.sin(2 * math.pi * k / n), cy + ay * math.sin(4 * math.pi * k / n)) for k in range(n + 1)]
+
+# ================================================================ M1 round 2 (Aaron, voice 2026-11-22): the upper flipper
+# Orbits rode the arch round the top and never met a wisp. Aaron: "something that would knock the ball down, and then
+# another flipper up there that you then use to attack the wisp" — the drop only "sometimes".
+# A right-hand upper flipper in the glade's top-right, under the Old Road's raised hook (ramp balls pass over it). Its
+# feed: a one-way DIVERTER flap from the arch's right side down-left to just above the pivot — solid only for a ball
+# coming DOWN the arch (an orbit), never for a plunge going up, and only while it's raised (a mode: "sometimes").
+# Lowered, orbits ride on past the flipper (71 pt between the pivot and the arch) to the launch gate and the right lane.
+# The flipper shoots up-left across the glade at the wisps (and later the Witch's lanterns); a missed ball rolls off
+# its tip onto the island's roof and down the right lane.
+UF_PIVOT = (400.0, 1125.0)          # round 2b (Aaron's red mark): on the forest block's top, under the glade
+UF_LEN, UF_RP, UF_RT = 64.0, 10.0, 5.0
+def right_arch_y(x):
+    """y of the arch's right side at x (x between the top's middle and the shooter lane's outer wall)."""
+    f = (x - ARCH_MID_X) / (SHOOT_OUT - ARCH_MID_X)
+    one_minus_t = math.sqrt(max(0.0, 1 - f))
+    t = 1 - one_minus_t
+    return TOP_Y - (TOP_Y - ARCH_START) * t * t
+DIVERTER_A = (606.0, right_arch_y(606.0))
+DIVERTER_B = (UF_PIVOT[0] - (UF_RP + 1) * math.sin(FLIP_REST), UF_PIVOT[1] + (UF_RP + 1) * math.cos(FLIP_REST))
+def uf_poly(raised=0.0):
+    return flipper_poly_len(UF_PIVOT, "R", UF_LEN, UF_RP, UF_RT, raised)
+def flipper_poly_len(pivot, side, length, rp, rt, raised=0.0):
+    a = FLIP_REST - raised
+    sx = 1 if side == "L" else -1
+    dx, dy = sx * math.cos(a), -math.sin(a)
+    tip = (pivot[0] + dx * length, pivot[1] + dy * length)
+    nx, ny = -dy, dx
+    return tip, [(pivot[0] + nx * rp, pivot[1] + ny * rp), (tip[0] + nx * rt, tip[1] + ny * rt),
+                 (tip[0] - nx * rt, tip[1] - ny * rt), (pivot[0] - nx * rp, pivot[1] - ny * rp)]
+UF_SWEET = (364.0, 1126.0)       # where a cradled / mid-swing ball leaves the upper flipper (estimate)
+
+# M1 v6 (Aaron: a left-flipper shot up the right lane "just goes all the way around"; fix 1): a one-way ORBIT STOP, a
+# short flap hanging radially from the arch just right of the top. Raised with the diverter (any wisp alive), it's solid
+# only for a ball on its right side, i.e. one riding the arch counterclockwise (up the right lane, or a plunge): the ball
+# stops and drops onto the diverter, then rolls onto the upper flipper. Clockwise orbits (the Graveyard lane) pass it.
+STOP_X, STOP_LEN = 500.0, 40.0
+def _stop():
+    y = right_arch_y(STOP_X); y2 = right_arch_y(STOP_X + 1)
+    t = (1.0, y2 - y); n = math.hypot(*t); t = (t[0] / n, t[1] / n)
+    nin = (t[1], -t[0])                       # inward (down-left) normal
+    return (STOP_X, y), (STOP_X + nin[0] * STOP_LEN, y + nin[1] * STOP_LEN)
+STOP_A, STOP_B = _stop()
 
 # ================================================================ MODE-ONLY parts in the lower table (pop-ups / drifters)
 GHOST_HAUNTS = [(250.0, 738.0), (360.0, 738.0)]   # ghosts fade in at one of these, in the gaps between the shot paths
@@ -356,7 +417,13 @@ def floor_parts(mode_parts=True):
         P[f"bark {i + 1}"] = ("poly", [(x - BARK_W / 2, BARK_Y), (x + BARK_W / 2, BARK_Y), (x + BARK_W / 2, BARK_Y + BARK_DEPTH),
                                         (x - BARK_W / 2, BARK_Y + BARK_DEPTH), (x - BARK_W / 2, BARK_Y)])
     P["trunk"] = ("poly", [(CX - TRUNK_HALF, TRUNK_Y), (CX + TRUNK_HALF, TRUNK_Y)])
+    tip, poly = uf_poly()
+    P["upper flipper"] = ("poly", poly + [poly[0]])
+    P["upper flipper pivot"] = ("circle", UF_PIVOT, UF_RP)
+    P["upper flipper tip"] = ("circle", tip, UF_RT)
     if mode_parts:
+        P["diverter (mode)"] = ("poly", [DIVERTER_A, DIVERTER_B])
+        P["orbit stop (mode)"] = ("poly", [STOP_A, STOP_B])
         for i, h in enumerate(GHOST_HAUNTS):
             P[f"ghost haunt {'LR'[i]} (mode)"] = ("circle", h, GHOST_R)
         P["roots (mode)"] = ("circle", ROOTS, ROOTS_R)

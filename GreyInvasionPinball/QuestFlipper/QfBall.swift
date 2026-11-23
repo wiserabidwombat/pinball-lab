@@ -38,6 +38,10 @@ final class QfBall: SKNode {
     /// T7 M1: whether the right outlane's one-way save gate is solid for this ball (while it moves right, so a ball
     /// can roll from the outlane back into the inlane but never out).
     private(set) var saveGateSolid = false
+    /// T9 M1 v5: whether the upper flipper's diverter is solid for this ball (raised, and the ball above it).
+    private(set) var diverterSolid = false
+    /// T9 M1 v6: whether the orbit stop is solid for this ball (raised, and the ball on its right side).
+    private(set) var orbitStopSolid = false
 
     /// T7 M2 v5: the ramp layer (Table 06's TourBall pattern). On a ramp the ball takes the ramp's ball category and
     /// collides with that ramp's rails (and other ramp balls) only; floor parts, sensors and switches ignore it.
@@ -134,6 +138,18 @@ final class QfBall: SKNode {
         updateCollisionMask()
     }
 
+    func setDiverterSolid(_ solid: Bool) {
+        guard solid != diverterSolid else { return }
+        diverterSolid = solid
+        updateCollisionMask()
+    }
+
+    func setOrbitStopSolid(_ solid: Bool) {
+        guard solid != orbitStopSolid else { return }
+        orbitStopSolid = solid
+        updateCollisionMask()
+    }
+
     func setSaveGateSolid(_ solid: Bool) {
         guard solid != saveGateSolid else { return }
         saveGateSolid = solid
@@ -162,7 +178,8 @@ final class QfBall: SKNode {
             | QfPhysicsCategory.bumper | QfPhysicsCategory.target | QfPhysicsCategory.ball
             | QfPhysicsCategory.toy                         // M3 v4: the boat's captive ball
         if launchGateSolid { mask |= QfPhysicsCategory.launchGate }
-        if saveGateSolid { mask |= QfPhysicsCategory.diverter }
+        if saveGateSolid || diverterSolid { mask |= QfPhysicsCategory.diverter }
+        if orbitStopSolid { mask |= QfPhysicsCategory.orbitStop }
         if flipperGhostSteps > 0 { mask &= ~QfPhysicsCategory.flipper }
         body.collisionBitMask = mask
     }

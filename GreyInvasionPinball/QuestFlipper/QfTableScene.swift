@@ -113,6 +113,13 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private var slingshots: [QfSlingshot] = []
     private var leftFlipper: QfFlipper!
     private var rightFlipper: QfFlipper!
+    /// T9 M1 v5 (Aaron's mark): the upper flipper on the forest block's top, under the glade. The right button.
+    private var upperFlipper: QfFlipper!
+    /// Its feed: a one-way diverter from the arch, raised while any wisp is alive (Aaron: "sometimes" = option 1).
+    private var diverterNode: SKShapeNode!
+    /// M1 v6 (Aaron: right-lane orbits "just go all the way around"; fix 1): the one-way orbit stop, up with the diverter.
+    private var orbitStopNode: SKShapeNode!
+    private var diverterUp = false
     private var plunger: SKShapeNode!
     private var isBuilt = false
     private let hitHaptic = Haptic(style: .medium)
@@ -215,7 +222,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M1 v4"
+    static let buildTagText = "T9 M1 v6"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -286,9 +293,14 @@ final class QfTableScene: SKScene, RendererHostedScene {
         rightFlipper = QfFlipper(side: .right, pivot: F.pivotRight)
         leftFlipper.attach(to: self)
         rightFlipper.attach(to: self)
+        upperFlipper = QfFlipper(side: .right, pivot: F.upperFlipperPivot, length: F.upperFlipperLength,
+                                 pivotRadius: F.upperFlipperPivotRadius, tipRadius: F.upperFlipperTipRadius)
+        upperFlipper.attach(to: self)
 
         addPlunger()
         addLaunchGate()
+        addOrbitStop()
+        addDiverter()
         addTarget(name: "TRUNK", face: F.trunkFace)
         addTarget(name: "EAST LANTERN", face: F.lanternFace)
         addBark()
@@ -397,6 +409,95 @@ final class QfTableScene: SKScene, RendererHostedScene {
         body.collisionBitMask = QfPhysicsCategory.ball
         node.physicsBody = body
         addChild(node)
+    }
+
+    /// T9 M1 v5: the upper flipper's diverter, from the arch's right side down-left to just above its pivot. Solid per
+    /// ball (QfBall.diverterSolid): only for a ball above it, and only while raised. An orbit coming down the arch rolls
+    /// down it onto the upper flipper; lowered, orbits ride on past to the right lane.
+    private func addDiverter() {
+        let (a, b) = QfForestLayout.diverter
+        let path = CGMutablePath()
+        path.addLines(between: [a, b])
+        let node = SKShapeNode(path: path)
+        node.strokeColor = Self.kickColor
+        node.lineWidth = 5
+        node.lineCap = .round
+        node.zPosition = -18.5
+        let body = SKPhysicsBody(edgeFrom: a, to: b)
+        body.friction = 0.05
+        body.restitution = 0.2
+        body.categoryBitMask = QfPhysicsCategory.diverter
+        body.collisionBitMask = QfPhysicsCategory.ball
+        node.physicsBody = body
+        addChild(node)
+        diverterNode = node
+        setDiverterUp(true)
+    }
+
+    /// M1 v6: a short flap hanging from the arch just right of the top. Solid per ball (QfBall.orbitStopSolid) only on
+    /// its right side and only while raised: a ball riding the arch counterclockwise (up the right lane, or a plunge)
+    /// stops and drops onto the diverter, then the upper flipper. Clockwise orbits (the Graveyard lane) pass it.
+    private func addOrbitStop() {
+        let (a, b) = QfForestLayout.orbitStop
+        let path = CGMutablePath()
+        path.addLines(between: [a, b])
+        let node = SKShapeNode(path: path)
+        node.strokeColor = Self.kickColor
+        node.lineWidth = 5
+        node.lineCap = .round
+        node.zPosition = -18.5
+        let body = SKPhysicsBody(edgeFrom: a, to: b)
+        body.friction = 0.05
+        body.restitution = 0.2
+        body.categoryBitMask = QfPhysicsCategory.orbitStop
+        body.collisionBitMask = QfPhysicsCategory.ball
+        node.physicsBody = body
+        addChild(node)
+        orbitStopNode = node
+    }
+
+    private func setDiverterUp(_ up: Bool) {
+        guard up != diverterUp else { return }          // (starts false, so the first call draws it)
+        diverterUp = up
+        diverterNode.strokeColor = up ? Self.kickColor : SKColor(white: 0.45, alpha: 1)
+        diverterNode.alpha = up ? 1 : 0.35
+        diverterNode.lineWidth = up ? 5 : 2
+        orbitStopNode.strokeColor = diverterNode.strokeColor
+        orbitStopNode.alpha = diverterNode.alpha
+        orbitStopNode.lineWidth = diverterNode.lineWidth
+    }
+
+    /// Which side of the diverter's line a point is on (true = above it, the glade side), and how far it is from the
+    /// segment.
+    private static func aboveDiverter(_ p: CGPoint) -> Bool {
+        let (a, b) = QfForestLayout.diverter
+        return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) < 0
+    }
+
+    /// The orbit stop's solid side: the side a point right of it (inside the arch) is on.
+    private static let orbitStopSign: CGFloat = {
+        let (a, b) = QfForestLayout.orbitStop
+        let q = CGPoint(x: a.x + 60, y: a.y - 20)
+        return (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x) > 0 ? 1 : -1
+    }()
+
+    private static func rightOfOrbitStop(_ p: CGPoint) -> Bool {
+        let (a, b) = QfForestLayout.orbitStop
+        return ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) * orbitStopSign > 0
+    }
+
+    private static func distance(_ p: CGPoint, toSegment s: (CGPoint, CGPoint)) -> CGFloat {
+        let (a, b) = s
+        let ab = CGVector(dx: b.x - a.x, dy: b.y - a.y)
+        let t = min(max(((p.x - a.x) * ab.dx + (p.y - a.y) * ab.dy) / (ab.dx * ab.dx + ab.dy * ab.dy), 0), 1)
+        return hypot(p.x - (a.x + t * ab.dx), p.y - (a.y + t * ab.dy))
+    }
+
+    private static func distanceToDiverter(_ p: CGPoint) -> CGFloat {
+        let (a, b) = QfForestLayout.diverter
+        let ab = CGVector(dx: b.x - a.x, dy: b.y - a.y)
+        let t = min(max(((p.x - a.x) * ab.dx + (p.y - a.y) * ab.dy) / (ab.dx * ab.dx + ab.dy * ab.dy), 0), 1)
+        return hypot(p.x - (a.x + t * ab.dx), p.y - (a.y + t * ab.dy))
     }
 
     /// A standup: a thick drawn face with an edge body (category target).
@@ -859,6 +960,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         if right && !rightFlipper.isPressed { sfx(.flipper) }
         leftFlipper.isPressed = left
         rightFlipper.isPressed = right
+        upperFlipper.isPressed = right
     }
 
     private func applyNudge(_ direction: Nudge.Direction) {
@@ -958,6 +1060,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         updateGamepad()
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
+        upperFlipper.step(dt: dt)
         updateRides(dt)
         handBallsToSwingingFlippers()
         slingshots.forEach { $0.settle() }
@@ -965,6 +1068,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         updateScoops(now)
         updateBark(now)
         updateWisps(now, dt: step)
+        setDiverterUp(wisps.contains { $0.alive })
         updateGhost(now)
         updateDrifter(now)
         updateRoots(now)
@@ -1008,7 +1112,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         guard QfTableLayout.flipperModel else { return }
         let r = QfTableLayout.ballRadius
         for ball in balls where ball.isOnFloor {
-            for f in [leftFlipper!, rightFlipper!] where f.isSwingingUp && f.reaches(ball.position, ballRadius: r) {
+            for f in [leftFlipper!, rightFlipper!, upperFlipper!] where f.isSwingingUp && f.reaches(ball.position, ballRadius: r) {
                 ball.flipperGhostSteps = max(ball.flipperGhostSteps, 1)
             }
         }
@@ -1603,6 +1707,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             if ball.isOnFloor {
                 leftFlipper.solveSwing(ball, ballRadius: r)
                 rightFlipper.solveSwing(ball, ballRadius: r)
+                upperFlipper.solveSwing(ball, ballRadius: r)
                 keepOutOfSolids(ball)
                 let v = body.velocity
                 let speed = hypot(v.dx, v.dy)
@@ -1613,6 +1718,20 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 let p = ball.position
                 // The launch gate is solid only for a ball on its playfield side (a plunge passes up through it).
                 ball.setLaunchGateSolid(p.x > F.laneWallX - 40 && Self.aboveLaunchGate(p))
+                // The upper flipper's diverter: solid only while raised, for a ball above it. A ball turns it solid
+                // only once clear of the line (so a ball rising up through it is never caught inside it), then keeps
+                // it while it stays above.
+                if !diverterUp || !Self.aboveDiverter(p) {
+                    ball.setDiverterSolid(false)
+                } else if !ball.diverterSolid, Self.distanceToDiverter(p) > r + 1 {
+                    ball.setDiverterSolid(true)
+                }
+                // The orbit stop: the same rule, on its right side (counterclockwise orbits and plunges meet it).
+                if !diverterUp || !Self.rightOfOrbitStop(p) {
+                    ball.setOrbitStopSolid(false)
+                } else if !ball.orbitStopSolid, Self.distance(p, toSegment: QfForestLayout.orbitStop) > r + 1 {
+                    ball.setOrbitStopSolid(true)
+                }
                 // The Graveyard spinner: every crossing digs (spins from the ball's speed).
                 let (sa, sb) = F.spinnerLine
                 if (p0.y - sa.y) * (p.y - sa.y) < 0, p.x > sa.x, p.x < sb.x {

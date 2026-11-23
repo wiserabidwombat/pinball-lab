@@ -46,4 +46,6 @@ enum QfPhysicsCategory {
     /// T7 M3 v10: the right ramp's J-hook and wire, a third wire level (it crosses under the wave ramp's wire).
     static let hookWireWall: UInt32 = 1 << 20
     static let hookWireBall: UInt32 = 1 << 21
+    /// T9 M1 v6: Quest & Flipper's one-way orbit stop in the arch (solid per ball, like the diverter).
+    static let orbitStop: UInt32 = 1 << 22
 }

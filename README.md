@@ -136,6 +136,22 @@ sweep stamp · `UNTIL_TIGHT=0.5` keep adding games until the advanced/expert dra
 (don't go much below ~0.4: tighter bands take many hours) · `BUDGET_MIN=60` extra minutes per table for that ·
 `PARALLEL=2` two tables at once on cloned Simulators (needs the memory) · `SKIP_BUILD=1`.
 
+**Health check (after a table change)** — `tools/lab_health.py TABLE`
+
+```
+tools/lab_health.py chomp                 # ~15 min with fast-forward
+tools/lab_health.py chomp --accept        # … and save this run as the table's accepted results
+tools/lab_health.py chomp --only stuck,windows
+```
+
+Runs the stuck-ball finder (80 drops), the Shot Lab's flip-timing sweep and two robot games per skill, then compares
+them with the table's accepted results (`tools/lab_accepted/TABLE.json`, kept in git) and prints a pass / warn / fail
+list. **Fails:** a new stuck spot reached from a distance, a shot that is gone, a watchdog incident. **Warns:** a stuck
+ball right where it was dropped (usually inside a part), a shot whose window shrank or moved, a changed drain rate, an
+objective the good robots no longer reach. It also notes each skill's time per ball against the design targets. Exit
+code 1 on a failure. Environment: `DROPS=80`, `GAMES=2`, `FAST=8`, plus the runners' own (`DEVICE`, `DERIVED`,
+`SKIP_BUILD`).
+
 ### Launch arguments (Xcode scheme or `simctl launch`)
 
 | Argument | Meaning |
@@ -177,6 +193,7 @@ CUSTOM="base=intermediate,sigma=0.025,catch=0.30" tools/playlab_run.sh lamplight
 | `lmp_econ_sim.py --from REPORTS…` | The Lamplight's collection pace from real evenings (books, ultras, the catalog). |
 | `shotlab_windows.py SHOTLAB.json [--map map.svg]` | The Shot Lab's timing windows per flipper and rate; `--map` draws the flips over the table. |
 | `shotlab_stuck.py SCATTER.json [--svg map.svg]` | The stuck-ball finder's report: stuck spots, rests a flip freed, and a map. |
+| `lab_health.py TABLE [--accept]` | The health check above; `--compare NOW.json ACCEPTED.json` compares two saved summaries without running. |
 | `shotlab_analyze.py SHOTLAB.json` | Turns timing windows into per-skill shot odds. |
 
 File names: `ShotLab/shotlab-TABLE-…-STAMP.json` (the scenario and start in the name), `ShotLab/playlab-TABLE-STAMP.json` (+ `.html` and a

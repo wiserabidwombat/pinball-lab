@@ -1,0 +1,200 @@
+{
+ "table": "monsoon",
+ "date": "2026-11-23T02-19-37Z",
+ "fast": "8",
+ "stuck": {
+  "drops": 80,
+  "stuck": 2,
+  "moving": 0,
+  "freed": 0,
+  "spots": [
+   [
+    558,
+    129,
+    2,
+    636
+   ]
+  ],
+  "file": "shotlab-monsoon-scatter-2026-11-23T02-20-38Z.json"
+ },
+ "windows": {
+  "trials": 288,
+  "shots": {
+   "left": {
+    "arroyo": {
+     "trials": 19,
+     "mid": 0.317,
+     "lo": 0.283,
+     "hi": 0.35
+    },
+    "lane": {
+     "trials": 2,
+     "mid": 0.392,
+     "lo": 0.392,
+     "hi": 0.392
+    },
+    "mesaRamp": {
+     "trials": 5,
+     "mid": 0.458,
+     "lo": 0.45,
+     "hi": 0.475
+    },
+    "standup": {
+     "trials": 10,
+     "mid": 0.533,
+     "lo": 0.517,
+     "hi": 0.55
+    }
+   },
+   "right": {
+    "lane": {
+     "trials": 4,
+     "mid": 0.425,
+     "lo": 0.375,
+     "hi": 0.475
+    },
+    "arroyo": {
+     "trials": 15,
+     "mid": 0.442,
+     "lo": 0.4,
+     "hi": 0.575
+    },
+    "orbit": {
+     "trials": 7,
+     "mid": 0.5,
+     "lo": 0.483,
+     "hi": 0.508
+    },
+    "captiveTop": {
+     "trials": 5,
+     "mid": 0.517,
+     "lo": 0.517,
+     "hi": 0.525
+    }
+   },
+   "upper": {
+    "arroyo": {
+     "trials": 5,
+     "mid": 0.367,
+     "lo": 0.333,
+     "hi": 0.375
+    },
+    "lane": {
+     "trials": 16,
+     "mid": 0.421,
+     "lo": 0.358,
+     "hi": 0.517
+    },
+    "standup": {
+     "trials": 3,
+     "mid": 0.375,
+     "lo": 0.375,
+     "hi": 0.508
+    }
+   }
+  },
+  "drains": {
+   "left": 3,
+   "right": 2
+  },
+  "file": "shotlab-monsoon-2026-11-23T02-26-08Z.json"
+ },
+ "play": {
+  "games": 8,
+  "drains_per_min": 1.13,
+  "lo": 0.8,
+  "hi": 1.46,
+  "skills": {
+   "beginner": {
+    "games": 2,
+    "drains_per_min": 1.63,
+    "lo": 0.57,
+    "hi": 2.7,
+    "seconds_per_ball": 55,
+    "verdict": "in range",
+    "median_score": 248645.0
+   },
+   "intermediate": {
+    "games": 2,
+    "drains_per_min": 1.14,
+    "lo": 0.39,
+    "hi": 1.88,
+    "seconds_per_ball": 79,
+    "verdict": "in range",
+    "median_score": 526415.0
+   },
+   "advanced": {
+    "games": 2,
+    "drains_per_min": 1.07,
+    "lo": 0.47,
+    "hi": 1.68,
+    "seconds_per_ball": 112,
+    "verdict": "short, but 1 of 2 games hit the cap",
+    "median_score": 1057065.0
+   },
+   "expert": {
+    "games": 2,
+    "drains_per_min": 1.0,
+    "lo": 0.5,
+    "hi": 1.5,
+    "seconds_per_ball": 200,
+    "verdict": "cap too low to tell (a ball can show at most ~192 s; raise CAP)",
+    "median_score": 1762320.0
+   }
+  },
+  "incidents": [],
+  "objectives": [
+   "skyPainted",
+   "mesasPainted",
+   "saguarosPainted",
+   "arroyoPainted",
+   "desertPainted",
+   "monsoonLit",
+   "monsoon",
+   "wildflower",
+   "superbloomLit",
+   "superbloom",
+   "bloom",
+   "superJackpot",
+   "paintingFinished",
+   "newSketch",
+   "lanesComplete",
+   "multiplier",
+   "helix",
+   "captiveTop",
+   "kickback",
+   "outlaneSave",
+   "skillShot"
+  ],
+  "reached": [
+   "arroyoPainted",
+   "bloom",
+   "captiveTop",
+   "desertPainted",
+   "helix",
+   "kickback",
+   "lanesComplete",
+   "mesasPainted",
+   "monsoon",
+   "monsoonLit",
+   "multiplier",
+   "outlaneSave",
+   "paintingFinished",
+   "saguarosPainted",
+   "skillShot",
+   "skyPainted",
+   "superJackpot",
+   "superbloom",
+   "superbloomLit",
+   "wildflower"
+  ],
+  "flags": [
+   "no 60 Hz window in the Shot Lab for captiveTop from the right flipper (the robot doesn't aim at them on that pass)",
+   "objective 'newSketch' was never reached by an advanced or expert robot",
+   "shot 'mesaRamp' made 2/21 (10%) by experts"
+  ],
+  "file": "playlab-monsoon-2026-11-23T02-26-42Z.json"
+ },
+ "table_name": "Monsoon",
+ "minutes": 20.3
+}

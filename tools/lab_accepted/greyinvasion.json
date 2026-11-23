@@ -1,0 +1,180 @@
+{
+ "table": "greyinvasion",
+ "date": "2026-11-22T23-32-58Z",
+ "fast": "8",
+ "stuck": {
+  "drops": 80,
+  "stuck": 9,
+  "moving": 0,
+  "freed": 0,
+  "spots": [
+   [
+    558,
+    129,
+    8,
+    1050
+   ],
+   [
+    442,
+    330,
+    1,
+    30
+   ]
+  ],
+  "file": "shotlab-grey-invasion-scatter-2026-11-22T23-33-58Z.json"
+ },
+ "windows": {
+  "trials": 192,
+  "shots": {
+   "left": {
+    "hangar": {
+     "trials": 13,
+     "mid": 0.3,
+     "lo": 0.283,
+     "hi": 0.408
+    },
+    "fighter": {
+     "trials": 15,
+     "mid": 0.525,
+     "lo": 0.325,
+     "hi": 0.55
+    },
+    "lane": {
+     "trials": 2,
+     "mid": 0.4,
+     "lo": 0.4,
+     "hi": 0.4
+    },
+    "rightRamp": {
+     "trials": 9,
+     "mid": 0.45,
+     "lo": 0.442,
+     "hi": 0.475
+    },
+    "abduction": {
+     "trials": 5,
+     "mid": 0.492,
+     "lo": 0.492,
+     "hi": 0.558
+    }
+   },
+   "right": {
+    "hangar": {
+     "trials": 12,
+     "mid": 0.3,
+     "lo": 0.283,
+     "hi": 0.358
+    },
+    "leftRamp": {
+     "trials": 17,
+     "mid": 0.442,
+     "lo": 0.4,
+     "hi": 0.467
+    },
+    "orbit": {
+     "trials": 8,
+     "mid": 0.492,
+     "lo": 0.483,
+     "hi": 0.508
+    },
+    "abduction": {
+     "trials": 2,
+     "mid": 0.55,
+     "lo": 0.55,
+     "hi": 0.55
+    }
+   }
+  },
+  "drains": {
+   "left": 2,
+   "right": 3
+  },
+  "file": "shotlab-grey-invasion-2026-11-22T23-36-32Z.json"
+ },
+ "play": {
+  "games": 8,
+  "drains_per_min": 1.16,
+  "lo": 0.82,
+  "hi": 1.48,
+  "skills": {
+   "beginner": {
+    "games": 2,
+    "drains_per_min": 1.46,
+    "lo": 0.69,
+    "hi": 2.22,
+    "seconds_per_ball": 96,
+    "verdict": "long",
+    "median_score": 987490.0
+   },
+   "intermediate": {
+    "games": 2,
+    "drains_per_min": 0.56,
+    "lo": 0.2,
+    "hi": 0.93,
+    "seconds_per_ball": 160,
+    "verdict": "long",
+    "median_score": 1126105.0
+   },
+   "advanced": {
+    "games": 2,
+    "drains_per_min": 1.19,
+    "lo": 0.65,
+    "hi": 1.72,
+    "seconds_per_ball": 320,
+    "verdict": "long",
+    "median_score": 5773255.0
+   },
+   "expert": {
+    "games": 2,
+    "drains_per_min": 1.69,
+    "lo": 0.95,
+    "hi": 2.43,
+    "seconds_per_ball": 118,
+    "verdict": "cap too low to tell (a ball can show at most ~160 s; raise CAP)",
+    "median_score": 2203670.0
+   }
+  },
+  "incidents": [],
+  "objectives": [
+   "hangarLit",
+   "wave1",
+   "wave1Cleared",
+   "wave2Cleared",
+   "wave3Cleared",
+   "mothership",
+   "coreOpen",
+   "coreHit",
+   "mothershipDestroyed",
+   "extraBall",
+   "lock",
+   "multiball",
+   "jackpot",
+   "kickbackLit",
+   "skillShot",
+   "combo"
+  ],
+  "reached": [
+   "combo",
+   "coreHit",
+   "coreOpen",
+   "extraBall",
+   "hangarLit",
+   "jackpot",
+   "kickbackLit",
+   "lock",
+   "mothership",
+   "multiball",
+   "skillShot",
+   "wave1",
+   "wave1Cleared",
+   "wave2Cleared",
+   "wave3Cleared"
+  ],
+  "flags": [
+   "objective 'mothershipDestroyed' was never reached by an advanced or expert robot"
+  ],
+  "file": "playlab-grey-invasion-2026-11-22T23-37-04Z.json"
+ },
+ "table_name": "Grey Invasion",
+ "minutes": 17.7
+}

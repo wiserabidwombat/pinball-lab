@@ -1,0 +1,179 @@
+{
+ "table": "lamplight",
+ "date": "2026-11-23T01-55-05Z",
+ "fast": "8",
+ "stuck": {
+  "drops": 80,
+  "stuck": 5,
+  "moving": 0,
+  "freed": 0,
+  "spots": [
+   [
+    558,
+    129,
+    5,
+    846
+   ]
+  ],
+  "file": "shotlab-the-lamplight-scatter-2026-11-23T01-56-39Z.json"
+ },
+ "windows": {
+  "trials": 288,
+  "shots": {
+   "left": {
+    "mail": {
+     "trials": 8,
+     "mid": 0.375,
+     "lo": 0.275,
+     "hi": 0.558
+    },
+    "bookTarget": {
+     "trials": 33,
+     "mid": 0.35,
+     "lo": 0.292,
+     "hi": 0.567
+    },
+    "ramp": {
+     "trials": 10,
+     "mid": 0.442,
+     "lo": 0.425,
+     "hi": 0.458
+    },
+    "cat": {
+     "trials": 3,
+     "mid": 0.492,
+     "lo": 0.492,
+     "hi": 0.492
+    },
+    "rightLoop": {
+     "trials": 5,
+     "mid": 0.508,
+     "lo": 0.5,
+     "hi": 0.517
+    }
+   },
+   "right": {
+    "bookTarget": {
+     "trials": 34,
+     "mid": 0.354,
+     "lo": 0.292,
+     "hi": 0.567
+    },
+    "kettle": {
+     "trials": 7,
+     "mid": 0.442,
+     "lo": 0.433,
+     "hi": 0.45
+    },
+    "leftLoop": {
+     "trials": 12,
+     "mid": 0.496,
+     "lo": 0.475,
+     "hi": 0.517
+    }
+   },
+   "loft": {
+    "mail": {
+     "trials": 3,
+     "mid": 0.217,
+     "lo": 0.217,
+     "hi": 0.225
+    },
+    "windowSeat": {
+     "trials": 14,
+     "mid": 0.35,
+     "lo": 0.325,
+     "hi": 0.375
+    }
+   }
+  },
+  "drains": {
+   "left": 4,
+   "right": 4
+  },
+  "file": "shotlab-the-lamplight-2026-11-23T02-01-25Z.json"
+ },
+ "play": {
+  "games": 8,
+  "drains_per_min": 0.75,
+  "lo": 0.53,
+  "hi": 0.98,
+  "skills": {
+   "beginner": {
+    "games": 2,
+    "drains_per_min": 0.86,
+    "lo": 0.26,
+    "hi": 1.46,
+    "seconds_per_ball": 93,
+    "verdict": "in range",
+    "median_score": 264950.0
+   },
+   "intermediate": {
+    "games": 2,
+    "drains_per_min": 0.56,
+    "lo": 0.2,
+    "hi": 0.93,
+    "seconds_per_ball": 200,
+    "verdict": "in range",
+    "median_score": 739980.0
+   },
+   "advanced": {
+    "games": 2,
+    "drains_per_min": 0.57,
+    "lo": 0.2,
+    "hi": 0.95,
+    "seconds_per_ball": 197,
+    "verdict": "cap too low to tell (a ball can show at most ~192 s; raise CAP)",
+    "median_score": 674155.0
+   },
+   "expert": {
+    "games": 2,
+    "drains_per_min": 1.06,
+    "lo": 0.56,
+    "hi": 1.57,
+    "seconds_per_ball": 320,
+    "verdict": "cap too low to tell (a ball can show at most ~240 s; raise CAP)",
+    "median_score": 452460.0
+   }
+  },
+  "incidents": [],
+  "objectives": [
+   "request",
+   "rush",
+   "fireplaceOpen",
+   "fireplace",
+   "find",
+   "loft",
+   "windowSeat",
+   "loopCombo",
+   "luckyEvening",
+   "mail",
+   "cat",
+   "catGift",
+   "bonus3x",
+   "festival"
+  ],
+  "reached": [
+   "bonus3x",
+   "cat",
+   "catGift",
+   "find",
+   "fireplace",
+   "fireplaceOpen",
+   "loft",
+   "loopCombo",
+   "luckyEvening",
+   "mail",
+   "request",
+   "rush",
+   "windowSeat"
+  ],
+  "flags": [
+   "objective 'festival' was never reached by an advanced or expert robot",
+   "shot 'mail' made 2/26 (8%) by experts"
+  ],
+  "file": "playlab-the-lamplight-2026-11-23T02-02-04Z.json"
+ },
+ "table_name": "The Lamplight",
+ "minutes": 24.5
+}

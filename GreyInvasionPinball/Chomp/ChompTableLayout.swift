@@ -570,6 +570,12 @@ enum ChompTableLayout {
     static let boatPostRadius: CGFloat = 5
     static let boatLip = [CGPoint(x: 318, y: 1000), CGPoint(x: 334, y: 995), CGPoint(x: 350, y: 993),
                           CGPoint(x: 366, y: 995), CGPoint(x: 382, y: 1000)]
+    /// M5 v4d (Play Lab 01-56-14Z: in Kevin Multiball a 3,500 pt/s left shot went into the cradle, pushed the captive
+    /// ball aside in the 64 pt slot and sat wedged between it and the right mouth post at (364, 1008)): the slot above
+    /// the mouth narrows to one ball (34 pt, x 333–367) like the real cone's channel; the 54 pt mouth between the posts
+    /// stays. Both balls meet these walls, so nothing fits beside the captive ball.
+    static let boatFunnelLeft = [CGPoint(x: 323, y: 1003), CGPoint(x: 333, y: 1015), CGPoint(x: 333, y: 1042)]
+    static let boatFunnelRight = [CGPoint(x: 377, y: 1003), CGPoint(x: 367, y: 1015), CGPoint(x: 367, y: 1042)]
     /// M3 v9: its top lies on the shared roof (`roofY`), so a ball landing on it rolls on to the right.
     static var boatHousing: [CGPoint] {
         [CGPoint(x: 318, y: 1000), CGPoint(x: 305, y: 1000), CGPoint(x: 305, y: roofY(305)),
@@ -608,7 +614,15 @@ enum ChompTableLayout {
     static var reelLeftBlock: [CGPoint] {
         [CGPoint(x: 395, y: 1000), CGPoint(x: 395, y: 978), CGPoint(x: 426, y: 978), CGPoint(x: 433, y: 1043),
          CGPoint(x: 433, y: 1065)] + reelArc(reelLeftAngle, 60)      // M5 v3c: over the top to the right block (60°)
-            + [CGPoint(x: 490, y: roofY(490)), CGPoint(x: 395, y: roofY(395)), CGPoint(x: 395, y: 1000)]
+            + [CGPoint(x: 522, y: 1200), CGPoint(x: 480, y: 1242), CGPoint(x: 420, y: 1242),
+               CGPoint(x: 395, y: roofY(395)), CGPoint(x: 395, y: 1000)]
+        // M5 v4c (Play Lab 01-32-23Z, 2 stuck at (486, 1169)): the space above the roof WAS reachable — balls falling
+        // back out of the right ramp's low U, and balls coming round the turn, drop inside the turn onto the roof
+        // (the v10b hole had drained them); and v3c's cap left only a 5–10 pt sliver between the arc and the roof, so a
+        // fast reel shot pushed into it came out above the roof. Now this block fills everything from the reel's arc
+        // up the right block's slanted top to the turn's inner side (522, 1200) → (480, 1242), under the ramp mouth's
+        // lower rail to (420, 1242), and down to the roof: the turn is a 40–52 pt channel from the reel-right lane to
+        // the mouth, as on the real table (plastic under the ramp's entrance).
         // M5 v3c (Play Lab 22-31-55Z: a ~3,200 pt/s reel shot went out through M3 v10b's drain hole, x 442–490 at the
         // top of the round end, and stuck above the roof at (439, 1283)): the round end is closed, as on the real
         // table. The hole only ever drained the stuck test's drops above the roof, which play can't reach now.

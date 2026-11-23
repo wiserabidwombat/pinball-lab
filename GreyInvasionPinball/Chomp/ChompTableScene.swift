@@ -134,6 +134,11 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     let cameos = ChompCameos()
     /// M5 v3: tourists and beach closures (Mayor Meltdown hurry-ups).
     let beaches = ChompBeaches()
+    /// M5 v4: the Stink Line, the flamingos and Kevin Multiball.
+    let kevin = ChompKevin()
+    private var mbLaunchesPending = 0
+    private var mbNextLaunchAt: TimeInterval = 0
+    private var mbSaveUntil: TimeInterval = -1
     private var touristDots: [ChompShot: [SKShapeNode]] = [:]
     private var sharkHitAt: [TimeInterval] = [-1, -1, -1]
     private var shotLamps: [ChompShot: SKShapeNode] = [:]
@@ -195,7 +200,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M5 v3c"
+    static let buildTagText = "T7 M5 v4d"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -634,6 +639,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// M3 v4: the boat — its housing and the captive ball in the channel up its middle.
     private func addBoat() {
         addWall(points: ChompTableLayout.boatHousing)
+        addWall(points: ChompTableLayout.boatFunnelLeft)    // M5 v4d: one ball wide above the mouth
+        addWall(points: ChompTableLayout.boatFunnelRight)
         addWall(points: ChompTableLayout.rampIsland)       // M3 v8: the real plastics that close the stuck-ball traps
         addWall(points: ChompTableLayout.bankWedge)
         addReel()
@@ -751,28 +758,83 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             applyCameo(cameos.tick(dt: TimeInterval(dt), now: now))
             applyBeaches(beaches.tick(dt: TimeInterval(dt)))        // M5 v3
         }
+        if !balls.isEmpty { kevin.tick(now: now) }                    // M5 v4: the red arrows move
         let meltdownFlash = Int(now * 10) % 2 == 0
         if cameos.jackpotUntil != nil, fin?.isUp == true { cameos.startJackpotWindow(now: now) }
         for (shot, node) in shotLamps {
-            var c = lampColor(cameos.lamp(shot), now) ?? Self.shotLampOff
+            // M5 v4: Kevin Multiball's lamps first, then a cameo's, then the Stink Line / flamingo / KMB-lit lamps.
+            let cameoLamp = lampColor(cameos.lamp(shot), now)
+            let kevinLamp = kevinColor(kevin.lamp(shot), now)
+            var c = (kevin.multiballActive ? kevinLamp ?? cameoLamp : cameoLamp ?? kevinLamp) ?? Self.shotLampOff
             if shot == beaches.meltdownShot { c = meltdownFlash ? Self.meltdownRed : .white }     // M5 v3
             if node.fillColor != c { node.fillColor = c }
         }
-        fin?.setGlow(lampColor(cameos.lamp(.fin), now))
+        let flamingoGlow: SKColor? = kevin.stage == .finUp ? (Int(now * 4) % 2 == 0 ? Self.flamingoPink : .white) : nil
+        fin?.setGlow(lampColor(cameos.lamp(.fin), now) ?? flamingoGlow)
         updateTouristDots(now)
-        if !skillShotLive { game.status = beaches.statusText() ?? cameos.statusText(now: now) }
+        if !skillShotLive {
+            let kmb = kevin.multiballActive ? kevin.statusText() : nil
+            game.status = beaches.statusText() ?? kmb ?? cameos.statusText(now: now) ?? kevin.statusText()
+        }
+    }
+
+    static let kevinRed = SKColor(red: 1.0, green: 0.15, blue: 0.15, alpha: 1)
+    static let kevinYellow = SKColor(red: 1.0, green: 0.9, blue: 0.1, alpha: 1)
+    static let flamingoPink = SKColor(red: 1.0, green: 0.45, blue: 0.75, alpha: 1)
+
+    private func kevinColor(_ lamp: ChompKevin.Lamp, _ now: TimeInterval) -> SKColor? {
+        let slow = Int(now * 4) % 2 == 0, fast = Int(now * 10) % 2 == 0
+        switch lamp {
+        case .off: return nil
+        case .red: return slow ? Self.kevinRed : Self.shotLampOff
+        case .yellow: return slow ? Self.kevinYellow : Self.shotLampOff
+        case .start: return fast ? Self.shotLampFinal : Self.kevinYellow
+        case .jackpot: return fast ? Self.shotLampGold : Self.kevinRed
+        }
+    }
+
+    private func applyKevin(_ effects: [ChompKevin.Effect]) {
+        for e in effects {
+            switch e {
+            case .score(let points, let banner):
+                if points > 0 { game.add(points) }
+                if let banner { showBanner(banner, hold: true) }
+            case .startMultiball(let n):
+                mbLaunchesPending += max(0, n - balls.count)
+                mbNextLaunchAt = gameTime + 0.5
+                mbSaveUntil = gameTime + ChompKevin.multiballSaveSeconds
+                sfx(.skillShot)
+                bigHaptic.impactOccurred()
+            case .multiballOver:
+                mbLaunchesPending = 0
+                mbSaveUntil = -1
+            }
+        }
+    }
+
+    /// M5 v4: a multiball ball (or a saved one) served and launched by itself, off the pin and down to the flippers.
+    private func launchExtraBall() {
+        let r = ChompTableLayout.ballRadius
+        let ball = ChompBall(at: CGPoint(x: ChompTableLayout.laneCenterX, y: ChompTableLayout.plungerRestTop + r + 2))
+        addChild(ball)
+        balls.append(ball)
+        ball.physicsBody?.velocity = CGVector(dx: 0, dy: ChompKevin.launchSpeed)
+        sfx(.launch)
     }
 
     /// A switch, for the cameos (from labEvent).
     private func cameoEvent(_ name: String) {
         if name == "sharkTower" { cameos.sharkTowerHit(); return }
+        if name == "chumBucket" { applyKevin(kevin.bucketHit(now: gameTime)); return }      // M5 v4
         guard let shot = ChompShot(rawValue: name) else { return }
+        let cameoOwnsFin = cameos.finWanted != nil          // v4b: a cameo's fin hit isn't also a flamingo
         let fx = cameos.shot(shot, now: gameTime)
         // M5 v3: a closed beach's boost (20 % of its Mayor Meltdown) on each later lit shot there.
         if let b = beaches.boost[shot], b > 0,
            fx.contains(where: { if case .score(let p, _) = $0 { return p > 0 }; return false }) { game.add(b) }
         applyCameo(fx)
-        applyBeaches(beaches.shot(shot))
+        if !kevin.multiballActive { applyBeaches(beaches.shot(shot)) }   // tourists wait out a multiball
+        if !(shot == .fin && cameoOwnsFin) { applyKevin(kevin.shot(shot, now: gameTime)) }   // M5 v4
     }
 
     private func applyCameo(_ effects: [ChompCameos.Effect]) {
@@ -897,7 +959,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             }
         }
         let floorBalls = balls.filter { $0.isOnFloor }.map { $0.position }
-        if let want = cameos.finWanted {                  // M5 v2: a cameo raises / holds the fin down
+        if let want = cameos.finWanted ?? kevin.finWanted {   // M5 v2: a cameo raises / holds the fin down (v4: or a flamingo)
             if want, !f.isUp { f.raise(clearOf: floorBalls, ballRadius: ChompTableLayout.ballRadius) }
             if !want, f.isUp { f.drop(at: now) }
         } else if !f.isUp, now - f.droppedAt >= ChompTableLayout.finRelightTime {
@@ -1407,6 +1469,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         ballSaveUsed = false
         cameos.newGame()                           // M5 v2
         beaches.newGame()                          // M5 v3
+        kevin.newGame()                            // M5 v4
+        mbLaunchesPending = 0
+        mbSaveUntil = -1
         sharkHitAt = [-1, -1, -1]
         game.reset()
         placeBallOnPlunger()
@@ -1685,7 +1750,14 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         let drained = balls.filter { $0.position.y < -ChompTableLayout.ballRadius * 3 }
         if !drained.isEmpty {
             drained.forEach { removeBall($0) }
-            if balls.isEmpty, nextBallAt == nil {
+            // M5 v4: Kevin Multiball's ball save serves drained balls again (launched by themselves).
+            let mbSaved = kevin.multiballActive && now < mbSaveUntil && !nudge.tilted
+            if mbSaved {
+                mbLaunchesPending += drained.count
+                mbNextLaunchAt = max(mbNextLaunchAt, now + 0.5)
+                showBanner("BALL SAVED"); sfx(.ballSave)
+            }
+            if balls.isEmpty, nextBallAt == nil, !mbSaved, mbLaunchesPending == 0 {   // v4b: not while a saved ball is owed
                 if ballSaveNow, !nudge.tilted {
                     ballSaveUsed = true
                     game.ballSaved()
@@ -1711,6 +1783,19 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         if let due = nextBallAt, now >= due {
             nextBallAt = nil
             placeBallOnPlunger()
+        }
+
+        // M5 v4: Kevin Multiball — serve its balls one at a time, and end it when one (or none) is left.
+        if kevin.multiballActive {
+            if mbLaunchesPending > 0, now >= mbNextLaunchAt, !isBallOnPlunger, !game.isGameOver {
+                mbLaunchesPending -= 1
+                mbNextLaunchAt = now + 1.0
+                launchExtraBall()
+            }
+            // v4b: an owed (saved) ball with none in play is served first; the end comes once it's out.
+            if balls.count + mbLaunchesPending <= 1, !(balls.isEmpty && mbLaunchesPending > 0) {
+                applyKevin(kevin.multiballEnded())
+            }
         }
 
         #if DEBUG
@@ -1908,7 +1993,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 labEvent("sharkTower")
                 if gameTime - sharkHitAt[i] > 0.3 {                // M5 v3: a tourist at a beach beside it
                     sharkHitAt[i] = gameTime
-                    applyBeaches(beaches.towerHit(i, modeRunning: cameos.isRunning))
+                    if !kevin.multiballActive { applyBeaches(beaches.towerHit(i, modeRunning: cameos.isRunning)) }
                 }
                 if !sharkDown[i] {
                     sharkDown[i] = true
@@ -2368,7 +2453,11 @@ extension ChompTableScene: PlayLabHost {
          PlayObjective(name: "touristSaved", text: "Save a tourist"),
          PlayObjective(name: "meltdownStarted", text: "Start a Mayor Meltdown (3 tourists at a beach)"),
          PlayObjective(name: "beachClosed", text: "Collect a Mayor Meltdown (close a beach)"),
-         PlayObjective(name: "extraBall", text: "Save 8 tourists: extra ball")]
+         PlayObjective(name: "extraBall", text: "Save 8 tourists: extra ball"),
+         PlayObjective(name: "stinkLineFull", text: "Fill the Stink Line"),
+         PlayObjective(name: "flamingo", text: "Harpoon a flamingo at the fin"),
+         PlayObjective(name: "kmbStarted", text: "Start Kevin Multiball"),
+         PlayObjective(name: "kmbJackpot", text: "Collect a Kevin jackpot")]
     }
 
     /// Flip delays = the middle of each Shot Lab window, 120 Hz (the default pass; the 60 Hz pass now only models the
@@ -2518,6 +2607,12 @@ extension ChompTableScene: PlayLabHost {
         // M5 v3: a Mayor Meltdown shot first of all, then beaches with tourists waiting.
         if let m = beaches.meltdownShot { w.insert(m.rawValue, at: 0) }
         for s in ChompShot.beach where (beaches.lit[s] ?? 0) > 0 && !w.contains(s.rawValue) { w.append(s.rawValue) }
+        // M5 v4: Kevin's lit shots (jackpot, start, red, yellow), the fin for a flamingo, the bucket for the line.
+        for lamp in [ChompKevin.Lamp.jackpot, .start, .red, .yellow] {
+            for s in ChompShot.allCases where kevin.lamp(s) == lamp && !w.contains(s.rawValue) { w.append(s.rawValue) }
+        }
+        if kevin.stage == .finUp, !w.contains("fin") { w.insert("fin", at: 0) }
+        if kevin.stage == .idle || kevin.stage == .line, !w.contains("chumBucket") { w.append("chumBucket") }
         if !cameos.isRunning, !w.contains("boat") { w.append("boat") }
         if bankDown.contains(false) { w.append("fishPhone") }
         if sharkDown.contains(false) { w.append("sharkTower") }
@@ -2548,6 +2643,10 @@ extension ChompTableScene: PlayLabHost {
         case _ where text.hasPrefix("MAYOR MELTDOWN ·"): name = "meltdownStarted"
         case _ where text.hasPrefix("BEACH CLOSED"): name = "beachClosed"
         case "EXTRA BALL": name = "extraBall"
+        case _ where text.hasPrefix("STINK LINE FULL"): name = "stinkLineFull"
+        case _ where text.hasPrefix("FLAMINGO ") && text.contains("/"): name = "flamingo"
+        case _ where ChompKevin.titles.contains(text): name = "kmbStarted"
+        case _ where text.hasPrefix("KEVIN JACKPOT") || text.contains(" COMPLETE · "): name = "kmbJackpot"
         default: name = nil
         }
         if let name { lab.objective(name, now: gameTime) }

@@ -724,3 +724,11 @@ def outer_wall():
 # the roof). The left block's arc runs on to 60 deg, where the right block's arc starts.
 reelLeftBlock = ([(395, 1000), (395, 978), (426, 978), (433, 1043), (433, 1065)] + _reel_arc(_aL, 60)
                  + [(490, roofY(490)), (395, roofY(395)), (395, 1000)])
+
+# ---- M5 v4c: the block under the right ramp's mouth (the space above the roof was reachable from the turn / low U).
+reelLeftBlock = ([(395, 1000), (395, 978), (426, 978), (433, 1043), (433, 1065)] + _reel_arc(_aL, 60)
+                 + [(522, 1200), (480, 1242), (420, 1242), (395, roofY(395)), (395, 1000)])
+
+# ---- M5 v4d: the boat's slot narrows to one ball above the mouth (a ball wedged beside the captive ball).
+boatFunnelLeft = [(323, 1003), (333, 1015), (333, 1042)]
+boatFunnelRight = [(377, 1003), (367, 1015), (367, 1042)]

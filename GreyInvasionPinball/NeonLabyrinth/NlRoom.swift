@@ -21,8 +21,9 @@ enum NlRideEnd {
     case room(Int)
 }
 
-/// A room on the shared cell. The cell calls these; the room calls the cell's building and play services
-/// (addWall, addPost, addTarget, addRails, ride, leave, setExitLit, showBanner, sfx, labEvent, haptic, score).
+/// A room on the shared cell. The cell calls these; the room calls its floor's building and play services
+/// (addChild, addWall, addPost, addTarget, addRails, ride, leave, setExitLit, showBanner, sfx, labEvent, haptic, score).
+/// T8 M2 round B: a room sits on one floor of the column (NlCellFloor), in that floor's coordinates.
 @MainActor
 protocol NlRoom: AnyObject {
     /// Which exits the room has: the cell draws only these exit portals, and only these sides' entry portals and stubs,
@@ -32,8 +33,8 @@ protocol NlRoom: AnyObject {
     var solidBlocks: [[CGPoint]] { get }
     /// The room's targets' lab event names, by target name.
     var targetEvents: [String: String] { get }
-    /// Builds the room's floor parts, targets and drawn parts into the cell (once, while the cell builds).
-    func build(in cell: NlTableScene)
+    /// Builds the room's floor parts, targets and drawn parts into its floor (once, while the floor builds).
+    func build(in cell: NlCellFloor)
     /// A new game: the room's state back to its start.
     func newGame()
     /// Every game frame, after the rides moved (game seconds).

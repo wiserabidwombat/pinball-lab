@@ -18,12 +18,36 @@
 // M2 round A: the scene is the shared CELL; the Switchyard is a room (NlRoom / NlSwitchyardRoom.swift) that adds its own
 // parts, targets, drawn parts and exit puzzle. The cell draws only the room's exits (and those sides' entry portals),
 // brings in only arrivals through open sides, and calls the room each frame, per ball, per target hit and at ride ends.
+// M2 round B: the scene is a COLUMN of cells. Each floor (NlCellFloor) is a cell with its own kit, flippers and room,
+// stacked up the world; the ball is a child of its floor, so a cell's logic stays in cell coordinates. A drain drops the
+// ball one floor (it comes in FROM ABOVE on the floor below); out the top exit it climbs one floor (FROM BELOW on the
+// floor above). The table's column (NlColumn) says which room is on each floor and when a drain costs a ball (Neon: a
+// drain on the bottom floor). The camera pans to the ball's floor. Side exits still come back in on the same floor
+// (no columns beside it yet), as does the top exit of the top floor.
 // M1 v2: the Shot Lab and Play Lab hosts (CHOMP!'s pattern; `-shotlab neon`, `-playlab neon`). In the Play Lab the cell
 // plays as a bottom-row cell: a drain costs a ball (the next ball still comes in by the next way in).
 import SpriteKit
 import UIKit
 import CoreGraphics
 import Foundation
+
+/// T8 M2 round B: a table's column of cells — the room on each floor (bottom first), and the table's rule for when a drain
+/// costs a ball. Other tables (9 to Alive) give their own.
+@MainActor
+struct NlColumn {
+    /// Makes the rooms, bottom floor first (one per floor).
+    let makeRooms: () -> [NlRoom]
+    /// Whether a drain on this floor costs a ball (otherwise it drops the ball to the floor below).
+    let drainCostsBall: (_ floor: Int) -> Bool
+    /// The space between floors in the world (the camera pans across it).
+    var floorGap: CGFloat = 120
+
+    /// Neon Labyrinth's test column: three Switchyards; a drain on the bottom floor costs a ball.
+    static func neonTest() -> NlColumn {
+        NlColumn(makeRooms: { [NlSwitchyardRoom(), NlSwitchyardRoom(), NlSwitchyardRoom()] },
+                 drainCostsBall: { $0 == 0 })
+    }
+}
 
 final class NlTableScene: SKScene, RendererHostedScene {
     private enum Control { case left, right }
@@ -81,40 +105,43 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
     private var balls: [NlBall] = []
     private var rides: [Ride] = []
-    private var slingshots: [NlSlingshot] = []
-    private var leftFlipper: NlFlipper!
-    private var rightFlipper: NlFlipper!
     private var isBuilt = false
+    // M2 round B: the column — its floors (bottom first) and the floor the ball is on.
+    private let column: NlColumn
+    private var floors: [NlCellFloor] = []
+    private var activeFloor = 0
+    /// The floor the ball is on (the one input and the camera follow).
+    private var floor: NlCellFloor! { floors.isEmpty ? nil : floors[activeFloor] }
+    /// The ball's floor's flippers (the only ones input drives).
+    private var leftFlipper: NlFlipper! { floor?.leftFlipper }
+    private var rightFlipper: NlFlipper! { floor?.rightFlipper }
+    /// The ball's floor's room.
+    private var room: NlRoom! { floor?.room }
     private let hitHaptic = Haptic(style: .medium)
 
-    // The Switchyard's targets (placeholders until its rules): which body is which, and a short cooldown each.
-    private var targets: [(body: SKNode, name: String, face: SKShapeNode)] = []
+    // The targets' short cooldown each (the targets themselves and their flashes are each floor's).
     private var targetLastHit: [String: TimeInterval] = [:]
-    private var targetFlashUntil: [String: TimeInterval] = [:]
 
-    // M1: the arrival the next drain brings, and which side the alternating arrivals use next.
-    private var nextArrival: Arrival = .fromBelow
+    // Which side the alternating arrivals use next.
     private var nextBelowLeft = true
     private var nextAboveLeft = true
     private var drains = 0
+    /// Drains that dropped the ball to the floor below (not counted in `drains`, which are balls lost).
+    private var floorDrops = 0
     // M1 v4: the outlane saves. Left = the kickback, lit at the start of every ball; right = the outlane save, lit by
     // hitting all three Switchyard targets (placeholder goal until the room's rules). Each fires once.
     private var kickbackLit = true
     private var saveLit = false
     private var targetsHitForSave: Set<String> = []
-    private var kickLamps: [SKShapeNode] = []
-    // M2 round A: the room on this cell, the exit portals' nodes, and which are lit (the room's exit open).
-    private let room: NlRoom
     #if DEBUG
     /// The lab events that count as Play Lab objectives: the room's and the cell's (built once).
     fileprivate lazy var cachedShotObjectives: Set<String> =
         room.playLabShotObjectives.union(["fromBelow", "fromAbove", "fromLeft", "fromRight",
-                                          "kickback", "saveLit", "outlaneSave"])
+                                          "kickback", "saveLit", "outlaneSave", "floorDown", "floorUp"])
     #endif
-    private var exitPortals: [NlExit: SKShapeNode] = [:]
-    private var exitsLit: Set<NlExit> = []
-    /// The arrival a ball out of an exit comes back in by (the cell next door's view), ahead of the drain cycle.
-    private var pendingArrival: Arrival?
+    /// The next ball in: how it arrives and on which floor (set by a drain or an exit; a new ball is FROM BELOW on the
+    /// bottom floor).
+    private var pendingArrival: (arrival: Arrival, floor: Int)?
 
     #if DEBUG
     /// M1 v2: the Shot Lab robot (shared ShotLab) and its own clock.
@@ -179,12 +206,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M2 A"
+    static let buildTagText = "T8 M2 B"
 
-    init(game: NlGameState, settings: GameSettings) {
+    /// `column`: the table's column of cells (nil = Neon's test column).
+    init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
         self.game = game
         self.settings = settings
-        self.room = NlSwitchyardRoom()             // M2 round A: the cell's room (the only one so far)
+        self.column = column ?? NlColumn.neonTest()
         super.init(size: NlTableLayout.worldSize)
         scaleMode = .resizeFill
         backgroundColor = SKColor(red: 0.0, green: 0.0, blue: 0.02, alpha: 1)
@@ -222,182 +250,17 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
     // MARK: - Table
 
+    /// Builds the column: one floor per room, bottom first, stacked up the world with a gap between floors.
     private func buildTable() {
-        addFloor()
-        typealias C = NlCellLayout
-        addWall(points: C.outerWall, friction: NlTableLayout.railFriction, restitution: NlTableLayout.railRestitution)
-        for pts in [C.laneGuideLeft, C.laneGuideRight, C.outlaneWallLeft, C.outlaneWallRight,
-                    C.outlanePostRailLeft, C.outlanePostRailRight, C.topLaneWallLeft, C.topLaneWallRight] {
-            addWall(points: pts)
-        }
-        for p in [C.laneGuidePostLeft, C.laneGuidePostRight, C.outlanePostLeft, C.outlanePostRight] {
-            addPost(at: p, radius: C.laneGuidePostRadius)
-        }
-        for p in C.topLanePosts { addPost(at: p, radius: C.topLanePostRadius) }
-
-        for s in [C.slingLeft, C.slingRight] {
-            let sling = NlSlingshot(top: s[0], corner: s[1], tip: s[2], artBaked: false,
-                                    kickFrom: NlTableLayout.slingKickFrom, kickTo: NlTableLayout.slingKickTo)
-            addChild(sling)
-            slingshots.append(sling)
-        }
         hitHaptic.prepare()
-
-        leftFlipper = NlFlipper(side: .left, pivot: C.pivotLeft)
-        rightFlipper = NlFlipper(side: .right, pivot: C.pivotRight)
-        leftFlipper.attach(to: self)
-        rightFlipper.attach(to: self)
-
-        addWires()
-        addPortals()
-        room.build(in: self)                       // M2 round A: the room's parts, targets and drawn parts
-        for p in [NlTableLayout.kickLampLeft, CGPoint(x: NlTableLayout.mirrorSum - NlTableLayout.kickLampLeft.x,
-                                                       y: NlTableLayout.kickLampLeft.y)] {
-            let lamp = SKShapeNode(circleOfRadius: 9)
-            lamp.position = p
-            lamp.lineWidth = 1.5
-            lamp.zPosition = -18
-            addChild(lamp)
-            kickLamps.append(lamp)
+        for (i, room) in column.makeRooms().enumerated() {
+            let f = NlCellFloor(index: i, room: room, column: self)
+            f.position = CGPoint(x: 0, y: CGFloat(i) * (NlCellLayout.cellSize.height + column.floorGap))
+            addChild(f)
+            f.build()
+            floors.append(f)
         }
         refreshKickLamps()
-    }
-
-    /// The floor inside the outer wall, with a faint 50 pt grid (the neon look's grid floor, in grey-box form).
-    private func addFloor() {
-        let path = CGMutablePath()
-        path.addLines(between: NlCellLayout.outerWall)
-        path.closeSubpath()
-        let floor = SKShapeNode(path: path)
-        floor.fillColor = Self.floorColor
-        floor.strokeColor = .clear
-        floor.zPosition = -20
-        addChild(floor)
-        let grid = CGMutablePath()
-        let w = NlCellLayout.cellSize.width, h = NlCellLayout.cellSize.height
-        for x in stride(from: CGFloat(0), through: w, by: 50) {
-            grid.move(to: CGPoint(x: x, y: 0)); grid.addLine(to: CGPoint(x: x, y: h))
-        }
-        for y in stride(from: CGFloat(0), through: h, by: 50) {
-            grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: w, y: y))
-        }
-        let lines = SKShapeNode(path: grid)
-        lines.strokeColor = SKColor(red: 0.10, green: 0.55, blue: 0.75, alpha: 0.18)
-        lines.lineWidth = 1
-        lines.zPosition = -19.8
-        let crop = SKCropNode()
-        crop.maskNode = SKShapeNode(path: path).then { $0.fillColor = .white; $0.strokeColor = .clear }
-        crop.addChild(lines)
-        crop.zPosition = -19.8
-        addChild(crop)
-    }
-
-    func addWall(points: [CGPoint],
-                         friction: CGFloat = NlTableLayout.wallFriction,
-                         restitution: CGFloat = NlTableLayout.wallRestitution,
-                         z: CGFloat = -19.5) {
-        // A closed outline (last point = first) is an edge LOOP (CHOMP! M3 v13b: an edge chain lost its closing edge).
-        let closed = points.count > 2 && points.first == points.last
-        let path = CGMutablePath()
-        if closed {
-            path.addLines(between: Array(points.dropLast()))
-            path.closeSubpath()
-        } else {
-            path.addLines(between: points)
-        }
-        let node = SKShapeNode(path: path)
-        node.strokeColor = Self.wallColor
-        node.lineWidth = 3
-        node.lineCap = .round
-        node.lineJoin = .round
-        node.zPosition = z
-        let body = closed ? SKPhysicsBody(edgeLoopFrom: path) : SKPhysicsBody(edgeChainFrom: path)
-        body.friction = friction
-        body.restitution = restitution
-        body.categoryBitMask = NlPhysicsCategory.wall
-        body.collisionBitMask = NlPhysicsCategory.ball
-        node.physicsBody = body
-        addChild(node)
-    }
-
-    func addPost(at p: CGPoint, radius r: CGFloat, fill: SKColor = SKColor(white: 0.85, alpha: 1)) {
-        let post = SKShapeNode(circleOfRadius: r)
-        post.position = p
-        post.fillColor = fill
-        post.strokeColor = Self.wallColor
-        post.lineWidth = 1.5
-        post.zPosition = -19
-        let body = SKPhysicsBody(circleOfRadius: r)
-        body.isDynamic = false
-        body.restitution = NlTableLayout.postRestitution
-        body.friction = 0.2
-        body.categoryBitMask = NlPhysicsCategory.wall
-        body.collisionBitMask = NlPhysicsCategory.ball
-        post.physicsBody = body
-        addChild(post)
-    }
-
-    /// A standup: a thick drawn face with an edge body (category target) along it, and its label behind it.
-    func addTarget(name: String, face: (CGPoint, CGPoint), normal: CGVector) {
-        let path = CGMutablePath()
-        path.addLines(between: [face.0, face.1])
-        let node = SKShapeNode(path: path)
-        node.strokeColor = Self.targetColor
-        node.lineWidth = 6
-        node.lineCap = .round
-        node.zPosition = -18
-        let body = SKPhysicsBody(edgeFrom: face.0, to: face.1)
-        body.restitution = NlTableLayout.wallRestitution
-        body.friction = NlTableLayout.wallFriction
-        body.categoryBitMask = NlPhysicsCategory.target
-        body.collisionBitMask = NlPhysicsCategory.ball
-        node.physicsBody = body
-        addChild(node)
-        let mid = CGPoint(x: (face.0.x + face.1.x) / 2 - normal.dx * 24, y: (face.0.y + face.1.y) / 2 - normal.dy * 24)
-        let label = SKLabelNode(text: name)
-        label.fontName = "Menlo-Bold"
-        label.fontSize = 11
-        label.fontColor = Self.targetColor.withAlphaComponent(0.85)
-        label.verticalAlignmentMode = .center
-        label.position = mid
-        label.zPosition = -17
-        addChild(label)
-        targets.append((body: node, name: name, face: node))
-    }
-
-    /// The kit's wires (drawn; ridden as scripted rides): both return wires (arrivals from above use them), and the entry
-    /// stubs of the sides the room has open.
-    private func addWires() {
-        typealias C = NlCellLayout
-        var wires = [C.returnWireLeft, C.returnWireRight]
-        if room.exits.contains(.left) { wires.append(C.entryStubLeft) }
-        if room.exits.contains(.right) { wires.append(C.entryStubRight) }
-        for wire in wires { addRails(wire, halfWidth: 17, z: 17) }
-    }
-
-    @discardableResult
-    func addRails(_ centre: [CGPoint], halfWidth: CGFloat, z: CGFloat) -> [SKShapeNode] {
-        guard centre.count >= 2 else { return [] }
-        var sides: [[CGPoint]] = [[], []]
-        for (i, p) in centre.enumerated() {
-            let a = centre[max(0, i - 1)], b = centre[min(centre.count - 1, i + 1)]
-            let len = max(hypot(b.x - a.x, b.y - a.y), 0.001)
-            let n = CGVector(dx: -(b.y - a.y) / len, dy: (b.x - a.x) / len)
-            sides[0].append(CGPoint(x: p.x + n.dx * halfWidth, y: p.y + n.dy * halfWidth))
-            sides[1].append(CGPoint(x: p.x - n.dx * halfWidth, y: p.y - n.dy * halfWidth))
-        }
-        var nodes: [SKShapeNode] = []
-        for side in sides {
-            let path = CGMutablePath()
-            path.addLines(between: side)
-            let node = SKShapeNode(path: path)
-            node.strokeColor = Self.wireColor
-            node.lineWidth = 1.6
-            node.zPosition = z
-            addChild(node)
-            nodes.append(node)
-        }
-        return nodes
     }
 
     // MARK: - Services for the room (M2 round A)
@@ -414,70 +277,40 @@ final class NlTableScene: SKScene, RendererHostedScene {
         hitHaptic.impactOccurred(intensity: intensity)
     }
 
-    /// The ball has gone out through `exit`: it's removed, and with no maze yet it comes straight back in 0.8 s later as
-    /// the cell next door would get it (out the left → in from the right, out the top → in from below). Costs nothing.
-    func leave(_ ball: NlBall, by exit: NlExit) {
+    /// The ball has gone out through `exit` of `from`: it's removed, and comes in where that exit leads. Out the top it
+    /// climbs to the floor above (FROM BELOW there); the top floor's top exit and the side exits have nowhere to go yet,
+    /// so the ball comes back in on the same floor as the cell next door would get it (out the left → in from the right,
+    /// out the top → in from below). Costs nothing.
+    func leave(_ ball: NlBall, by exit: NlExit, from: NlCellFloor) {
         removeBall(ball)
-        room.ballLeft(by: exit)
+        from.room.ballLeft(by: exit)
         labEvent(exit.labEvent)
+        if exit == .top, from.index + 1 < floors.count {
+            pendingArrival = (.fromBelow, from.index + 1)
+            cameraRig.origin = floors[from.index + 1].position     // the pan starts now
+            labEvent("floorUp")
+            if balls.isEmpty, nextBallAt == nil { nextBallAt = gameTime + Self.floorMoveDelay }
+            return
+        }
         let back: Arrival = [Arrival.fromRight, .fromBelow, .fromLeft][exit.rawValue]
-        pendingArrival = availableArrivals.contains(back) ? back : nil
+        pendingArrival = (availableArrivals(on: from).contains(back) ? back : .fromBelow, from.index)
         if balls.isEmpty, nextBallAt == nil { nextBallAt = gameTime + 0.8 }
     }
 
-    /// The room's way out `exit` is open (lit) or not: its portal glows.
-    func setExitLit(_ exit: NlExit, _ lit: Bool) {
-        if lit { exitsLit.insert(exit) } else { exitsLit.remove(exit) }
-        guard let node = exitPortals[exit] else { return }
-        node.strokeColor = lit ? SKColor(red: 1.0, green: 0.75, blue: 0.95, alpha: 1) : Self.exitColor
-        node.lineWidth = lit ? 9 : 6
-    }
+    /// From a drain or a top exit to the next floor's arrival (the camera pans meanwhile).
+    static let floorMoveDelay: TimeInterval = 0.3
 
-    /// The arrivals that can happen in this cell: below and above always, a side only if the room has that side.
-    private var availableArrivals: [Arrival] {
+    /// The arrivals that can happen on a floor: below and above always, a side only if its room has that side.
+    private func availableArrivals(on f: NlCellFloor) -> [Arrival] {
         Arrival.allCases.filter { a in
             switch a {
-            case .fromLeft: return room.exits.contains(.left)
-            case .fromRight: return room.exits.contains(.right)
+            case .fromLeft: return f.room.exits.contains(.left)
+            case .fromRight: return f.room.exits.contains(.right)
             default: return true
             }
         }
     }
 
-    /// The portals on the walls: entries (cyan) and exits (magenta, glowing while the room has that exit open), only on
-    /// the sides the room has (a side's entry comes with its exit).
-    private func addPortals() {
-        typealias C = NlCellLayout
-        @discardableResult
-        func bar(_ a: CGPoint, _ b: CGPoint, _ color: SKColor) -> SKShapeNode {
-            let path = CGMutablePath()
-            path.addLines(between: [a, b])
-            let node = SKShapeNode(path: path)
-            node.strokeColor = color
-            node.lineWidth = 6
-            node.lineCap = .round
-            node.zPosition = -18.5
-            addChild(node)
-            return node
-        }
-        let entryX = C.entryStubLeft.first!.x + 6
-        if room.exits.contains(.left) {
-            bar(CGPoint(x: entryX, y: C.entryPortalY.lowerBound), CGPoint(x: entryX, y: C.entryPortalY.upperBound), Self.entryColor)
-            exitPortals[.left] = bar(CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound),
-                                     CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), Self.exitColor)
-        }
-        if room.exits.contains(.right) {
-            bar(CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.lowerBound),
-                CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.upperBound), Self.entryColor)
-            exitPortals[.right] = bar(CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound),
-                                      CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), Self.exitColor)
-        }
-        if room.exits.contains(.top) {
-            exitPortals[.top] = bar(CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1),
-                                    CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), Self.exitColor)
-        }
-        for exit in NlExit.allCases { setExitLit(exit, exitsLit.contains(exit)) }
-    }
 
     // MARK: - Build tag (debug builds)
 
@@ -529,7 +362,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
         let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\n" : ""
-        let text = "\(fps)\(Self.buildTagText) · \(speed) · \(room.tagText) · drains \(drains) · next \(nextArrival.banner.lowercased())"
+        let text = "\(fps)\(Self.buildTagText) · \(speed) · \(room.tagText) · floor \(activeFloor + 1)/\(floors.count) · drains \(drains)"
         if buildTag.text != text {
             buildTag.text = text
             buildTagBack?.path = CGPath(roundedRect: buildTag.frame.insetBy(dx: -4, dy: -4),
@@ -556,9 +389,11 @@ final class NlTableScene: SKScene, RendererHostedScene {
         balls.removeAll()
     }
 
-    /// Brings a ball into the cell by `arrival`. The alternating ones (below, above) take the next side.
-    private func arrive(_ arrival: Arrival) {
+    /// Brings a ball onto floor `on` by `arrival` (that floor becomes the ball's; the camera pans to it). The alternating
+    /// ones (below, above) take the next side.
+    private func arrive(_ arrival: Arrival, on floorIndex: Int) {
         typealias C = NlCellLayout
+        setActiveFloor(floorIndex)
         kickbackLit = true                          // every ball starts with the kickback lit
         refreshKickLamps()
         if nudge.tilted { nudge.newBall(); updateFlippers() } else { nudge.newBall() }   // a tilt ends here
@@ -588,14 +423,24 @@ final class NlTableScene: SKScene, RendererHostedScene {
                       height: NlTableLayout.wireHeight, release: CGVector(dx: 0, dy: -C.wireReleaseSpeed),
                       event: isLeft ? "fromLeft" : "fromRight")
         }
-        showBanner(arrival.banner)
+        showBanner(floors.count > 1 ? "\(arrival.banner) · FLOOR \(floorIndex + 1)" : arrival.banner)
         sfx(arrival == .fromBelow ? .upKick : .launch)
+    }
+
+    /// Makes floor `i` the ball's floor: its flippers take the input (the old floor's drop), the camera pans to it.
+    private func setActiveFloor(_ i: Int) {
+        guard i != activeFloor, floors.indices.contains(i) else { return }
+        floor.leftFlipper.isPressed = false
+        floor.rightFlipper.isPressed = false
+        activeFloor = i
+        cameraRig.origin = floor.position
+        updateFlippers()
     }
 
     private func startRide(from start: CGPoint, path: [CGPoint], speed: CGFloat, height: CGFloat, release: CGVector,
                            event: String? = nil) {
         let ball = NlBall(at: start)
-        addChild(ball)
+        floor.addChild(ball)                       // the ball lives on its floor (the floor's coordinates)
         balls.append(ball)
         ride(ball, path: path, speed: speed, height: height, release: release, event: event)
     }
@@ -647,12 +492,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 ride.ball.physicsBody?.velocity = ride.release
                 ride.ball.previousPosition = ride.ball.position
             } else if case .room(let tag) = ride.end {
-                room.rideEnded(ride.ball, tag: tag)
+                (ride.ball.parent as? NlCellFloor)?.room.rideEnded(ride.ball, tag: tag)
             }
         }
     }
 
     func newGame() {
+        guard !floors.isEmpty else { return }      // not built yet (the column builds in didMove)
         fpsLow = 0
         isAttractMode = false
         #if DEBUG
@@ -669,13 +515,14 @@ final class NlTableScene: SKScene, RendererHostedScene {
         targetsHitForSave = []
         refreshKickLamps()
         pendingArrival = nil
-        room.newGame()
+        floors.forEach { $0.room.newGame() }
         drains = 0
+        floorDrops = 0
         nextBelowLeft = true
         nextAboveLeft = true
         game.reset()
-        nextArrival = .fromAbove                   // after the first ball (from below), the drains cycle on
-        arrive(.fromBelow)
+        arrive(.fromBelow, on: 0)                  // a new ball comes up from below on the bottom floor
+        cameraRig.origin = floor.position
         refreshCamera()
     }
 
@@ -816,19 +663,23 @@ final class NlTableScene: SKScene, RendererHostedScene {
         #if DEBUG
         updatePlayLab(now)
         #endif
-        leftFlipper.step(dt: dt)
-        rightFlipper.step(dt: dt)
+        for f in floors {                        // every floor's flippers (an idle floor's fall back to rest)
+            f.leftFlipper.step(dt: dt)
+            f.rightFlipper.step(dt: dt)
+        }
         updateRides(dt)
-        room.update(dt)
-        if game.status != room.status { game.status = room.status }   // the room owns the HUD status line
+        floors.forEach { $0.room.update(dt) }
+        if game.status != room.status { game.status = room.status }   // the ball's room owns the HUD status line
         handBallsToSwingingFlippers()
-        slingshots.forEach { $0.settle() }
+        for f in floors { f.slingshots.forEach { $0.settle() } }
         governInlanes()                          // the inlane speed limit (InlaneGovernor, shared)
 
-        for t in targets {
-            if let until = targetFlashUntil[t.name], now >= until {
-                targetFlashUntil[t.name] = nil
-                t.face.strokeColor = Self.targetColor
+        for f in floors {
+            for t in f.targets {
+                if let until = f.targetFlashUntil[t.name], now >= until {
+                    f.targetFlashUntil[t.name] = nil
+                    t.face.strokeColor = Self.targetColor
+                }
             }
         }
 
@@ -837,47 +688,41 @@ final class NlTableScene: SKScene, RendererHostedScene {
             game.banner = nil
         }
 
-        // The drain: a floor ball across the drain line drops to the cell below. M1 has no grid, so in play it costs
-        // nothing and comes back in by the next way in; in the Play Lab the cell plays as a bottom-row cell (a ball lost).
+        // The drain: a floor ball across its floor's drain line drops to the floor below (FROM ABOVE there), unless the
+        // table's column says a drain on that floor costs a ball (Neon: the bottom floor). A new ball comes up from below
+        // on the bottom floor.
         let drained = balls.filter { $0.isOnFloor && $0.position.y < NlCellLayout.drainLineY }
         if !drained.isEmpty {
+            let from = (drained.first?.parent as? NlCellFloor)?.index ?? activeFloor
             drained.forEach { removeBall($0) }
-            drains += drained.count
-            cameraRig.shake(strength: 3, duration: 0.25)
-            sfx(.drain)
             if balls.isEmpty, nextBallAt == nil {
-                if drainsCostBalls {
+                // The bottom floor has nowhere to drop to, so a drain there always costs a ball.
+                if column.drainCostsBall(from) || from == 0 {
+                    drains += drained.count
+                    cameraRig.shake(strength: 3, duration: 0.25)
+                    sfx(.drain)
                     game.ballDrained()
+                    pendingArrival = (.fromBelow, 0)
                     if !game.isGameOver { nextBallAt = now + 0.8 }
                 } else {
-                    nextBallAt = now + 0.8
+                    pendingArrival = (.fromAbove, from - 1)
+                    floorDrops += 1
+                    cameraRig.origin = floors[from - 1].position         // the pan starts now
+                    labEvent("floorDown")
+                    sfx(.gate)
+                    nextBallAt = now + Self.floorMoveDelay
                 }
             }
         }
 
         if let due = nextBallAt, now >= due {
             nextBallAt = nil
-            if let back = pendingArrival {         // M2 v1: back in from an exit (the drain cycle doesn't move)
-                pendingArrival = nil
-                arrive(back)
-            } else {
-                let all = availableArrivals             // only through the sides the room has
-                let arrival = all.contains(nextArrival) ? nextArrival : .fromBelow
-                nextArrival = all[((all.firstIndex(of: arrival) ?? 0) + 1) % all.count]
-                arrive(arrival)
-            }
+            let next = pendingArrival ?? (.fromBelow, 0)
+            pendingArrival = nil
+            arrive(next.arrival, on: next.floor)
         }
         #if DEBUG
         checkPlayLabGame(now)
-        #endif
-    }
-
-    /// Whether a drain costs a ball: only in the Play Lab for now (the cell as a bottom-row cell).
-    private var drainsCostBalls: Bool {
-        #if DEBUG
-        return playLab != nil
-        #else
-        return false
         #endif
     }
 
@@ -906,11 +751,10 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
     /// The solid blocks (closed outlines): a floor ball whose centre ends up inside one is put back just outside its
     /// nearest edge, with any velocity into that edge removed (CHOMP! M3 v13).
-    private lazy var solidBlocks: [[CGPoint]] = room.solidBlocks
 
     private func keepOutOfSolids(_ ball: NlBall) {
         let p = ball.position
-        for closed in solidBlocks where closed.count > 3 {
+        for closed in floor.solidBlocks where closed.count > 3 {
             let poly = Array(closed.dropLast())                  // last point repeats the first
             var inside = false
             var j = poly.count - 1
@@ -1009,7 +853,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private func refreshKickLamps() {
         let on = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
         let off = SKColor(red: 0.14, green: 0.28, blue: 0.18, alpha: 0.9)
-        for (i, lamp) in kickLamps.enumerated() {
+        for (i, lamp) in floors.flatMap({ $0.kickLamps.enumerated().map { $0 } }) {
             let lit = i == 0 ? kickbackLit : saveLit
             lamp.fillColor = lit ? on : off
             lamp.strokeColor = lit ? .white : on.withAlphaComponent(0.4)
@@ -1039,19 +883,20 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 labEvent("sling")
                 game.add(NlPoints.slingshot)
                 hitHaptic.impactOccurred(intensity: 0.6)
-                Effects.burst(in: self, at: ballNode.position, color: Self.wallColor, count: 8,
+                Effects.burst(in: ballNode.parent ?? self, at: ballNode.position, color: Self.wallColor, count: 8,
                               speed: 160, lifetime: 0.25, size: 0.22)
                 sfx(.sling)
             }
         case NlPhysicsCategory.target:
             // The room's targets: the cell scores and flashes them and counts them for the outlane save; the room says what
             // they do (the Switchyard: turn the turntable or step the bridge) and what the banner reads.
-            guard let t = targets.first(where: { $0.body === node }) else { break }
+            guard let tf = floors.first(where: { f in f.targets.contains(where: { $0.body === node }) }),
+                  let t = tf.targets.first(where: { $0.body === node }) else { break }
             if let last = targetLastHit[t.name], gameTime - last < 0.15 { break }
             targetLastHit[t.name] = gameTime
             if !saveLit {
                 targetsHitForSave.insert(t.name)
-                if targetsHitForSave.count == targets.count {      // all three: light the right outlane save
+                if targetsHitForSave.count == tf.targets.count {   // all the room's targets: light the right outlane save
                     saveLit = true
                     targetsHitForSave = []
                     refreshKickLamps()
@@ -1059,13 +904,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
                     labEvent("saveLit")
                 }
             }
-            labEvent(room.targetEvents[t.name] ?? "target")
+            labEvent(tf.room.targetEvents[t.name] ?? "target")
             game.add(NlPoints.target)
-            showBanner(room.targetHit(t.name))
+            showBanner(tf.room.targetHit(t.name))
             sfx(.standup)
             hitHaptic.impactOccurred(intensity: 0.7)
             t.face.strokeColor = .white                     // back to its colour in update()
-            targetFlashUntil[t.name] = gameTime + 0.12
+            tf.targetFlashUntil[t.name] = gameTime + 0.12
         default:
             break
         }
@@ -1133,7 +978,7 @@ extension NlTableScene: ShotLabHost {
 
     func shotLabPlaceBall(at point: CGPoint) {
         let ball = NlBall(at: point)
-        addChild(ball)
+        floor.addChild(ball)
         balls.append(ball)
     }
 
@@ -1149,7 +994,7 @@ extension NlTableScene: ShotLabHost {
         kickbackLit = false                         // the robot measures the bare table: no saves
         saveLit = false
         refreshKickLamps()
-        room.shotLabReset()                         // and the room as a new game has it
+        floors.forEach { $0.room.shotLabReset() }   // and the rooms as a new game has them
     }
 
     /// The room's probes (the Switchyard: the shot line and the RAILS target's height).
@@ -1164,6 +1009,8 @@ extension NlTableScene: ShotLabHost {
         stopPlayLab(saving: true)                  // a Shot Lab started mid Play Lab ends that run first
         isAttractMode = false
         removeAllBalls()
+        setActiveFloor(0)                          // the robot plays the bottom floor
+        cameraRig.origin = floor.position
         shotLabTime = 0
         kickbackLit = false
         saveLit = false
@@ -1184,7 +1031,7 @@ extension NlTableScene: ShotLabHost {
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         handBallsToSwingingFlippers()
-        slingshots.forEach { $0.settle() }
+        floor.slingshots.forEach { $0.settle() }
         governInlanes()
         if lab.update(now: now) {
             game.banner = lab.progressText
@@ -1219,6 +1066,8 @@ extension NlTableScene: PlayLabHost {
          PlayObjective(name: "kickback", text: "The kickback saves a ball"),
          PlayObjective(name: "saveLit", text: "Light the outlane save (all the room's targets)"),
          PlayObjective(name: "outlaneSave", text: "The outlane save saves a ball"),
+         PlayObjective(name: "floorDown", text: "A drain drops the ball to the floor below"),
+         PlayObjective(name: "floorUp", text: "Out the top exit to the floor above"),
          PlayObjective(name: "tilt", text: "Tilt")]
     }
 
@@ -1253,7 +1102,7 @@ extension NlTableScene: PlayLabHost {
             removeAllBalls()
             nextBallAt = nil
         }
-        return ["drains": drains]
+        return ["drains": drains, "floorDrops": floorDrops]
     }
 
     func playLabStop() {
@@ -1338,7 +1187,7 @@ extension NlTableScene: PlayLabHost {
 
     /// The shots the table wants, most wanted first: the room decides, given the targets still needed for the save.
     private func robotWanted() -> [String] {
-        let need = targets.map(\.name).filter { !targetsHitForSave.contains($0) }.compactMap { room.targetEvents[$0] }
+        let need = floor.targets.map(\.name).filter { !targetsHitForSave.contains($0) }.compactMap { room.targetEvents[$0] }
         return room.robotWanted(saveNeeds: saveLit ? [] : need)
     }
 

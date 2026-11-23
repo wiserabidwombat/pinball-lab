@@ -44,7 +44,7 @@ final class NlSwitchyardRoom: NlRoom {
         static let derailBase = 20        // + heading: off the turntable → the floor
     }
 
-    private weak var cell: NlTableScene?
+    private weak var cell: NlCellFloor?
 
     // Where the turntable and the bridge point (0 W, 1 N, 2 E), their drawn angles, and the nodes that show the route.
     private var turntable = 1
@@ -64,7 +64,7 @@ final class NlSwitchyardRoom: NlRoom {
     let solidBlocks: [[CGPoint]] = [Y.switchBlockLeft, Y.switchBlockRight, Y.railsBlock]
     let targetEvents = ["SWITCH ◄": "switchLeft", "SWITCH ►": "switchRight", "RAILS": "rails"]
 
-    func build(in cell: NlTableScene) {
+    func build(in cell: NlCellFloor) {
         self.cell = cell
         for pts in [Y.switchBlockLeft, Y.switchBlockRight, Y.railsBlock, Y.rampU] { cell.addWall(points: pts) }
         for p in Y.rampMouthPosts { cell.addPost(at: p, radius: Y.rampMouthPostRadius) }
@@ -188,7 +188,7 @@ final class NlSwitchyardRoom: NlRoom {
 
     /// The ramp's raised part, the turntable with its pointer, the light-rail ring with its bridge, the three
     /// light-rails, and the route lamps (◄ ▲ ►) in the open lower table.
-    private func addDrawnParts(_ cell: NlTableScene) {
+    private func addDrawnParts(_ cell: NlCellFloor) {
         typealias S = NlTableScene
         let c = NlCellLayout.centerX
         // The ramp's plastic above its solid low end.

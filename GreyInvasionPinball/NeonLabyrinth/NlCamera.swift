@@ -17,6 +17,9 @@ final class NlCameraRig {
     private var joltLeft: TimeInterval = 0
     private var joltDuration: TimeInterval = 0
     private var joltVector = CGVector.zero          // screen points the TABLE appears to move at the peak
+    /// T8 M2 round B: where the framed cell sits in the world (the ball's floor in the column). The camera frames the
+    /// cell at this origin and eases across when it changes (a floor change pans).
+    var origin = CGPoint.zero
 
     /// `strength` is the largest offset in SCREEN points. Skipped with Reduce Motion.
     func shake(strength: CGFloat, duration: TimeInterval = 0.3) {
@@ -58,7 +61,9 @@ final class NlCameraRig {
         let scale = node.xScale + (goal.scale - node.xScale) * a
         node.setScale(scale)
 
-        let dead = CameraTuning.deadZone
+        // T8 M2 round B: no dead zone in Top-Down (its goal only moves when the floor changes; a dead zone stopped the
+        // pan short of the new floor).
+        let dead = mode == .topDown ? 0 : CameraTuning.deadZone
         let dx = goal.position.x - base.x
         let dy = goal.position.y - base.y
         let ex = dx - min(max(dx, -dead), dead)
@@ -93,7 +98,7 @@ final class NlCameraRig {
             let usableHeight = max(viewSize.height - hud, 1)
             let scale = max((w + 2 * m) / viewSize.width, (h + 2 * m) / usableHeight)
             let visibleHeight = viewSize.height * scale
-            return (CGPoint(x: w / 2, y: -m + visibleHeight / 2), scale)
+            return (CGPoint(x: origin.x + w / 2, y: origin.y - m + visibleHeight / 2), scale)
 
         case .flying, .wide:
             let visibleWidth = mode == .flying ? CameraTuning.flyingVisibleWidth : CameraTuning.wideVisibleWidth
@@ -123,7 +128,7 @@ final class NlCameraRig {
             }
             // When the view is wider than the table (iPad Wide, landscape), keep the table centred.
             let x = visW >= w + 2 * m ? w / 2 : min(max(tx, minX), maxX)
-            return (CGPoint(x: x, y: min(max(ty, minY), maxY)), scale)
+            return (CGPoint(x: origin.x + x, y: origin.y + min(max(ty, minY), maxY)), scale)
         }
     }
 }

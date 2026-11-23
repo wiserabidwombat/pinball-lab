@@ -200,7 +200,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M5 v4d"
+    static let buildTagText = "T7 M5 v4e"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -1225,6 +1225,45 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     }
 
     /// The one-way gates (category diverter; M2 v16: now only the quickshot gate): solid for each ball only while it moves right.
+    /// M5 v4e (Play Lab 03-10-05Z: a ball left the table at (−33, 923); wall probe: a 3,500 pt/s shot off Tgt1 into
+    /// the harpoon lane went through the outer wall at x 20, and 2,500 pt/s ones sank 13 pt into it): a ball moves
+    /// ~29 pt a 120 Hz step at top speed, almost a whole ball, and SpriteKit's edge chain can let its centre through.
+    /// If a floor ball's centre crossed the outer wall this step, it goes back to the playfield side, one radius off
+    /// the wall, with its velocity into the wall bounced (wall restitution).
+    private lazy var outerWallSegments: [(CGPoint, CGPoint)] = {
+        let w = ChompTableLayout.outerWall
+        return zip(w, w.dropFirst()).map { ($0, $1) }
+    }()
+
+    private func keepInsideOuterWall(_ ball: ChompBall, _ body: SKPhysicsBody) {
+        let p0 = ball.previousPosition, p = ball.position
+        guard p0 != p else { return }
+        let d = CGVector(dx: p.x - p0.x, dy: p.y - p0.y)
+        guard hypot(d.dx, d.dy) < 80 else { return }              // a ball placed by a lab, not a physics step
+        for (a, b) in outerWallSegments {
+            let e = CGVector(dx: b.x - a.x, dy: b.y - a.y)
+            let den = d.dx * e.dy - d.dy * e.dx
+            guard abs(den) > 1e-6 else { continue }
+            let w = CGVector(dx: a.x - p0.x, dy: a.y - p0.y)
+            let t = (w.dx * e.dy - w.dy * e.dx) / den          // along the ball's step
+            let u = (w.dx * d.dy - w.dy * d.dx) / den          // along the wall segment
+            guard t >= 0, t <= 1, u >= 0, u <= 1 else { continue }
+            let len = max(hypot(e.dx, e.dy), 1e-6)
+            var n = CGVector(dx: -e.dy / len, dy: e.dx / len)
+            if (p0.x - a.x) * n.dx + (p0.y - a.y) * n.dy < 0 { n = CGVector(dx: -n.dx, dy: -n.dy) }   // toward where it came from
+            let hit = CGPoint(x: p0.x + d.dx * t, y: p0.y + d.dy * t)
+            let r = ChompTableLayout.ballRadius
+            ball.position = CGPoint(x: hit.x + n.dx * (r + 0.5), y: hit.y + n.dy * (r + 0.5))
+            let v = body.velocity
+            let vn = v.dx * n.dx + v.dy * n.dy
+            if vn < 0 {
+                let k = (1 + ChompTableLayout.wallRestitution) * vn
+                body.velocity = CGVector(dx: v.dx - n.dx * k, dy: v.dy - n.dy * k)
+            }
+            return
+        }
+    }
+
     private func updateSaveGate() {
         for ball in balls {
             ball.setSaveGateSolid((ball.physicsBody?.velocity.dx ?? 0) > 0)
@@ -1907,6 +1946,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             }
             // A plunge crossing the launch gate going up swings the flap (read before previousPosition moves on).
             // M3 v14: a plunge crossing into the turn through the gate (between the divider's end and the spiral's end).
+            if ball.isOnFloor { keepInsideOuterWall(ball, body) }                 // M5 v4e
             let p0 = ball.previousPosition, p = ball.position
             if !isOnReelLaneSideOfGate(p0), isOnReelLaneSideOfGate(p),
                p.x > ChompTableLayout.gateHigh.x - 5, p.x < ChompTableLayout.gateLow.x + 5, p.y > ChompTableLayout.gateLow.y - 5 {
@@ -2342,6 +2382,16 @@ extension ChompTableScene {
         // M5 v1: plunges from the plunger's top at 1,040 → 2,300 pt/s in 30s (the whole pull), drops 10…, to see which
         // first switch each one makes (DROPEV lines) for the skill shot.
         + stride(from: 1040, through: 2300, by: 30).map { (CGPoint(x: 568, y: 140), CGVector(dx: 0, dy: CGFloat($0))) }
+        // M5 wall probe (Play Lab 03-10-05Z: a ball left the table at (-33, 923)): the reconstructed right-flipper shot
+        // ((264, 404) at 107.7°, 3,000 / 3,300 / 3,500 pt/s), then a fan from in front of Tgt1 at the harpoon lane's
+        // outer wall (x 20) between the quickshot gate's ends, 2,500 and 3,500 pt/s.
+        + [3000, 3300, 3500].map { (v: CGFloat) in
+            let a = 107.7 * CGFloat.pi / 180
+            return (CGPoint(x: 264, y: 404), CGVector(dx: v * cos(a), dy: v * sin(a))) }
+        + stride(from: 140, through: 175, by: 5).flatMap { (deg: Int) in
+            [2500, 3500].map { (v: CGFloat) in
+                let a = CGFloat(deg) * CGFloat.pi / 180
+                return (CGPoint(x: 150, y: 790), CGVector(dx: v * cos(a), dy: v * sin(a))) } }
 
     func debugDropProbe() {
         isAttractMode = false

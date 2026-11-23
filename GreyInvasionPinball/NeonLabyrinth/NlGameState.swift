@@ -3,7 +3,6 @@
 import Foundation
 import Observation
 
-private let nlHighScoreKey = "neon.highScore"
 
 /// Table 08 point values (placeholders until the rules milestone).
 enum NlPoints {
@@ -33,8 +32,16 @@ final class NlGameState {
     var bonusText: String?
     /// The mission and goal (from the rules milestone); shown dim when there's no banner.
     var status: String?
-    var highScore = UserDefaults.standard.integer(forKey: nlHighScoreKey)
+    var highScore = 0
     var isNewHighScore = false
+    /// Where this table's high score is saved (T8 M2 round D, for 9 to Alive: each table on the shared engine keeps its
+    /// own). Neon's is "neon.highScore".
+    let highScoreKey: String
+
+    init(highScoreKey: String = "neon.highScore") {
+        self.highScoreKey = highScoreKey
+        highScore = UserDefaults.standard.integer(forKey: highScoreKey)
+    }
 
     var isGameOver: Bool { ballsLeft == 0 }
 
@@ -77,6 +84,6 @@ final class NlGameState {
         guard !isRobot, score > highScore else { return }
         highScore = score
         isNewHighScore = true
-        UserDefaults.standard.set(score, forKey: nlHighScoreKey)
+        UserDefaults.standard.set(score, forKey: highScoreKey)
     }
 }

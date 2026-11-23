@@ -41,6 +41,9 @@ struct NlColumn {
     let drainCostsBall: (_ floor: Int) -> Bool
     /// The space between floors in the world (the camera pans across it).
     var floorGap: CGFloat = 120
+    /// T8 M2 round D (for 9 to Alive): the table's name in the labs' reports and file names
+    /// (shotlab-<name>-…, playlab-<name>-…). Neon's is "Neon".
+    var labName = "Neon"
 
     /// Neon Labyrinth's test column: three Switchyards; a drain on the bottom floor costs a ball.
     static func neonTest() -> NlColumn {
@@ -202,7 +205,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M2 C"
+    static let buildTagText = "T8 M2 D"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -944,7 +947,7 @@ extension NlTableScene {
 // MARK: - M1 v2: the Shot Lab host (CHOMP!'s pattern). The robot sweeps flip timings from both flippers and records
 // the first shot each flip makes. Run in the Simulator: tools/shotlab_run.sh neon
 extension NlTableScene: ShotLabHost {
-    var shotLabTableName: String { "Neon" }
+    var shotLabTableName: String { column.labName }
 
     /// The room's shots end a trial; slings are noted only.
     var shotLabMajorEvents: Set<String> { room.shotLabMajorEvents }
@@ -1051,7 +1054,7 @@ extension NlTableScene: ShotLabHost {
 // MARK: - M1 v2: the Play Lab host (CHOMP!'s pattern). Robot players at four skills play whole games of the cell as a
 // bottom-row cell; the report shows drains, stuck balls and which shots get made. tools/playlab_run.sh neon
 extension NlTableScene: PlayLabHost {
-    var playLabTableName: String { "Neon" }
+    var playLabTableName: String { column.labName }
     var playLabBallRadius: CGFloat { NlTableLayout.ballRadius }
     var playLabVariantCount: Int { 1 }
 

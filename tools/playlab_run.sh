@@ -88,6 +88,9 @@ fi
 [ -n "$SKILLS" ] && ARGS+=(-playlab-skills "$SKILLS")
 # Plan 2 round 18: OVERRIDE="Mon.ragingPush=2000" — what-if tunables (GreyInvasionPinball/LabOverrides.swift).
 [ -n "${OVERRIDE:-}" ] && ARGS+=(-override "$OVERRIDE") && echo "▶ Overrides: $OVERRIDE"
+# CAP=1800 → a game is closed after that many seconds of table time instead of 480 (until 2026-11-23 CAP only sized
+# the runner's budget and never reached the app).
+[ -n "${CAP:-}" ] && ARGS+=(-playlab-cap "$CAP") && echo "▶ Game cap: $CAP s"
 # Lab fast-forward: FAST=8 → 8 fixed 1/120 s updates per drawn frame (4× real time; no screenshots in this mode).
 [ -n "${FAST:-}" ] && ARGS+=(-lab-fast "$FAST") && echo "▶ Fast-forward: $FAST steps per frame"
 # The custom skill's profile: CUSTOM="base=advanced,sigma=0.013,catch=0.86" … custom (tools/playlab_calibrate.py prints it).

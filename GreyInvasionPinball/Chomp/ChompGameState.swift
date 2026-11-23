@@ -45,6 +45,8 @@ final class ChompGameState {
 
     var score = 0
     var ballsLeft = ballsPerGame
+    /// M5 v3: extra balls won this game (the Play Lab's balls-played count).
+    var extraBallsEarned = 0
     /// A robot (Play Lab) game: never recorded as the high score.
     var isRobot = false
     var ballOnPlunger = false
@@ -92,6 +94,7 @@ final class ChompGameState {
     func reset() {
         score = 0
         ballsLeft = Self.ballsPerGame
+        extraBallsEarned = 0
         ballOnPlunger = false
         multiplier = 1
         banner = nil

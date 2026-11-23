@@ -718,3 +718,9 @@ def outer_wall():
     pts += rightLaneCurve[1:]
     pts += [(rightWallX, laneFloorY), (laneWallX, laneFloorY), (laneWallX, 540), (laneWallX, shooterInnerTopY)]
     return pts
+
+
+# ---- M5 v3c: the reel's round end closed over the top (a fast reel shot went out of the drain hole and stuck above
+# the roof). The left block's arc runs on to 60 deg, where the right block's arc starts.
+reelLeftBlock = ([(395, 1000), (395, 978), (426, 978), (433, 1043), (433, 1065)] + _reel_arc(_aL, 60)
+                 + [(490, roofY(490)), (395, roofY(395)), (395, 1000)])

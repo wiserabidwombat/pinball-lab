@@ -607,8 +607,11 @@ enum ChompTableLayout {
     private static var reelRightAngle: CGFloat { atan2(1065 - reelCentre.y, 499 - reelCentre.x) * 180 / .pi }       // −46.7
     static var reelLeftBlock: [CGPoint] {
         [CGPoint(x: 395, y: 1000), CGPoint(x: 395, y: 978), CGPoint(x: 426, y: 978), CGPoint(x: 433, y: 1043),
-         CGPoint(x: 433, y: 1065)] + reelArc(reelLeftAngle, 120)     // M3 v10b: stops at the drain hole's left edge
-            + [CGPoint(x: 442, y: roofY(442)), CGPoint(x: 395, y: roofY(395)), CGPoint(x: 395, y: 1000)]
+         CGPoint(x: 433, y: 1065)] + reelArc(reelLeftAngle, 60)      // M5 v3c: over the top to the right block (60°)
+            + [CGPoint(x: 490, y: roofY(490)), CGPoint(x: 395, y: roofY(395)), CGPoint(x: 395, y: 1000)]
+        // M5 v3c (Play Lab 22-31-55Z: a ~3,200 pt/s reel shot went out through M3 v10b's drain hole, x 442–490 at the
+        // top of the round end, and stuck above the roof at (439, 1283)): the round end is closed, as on the real
+        // table. The hole only ever drained the stuck test's drops above the roof, which play can't reach now.
     }
     /// M3 v10b (stuck test: 10 drops rested at (524, 1165), in the V between the roof over the right ramp's base and the
     /// arch): the right block now also covers the right ramp's base (x 510–548 above its low U), and its roof slopes

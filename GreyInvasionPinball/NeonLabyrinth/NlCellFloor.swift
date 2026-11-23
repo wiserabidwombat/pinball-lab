@@ -29,14 +29,21 @@ final class NlCellFloor: SKNode {
     var targetsHitForSave: Set<String> = []
     private var exitPortals: [NlExit: SKShapeNode] = [:]
     private var exitsLit: Set<NlExit> = []
+    /// T8 M3 v1: the neon look (the table's column opts in). `halos` collects the fixed parts' halos while the floor
+    /// builds (the kit's and the room's); they're baked into one sprite at the end of build().
+    let neon: Bool
+    let halos = NlHaloBaker()
+    /// Neon: the hatching across each locked exit portal (hidden while the exit is open).
+    private var exitHatches: [NlExit: [SKShapeNode]] = [:]
     /// The room's solid blocks (a floor ball inside one is pushed back out).
     private(set) lazy var solidBlocks: [[CGPoint]] = room.solidBlocks
     private weak var column: NlTableScene?
 
-    init(index: Int, room: NlRoom, column: NlTableScene) {
+    init(index: Int, room: NlRoom, column: NlTableScene, neon: Bool = false) {
         self.index = index
         self.room = room
         self.column = column
+        self.neon = neon
         super.init()
         name = "floor\(index)"
     }
@@ -64,6 +71,10 @@ final class NlCellFloor: SKNode {
                                     kickFrom: NlTableLayout.slingKickFrom, kickTo: NlTableLayout.slingKickTo)
             addChild(sling)
             slingshots.append(sling)
+            if neon {
+                sling.applyNeon()
+                halos.add(points: [s[0], s[1], s[2]], NlNeon.cyan, alpha: 0.5)
+            }
         }
 
         // The floor's own flippers, pinned to this node (`pinned` holds them to their parent).
@@ -72,6 +83,7 @@ final class NlCellFloor: SKNode {
         for f in [leftFlipper!, rightFlipper!] {
             addChild(f)
             f.physicsBody?.pinned = true
+            if neon { f.applyNeon() }
         }
 
         addWires()
@@ -85,7 +97,38 @@ final class NlCellFloor: SKNode {
             lamp.zPosition = -18
             addChild(lamp)
             kickLamps.append(lamp)
+            if neon {
+                lamp.blendMode = .add
+                NlNeon.addHalo(to: lamp, NlNeon.white, width: 10, alpha: 0.3)
+            }
         }
+        if neon {
+            addHazardChevrons()
+            if let sprite = halos.makeSprite(size: NlCellLayout.cellSize) {
+                sprite.zPosition = -19.6               // under every core line, over the grid
+                addChild(sprite)
+            }
+        }
+    }
+
+    /// Neon: orange chevrons on the floor at the two outlane mouths and over the drain chute (hazards).
+    private func addHazardChevrons() {
+        let all = CGMutablePath()                  // one node for every chevron (fewer draws); each has its own halo
+        func chevron(_ c: CGPoint, half: CGFloat, alpha: CGFloat) {
+            let pts = [CGPoint(x: c.x - half, y: c.y + half * 0.5), c, CGPoint(x: c.x + half, y: c.y + half * 0.5)]
+            all.addLines(between: pts)
+            halos.add(points: pts, NlNeon.orange, width: 5, alpha: alpha * 0.9)
+        }
+        defer {
+            let n = SKShapeNode(path: all)
+            NlNeon.core(n, NlNeon.orange, width: 1.6, alpha: 0.5)
+            n.zPosition = -19.4
+            addChild(n)
+        }
+        for x in [CGFloat(47), NlCellLayout.cellSize.width - 47] {
+            for k in 0..<3 { chevron(CGPoint(x: x, y: 294 - CGFloat(k) * 22), half: 12, alpha: 0.55 - CGFloat(k) * 0.12) }
+        }
+        for k in 0..<2 { chevron(CGPoint(x: NlCellLayout.centerX, y: 64 - CGFloat(k) * 22), half: 16, alpha: 0.6 - CGFloat(k) * 0.2) }
     }
 
     /// This floor's two save lamps (left = kickback, right = outlane save): green when lit.
@@ -94,6 +137,12 @@ final class NlCellFloor: SKNode {
         let off = SKColor(red: 0.14, green: 0.28, blue: 0.18, alpha: 0.9)
         for (i, lamp) in kickLamps.enumerated() {
             let lit = i == 0 ? kickbackLit : saveLit
+            if neon {                              // lit = white (active); off = a dim cyan ring
+                lamp.fillColor = lit ? NlNeon.white.withAlphaComponent(0.55) : .clear
+                NlNeon.setColor(lamp, lit ? NlNeon.white : NlNeon.cyan, alpha: lit ? 1 : 0.3)
+                lamp.lineWidth = lit ? 1.8 : 1.2
+                continue
+            }
             lamp.fillColor = lit ? on : off
             lamp.strokeColor = lit ? .white : on.withAlphaComponent(0.4)
         }
@@ -128,7 +177,7 @@ final class NlCellFloor: SKNode {
         path.addLines(between: NlCellLayout.outerWall)
         path.closeSubpath()
         let floor = SKShapeNode(path: path)
-        floor.fillColor = S.floorColor
+        floor.fillColor = neon ? NlNeon.void : S.floorColor
         floor.strokeColor = .clear
         floor.zPosition = -20
         addChild(floor)
@@ -147,6 +196,22 @@ final class NlCellFloor: SKNode {
         let crop = SKCropNode()
         crop.maskNode = SKShapeNode(path: path).then { $0.fillColor = .white; $0.strokeColor = .clear }
         crop.addChild(lines)
+        if neon {                                  // neon: faint cyan every 50, brighter every 200
+            lines.strokeColor = NlNeon.cyan.withAlphaComponent(0.11)
+            lines.blendMode = .add
+            let major = CGMutablePath()
+            for x in stride(from: CGFloat(100), through: w, by: 200) {
+                major.move(to: CGPoint(x: x, y: 0)); major.addLine(to: CGPoint(x: x, y: h))
+            }
+            for y in stride(from: CGFloat(0), through: h, by: 200) {
+                major.move(to: CGPoint(x: 0, y: y)); major.addLine(to: CGPoint(x: w, y: y))
+            }
+            let majorLines = SKShapeNode(path: major)
+            majorLines.strokeColor = NlNeon.cyan.withAlphaComponent(0.26)
+            majorLines.lineWidth = 1.3
+            majorLines.blendMode = .add
+            crop.addChild(majorLines)
+        }
         crop.zPosition = -19.8
         addChild(crop)
     }
@@ -170,6 +235,10 @@ final class NlCellFloor: SKNode {
         node.lineCap = .round
         node.lineJoin = .round
         node.zPosition = z
+        if neon {                                  // a cyan core; its halo is baked
+            NlNeon.core(node, NlNeon.cyan)
+            halos.add(path, NlNeon.cyan)
+        }
         let body = closed ? SKPhysicsBody(edgeLoopFrom: path) : SKPhysicsBody(edgeChainFrom: path)
         body.friction = friction
         body.restitution = restitution
@@ -186,6 +255,12 @@ final class NlCellFloor: SKNode {
         post.strokeColor = S.wallColor
         post.lineWidth = 1.5
         post.zPosition = -19
+        if neon {                                  // a dark disc with a cyan rim
+            post.fillColor = NlNeon.void
+            NlNeon.core(post, NlNeon.cyan, width: 1.6)
+            post.blendMode = .alpha
+            halos.addCircle(p, r, NlNeon.cyan)
+        }
         let body = SKPhysicsBody(circleOfRadius: r)
         body.isDynamic = false
         body.restitution = NlTableLayout.postRestitution
@@ -212,16 +287,31 @@ final class NlCellFloor: SKNode {
         body.collisionBitMask = NlPhysicsCategory.ball
         node.physicsBody = body
         addChild(node)
+        if neon {                                  // white (active), with a live halo for the hit flash
+            NlNeon.core(node, targetRestColor, width: 4.5)
+            NlNeon.addHalo(to: node, targetRestColor, width: 14, alpha: 0.3)
+        }
         let mid = CGPoint(x: (face.0.x + face.1.x) / 2 - normal.dx * 24, y: (face.0.y + face.1.y) / 2 - normal.dy * 24)
         let label = SKLabelNode(text: name)
         label.fontName = "Menlo-Bold"
         label.fontSize = 11
-        label.fontColor = S.targetColor.withAlphaComponent(0.85)
+        label.fontColor = neon ? NlNeon.cyan.withAlphaComponent(0.75) : S.targetColor.withAlphaComponent(0.85)
         label.verticalAlignmentMode = .center
         label.position = mid
         label.zPosition = -17
         addChild(label)
         targets.append((body: node, name: name, face: node))
+    }
+
+    /// A target's colour at rest, and its hit flash (the scene flashes it for 0.12 s).
+    var targetRestColor: SKColor { neon ? SKColor(red: 0.85, green: 0.95, blue: 1.0, alpha: 1) : S.targetColor }
+    func setTargetFlash(_ face: SKShapeNode, _ on: Bool) {
+        if neon {
+            NlNeon.setColor(face, on ? NlNeon.magenta : targetRestColor)
+            NlNeon.setBloom(face, on, base: 14)
+        } else {
+            face.strokeColor = on ? .white : S.targetColor
+        }
     }
 
     /// The kit's wires (drawn; ridden as scripted rides): both return wires (arrivals from above use them), and the entry
@@ -235,7 +325,7 @@ final class NlCellFloor: SKNode {
     }
 
     @discardableResult
-    func addRails(_ centre: [CGPoint], halfWidth: CGFloat, z: CGFloat) -> [SKShapeNode] {
+    func addRails(_ centre: [CGPoint], halfWidth: CGFloat, z: CGFloat, bakeHalo: Bool = true) -> [SKShapeNode] {
         guard centre.count >= 2 else { return [] }
         var sides: [[CGPoint]] = [[], []]
         for (i, p) in centre.enumerated() {
@@ -253,6 +343,10 @@ final class NlCellFloor: SKNode {
             node.strokeColor = S.wireColor
             node.lineWidth = 1.6
             node.zPosition = z
+            if neon {                              // dim cyan rails with a faint baked halo
+                NlNeon.core(node, NlNeon.cyan, width: 1.1, alpha: 0.3)
+                if bakeHalo { halos.add(path, NlNeon.cyan, width: 5, alpha: 0.4) }
+            }
             addChild(node)
             nodes.append(node)
         }
@@ -263,6 +357,13 @@ final class NlCellFloor: SKNode {
     func setExitLit(_ exit: NlExit, _ lit: Bool) {
         if lit { exitsLit.insert(exit) } else { exitsLit.remove(exit) }
         guard let node = exitPortals[exit] else { return }
+        if neon {                                  // locked = an orange barrier; open = a magenta bloom
+            NlNeon.setColor(node, lit ? NlNeon.magenta : NlNeon.orange)
+            NlNeon.setBloom(node, lit, base: 14)
+            node.lineWidth = lit ? 5 : 4
+            exitHatches[exit]?.forEach { $0.isHidden = lit }
+            return
+        }
         node.strokeColor = lit ? SKColor(red: 1.0, green: 0.75, blue: 0.95, alpha: 1) : S.exitColor
         node.lineWidth = lit ? 9 : 6
     }
@@ -281,23 +382,56 @@ final class NlCellFloor: SKNode {
             node.lineCap = .round
             node.zPosition = -18.5
             addChild(node)
+            if neon {
+                NlNeon.core(node, color, width: 4)
+                if color == S.entryColor {
+                    halos.add(points: [a, b], NlNeon.cyan, width: 12, alpha: 0.9)
+                } else {
+                    NlNeon.addHalo(to: node, NlNeon.orange, width: 14, alpha: 0.32)
+                }
+            }
             return node
+        }
+        /// Neon: orange hatching across a locked exit, leaning into the cell.
+        func hatch(_ exit: NlExit, along a: CGPoint, _ b: CGPoint, into n: CGVector) {
+            guard neon else { return }
+            let len = hypot(b.x - a.x, b.y - a.y)
+            let u = CGVector(dx: (b.x - a.x) / len, dy: (b.y - a.y) / len)
+            let path = CGMutablePath()                 // one node for all of this exit's hatching
+            var t: CGFloat = 8
+            while t < len - 4 {
+                let p0 = CGPoint(x: a.x + u.dx * t, y: a.y + u.dy * t)
+                path.move(to: p0)
+                path.addLine(to: CGPoint(x: p0.x + n.dx * 10 + u.dx * 8, y: p0.y + n.dy * 10 + u.dy * 8))
+                t += 14
+            }
+            let l = SKShapeNode(path: path)
+            NlNeon.core(l, NlNeon.orange, width: 1.2, alpha: 0.5)
+            l.zPosition = -18.4
+            addChild(l)
+            exitHatches[exit] = [l]
         }
         let entryX = C.entryStubLeft.first!.x + 6
         if room.exits.contains(.left) {
             bar(CGPoint(x: entryX, y: C.entryPortalY.lowerBound), CGPoint(x: entryX, y: C.entryPortalY.upperBound), S.entryColor)
             exitPortals[.left] = bar(CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound),
                                      CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), S.exitColor)
+            hatch(.left, along: CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound),
+                  CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), into: CGVector(dx: 1, dy: 0))
         }
         if room.exits.contains(.right) {
             bar(CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.lowerBound),
                 CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.upperBound), S.entryColor)
             exitPortals[.right] = bar(CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound),
                                       CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), S.exitColor)
+            hatch(.right, along: CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound),
+                  CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), into: CGVector(dx: -1, dy: 0))
         }
         if room.exits.contains(.top) {
             exitPortals[.top] = bar(CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1),
                                     CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), S.exitColor)
+            hatch(.top, along: CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1),
+                  CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), into: CGVector(dx: 0, dy: -1))
         }
         for exit in NlExit.allCases { setExitLit(exit, exitsLit.contains(exit)) }
     }

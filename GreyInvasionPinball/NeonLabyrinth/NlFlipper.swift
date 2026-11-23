@@ -65,6 +65,15 @@ final class NlFlipper: SKNode {
         physicsBody?.pinned = true
     }
 
+    /// T8 M3 v1, the neon look: the drawn flipper white (active) with a faint cyan fill and a live cyan halo.
+    func applyNeon() {
+        for case let shape as SKShapeNode in children where shape.physicsBody == nil {
+            shape.fillColor = NlNeon.cyan.withAlphaComponent(0.12)
+            NlNeon.core(shape, NlNeon.white, width: 2.0)
+            NlNeon.addHalo(to: shape, NlNeon.cyan, width: 11, alpha: 0.3)
+        }
+    }
+
     /// How far the flipper is raised: 0 at rest, flipperTravel when fully up.
     private var raised: CGFloat { (zRotation - restRotation) * raiseSign }
 

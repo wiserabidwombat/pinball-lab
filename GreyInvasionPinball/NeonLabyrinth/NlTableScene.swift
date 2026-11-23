@@ -41,14 +41,18 @@ struct NlColumn {
     let drainCostsBall: (_ floor: Int) -> Bool
     /// The space between floors in the world (the camera pans across it).
     var floorGap: CGFloat = 120
+    /// T8 M3 v1: the neon look (Neon Labyrinth's; NlNeon.swift). Off = the grey box (9 to Alive draws its own).
+    var neon = false
     /// T8 M2 round D (for 9 to Alive): the table's name in the labs' reports and file names
     /// (shotlab-<name>-…, playlab-<name>-…). Neon's is "Neon".
     var labName = "Neon"
 
     /// Neon Labyrinth's test column: three Switchyards; a drain on the bottom floor costs a ball.
     static func neonTest() -> NlColumn {
-        NlColumn(makeRooms: { [NlSwitchyardRoom(), NlSwitchyardRoom(), NlSwitchyardRoom()] },
-                 drainCostsBall: { $0 == 0 })
+        var column = NlColumn(makeRooms: { [NlSwitchyardRoom(), NlSwitchyardRoom(), NlSwitchyardRoom()] },
+                              drainCostsBall: { $0 == 0 })
+        column.neon = true
+        return column
     }
 }
 
@@ -205,7 +209,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M2 D"
+    static let buildTagText = "T8 M3 v1"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -253,7 +257,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private func buildTable() {
         hitHaptic.prepare()
         for (i, room) in column.makeRooms().enumerated() {
-            let f = NlCellFloor(index: i, room: room, column: self)
+            let f = NlCellFloor(index: i, room: room, column: self, neon: column.neon)
             f.position = CGPoint(x: 0, y: CGFloat(i) * (NlCellLayout.cellSize.height + column.floorGap))
             addChild(f)
             f.build()
@@ -441,6 +445,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private func startRide(from start: CGPoint, path: [CGPoint], speed: CGFloat, height: CGFloat, release: CGVector,
                            event: String? = nil) {
         let ball = NlBall(at: start)
+        if column.neon { ball.applyNeon() }
         floor.addChild(ball)                       // the ball lives on its floor (the floor's coordinates)
         balls.append(ball)
         ride(ball, path: path, speed: speed, height: height, release: release, event: event)
@@ -681,7 +686,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
             for t in f.targets {
                 if let until = f.targetFlashUntil[t.name], now >= until {
                     f.targetFlashUntil[t.name] = nil
-                    t.face.strokeColor = Self.targetColor
+                    f.setTargetFlash(t.face, false)
                 }
             }
         }
@@ -884,7 +889,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 labEvent("sling")
                 game.add(NlPoints.slingshot)
                 hitHaptic.impactOccurred(intensity: 0.6)
-                Effects.burst(in: ballNode.parent ?? self, at: ballNode.position, color: Self.wallColor, count: 8,
+                Effects.burst(in: ballNode.parent ?? self, at: ballNode.position, color: column.neon ? NlNeon.cyan : Self.wallColor, count: 8,
                               speed: 160, lifetime: 0.25, size: 0.22)
                 sfx(.sling)
             }
@@ -910,7 +915,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
             showBanner(tf.room.targetHit(t.name))
             sfx(.standup)
             hitHaptic.impactOccurred(intensity: 0.7)
-            t.face.strokeColor = .white                     // back to its colour in update()
+            tf.setTargetFlash(t.face, true)                 // back to its colour in update()
             tf.targetFlashUntil[t.name] = gameTime + 0.12
         default:
             break
@@ -979,6 +984,7 @@ extension NlTableScene: ShotLabHost {
 
     func shotLabPlaceBall(at point: CGPoint) {
         let ball = NlBall(at: point)
+        if column.neon { ball.applyNeon() }
         floor.addChild(ball)
         balls.append(ball)
     }

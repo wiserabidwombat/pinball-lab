@@ -128,6 +128,30 @@ final class NlSlingshot: SKNode {
         fatalError("init(coder:) is not supported")
     }
 
+    /// The kicking face's width at rest (a hit thickens it to 9; settle() eases it back).
+    private var faceRestWidth: CGFloat = 5
+
+    /// T8 M3 v1, the neon look: a cyan outline and posts with a faint fill, the kicking face white (active) with a
+    /// live halo. The outline's halo is baked by the floor.
+    func applyNeon() {
+        faceRestWidth = 2.6
+        for case let shape as SKShapeNode in children {
+            if shape === face {
+                NlNeon.core(shape, NlNeon.white, width: 2.6)
+                NlNeon.addHalo(to: shape, NlNeon.white, width: 11, alpha: 0.3)
+            } else if shape.physicsBody != nil {                 // the posts
+                shape.fillColor = NlNeon.void
+                NlNeon.core(shape, NlNeon.cyan, width: 1.4)
+                shape.blendMode = .alpha                         // a dark disc with a cyan rim
+            } else if shape.zPosition > 0 {                      // the inner panel
+                shape.isHidden = true
+            } else {                                             // the body
+                shape.fillColor = NlNeon.cyan.withAlphaComponent(0.06)
+                NlNeon.core(shape, NlNeon.cyan, width: 1.8, alpha: 0.9)
+            }
+        }
+    }
+
     /// Fires the ball off the face. Returns false for a repeat contact within 80 ms.
     func hit(ball: SKPhysicsBody, at time: TimeInterval) -> Bool {
         guard time - lastHit > 0.08 else { return false }
@@ -148,7 +172,7 @@ final class NlSlingshot: SKNode {
 
     /// Called every frame by the scene to settle the face highlight back to normal.
     func settle() {
-        if face.lineWidth > 5 { face.lineWidth = max(5, face.lineWidth - 0.5) }
+        if face.lineWidth > faceRestWidth { face.lineWidth = max(faceRestWidth, face.lineWidth - 0.5) }
         if artBaked && face.alpha > 0 { face.alpha = max(0, face.alpha - 0.08) }
     }
 }

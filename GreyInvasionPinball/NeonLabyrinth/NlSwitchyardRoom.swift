@@ -203,6 +203,22 @@ final class NlSwitchyardRoom: NlRoom {
         plastic.lineWidth = 1.5
         plastic.zPosition = 15
         cell.addChild(plastic)
+        if cell.neon {                             // T8 M3 v1: a cyan outline, a faint fill and chevrons up the ramp
+            plastic.fillColor = NlNeon.cyan.withAlphaComponent(0.07)
+            NlNeon.core(plastic, NlNeon.cyan, width: 1.6, alpha: 0.9)
+            cell.halos.add(ramp, NlNeon.cyan, alpha: 0.5)
+            let chev = CGMutablePath()             // one node for all the chevrons
+            var y = Y.rampUTopY + 8
+            while y < Y.rampTopY - 4 {
+                let h = (c - Y.rampLeftRail.last!.x) - 7          // the 46 channel: 23 - 7
+                chev.addLines(between: [CGPoint(x: c - h, y: y - 6), CGPoint(x: c, y: y + 2), CGPoint(x: c + h, y: y - 6)])
+                y += 16
+            }
+            let n = SKShapeNode(path: chev)
+            NlNeon.core(n, NlNeon.cyan, width: 1.0, alpha: 0.35)
+            n.zPosition = 15.1
+            cell.addChild(n)
+        }
         // Turntable and the light-rail ring.
         for (r, w, a) in [(Y.hubTrackRadius, CGFloat(2.5), CGFloat(0.9)), (Y.railRingRadii.0, 1.2, 0.6), (Y.railRingRadii.1, 1.2, 0.6)] {
             let ring = SKShapeNode(circleOfRadius: r)
@@ -212,6 +228,14 @@ final class NlSwitchyardRoom: NlRoom {
             ring.lineWidth = w
             ring.zPosition = 16
             cell.addChild(ring)
+            if cell.neon {
+                NlNeon.core(ring, NlNeon.cyan, width: r == Y.hubTrackRadius ? 2.0 : 1.0, alpha: a)
+                if r == Y.hubTrackRadius {
+                    ring.fillColor = SKColor(red: 0.0, green: 0.04, blue: 0.06, alpha: 1)
+                    ring.blendMode = .alpha                // the turntable's dark disc covers the grid
+                    cell.halos.addCircle(Y.hubCenter, r, NlNeon.cyan, width: 8, alpha: 0.7)
+                }
+            }
         }
         // The turntable's pointer and the ring's bridge (drawn pointing east; turned by zRotation).
         let pointer = CGMutablePath()
@@ -223,6 +247,10 @@ final class NlSwitchyardRoom: NlRoom {
         pointerNode.zPosition = 16.5
         cell.addChild(pointerNode)
         turntablePointer = pointerNode
+        if cell.neon {
+            NlNeon.core(pointerNode, NlNeon.orange, width: 2.2)
+            NlNeon.addHalo(to: pointerNode, NlNeon.orange, width: 10, alpha: 0.32)
+        }
         let bridgeShape = SKShapeNode(rect: CGRect(x: Y.railRingRadii.0 - 2, y: -Y.railHalfWidth,
                                                    width: Y.railRingRadii.1 - Y.railRingRadii.0 + 6, height: 2 * Y.railHalfWidth),
                                       cornerRadius: 3)
@@ -231,8 +259,13 @@ final class NlSwitchyardRoom: NlRoom {
         bridgeShape.zPosition = 16.4
         cell.addChild(bridgeShape)
         bridgeNode = bridgeShape
+        if cell.neon {
+            NlNeon.core(bridgeShape, NlNeon.orange, width: 2.0)
+            NlNeon.addHalo(to: bridgeShape, NlNeon.orange, width: 10, alpha: 0.3)
+        }
         // The light-rails: two silver rails each.
-        railNodes = [Y.railW, Y.railN, Y.railE].map { cell.addRails($0, halfWidth: Y.railHalfWidth, z: 16) }
+        railNodes = [Y.railW, Y.railN, Y.railE].map { cell.addRails($0, halfWidth: Y.railHalfWidth, z: 16, bakeHalo: false) }
+        if cell.neon { railNodes.flatMap { $0 }.forEach { NlNeon.addHalo(to: $0, NlNeon.cyan, width: 8, alpha: 0.25) } }
         // Route lamps (◄ ▲ ►) in the open lower table.
         for (dx, glyph) in [(CGFloat(-46), "◄"), (0, "▲"), (46, "►")] {
             let lamp = SKShapeNode(circleOfRadius: 15)
@@ -242,6 +275,10 @@ final class NlSwitchyardRoom: NlRoom {
             lamp.lineWidth = 1.5
             lamp.zPosition = -18
             cell.addChild(lamp)
+            if cell.neon {
+                lamp.blendMode = .add
+                NlNeon.addHalo(to: lamp, NlNeon.cyan, width: 10, alpha: 0.3)
+            }
             let label = SKLabelNode(text: glyph)
             label.fontName = "Menlo-Bold"
             label.fontSize = 14
@@ -263,6 +300,11 @@ final class NlSwitchyardRoom: NlRoom {
         if snap {
             turntableShown = Self.headingAngle[turntable]
             bridgeShown = Self.headingAngle[bridge]
+        }
+        if cell?.neon == true {
+            refreshRouteNeon()
+            for exit in NlExit.allCases { cell?.setExitLit(exit, routeOpen && exit.rawValue == turntable) }
+            return
         }
         let orange = SKColor(red: 1.0, green: 0.55, blue: 0.15, alpha: 1)
         let aim = routeOpen ? S.entryColor : orange
@@ -287,6 +329,37 @@ final class NlSwitchyardRoom: NlRoom {
             l.label.fontColor = aimed ? .white : S.entryColor.withAlphaComponent(0.6)
         }
         for exit in NlExit.allCases { cell?.setExitLit(exit, routeOpen && exit.rawValue == turntable) }
+    }
+
+    /// T8 M3 v1, the neon route: lined up = magenta (the pointer, the bridge, that light-rail, its lamp; the exit blooms),
+    /// not lined up = orange (a ramp shot would derail). The bridge's lamp gets a white ring.
+    private func refreshRouteNeon() {
+        let state = routeOpen ? NlNeon.magenta : NlNeon.orange
+        if let p = turntablePointer {
+            p.fillColor = state.withAlphaComponent(0.35)
+            NlNeon.setColor(p, state)
+            p.zRotation = turntableShown
+        }
+        if let b = bridgeNode {
+            b.fillColor = state.withAlphaComponent(0.22)
+            NlNeon.setColor(b, state)
+            b.zRotation = bridgeShown
+        }
+        for (i, nodes) in railNodes.enumerated() {
+            let open = routeOpen && i == turntable
+            for n in nodes {
+                NlNeon.setColor(n, open ? NlNeon.magenta : NlNeon.cyan, alpha: open ? 1 : 0.4)
+                n.lineWidth = open ? 1.8 : 1.1
+            }
+        }
+        for (i, l) in routeLamps.enumerated() {
+            let aimed = i == turntable
+            l.lamp.fillColor = aimed ? state.withAlphaComponent(0.55) : .clear
+            NlNeon.setColor(l.lamp, i == bridge ? NlNeon.white : (aimed ? state : NlNeon.cyan),
+                            alpha: aimed || i == bridge ? 1 : 0.35)
+            l.lamp.lineWidth = i == bridge ? 2.4 : 1.6
+            l.label.fontColor = aimed ? NlNeon.white : NlNeon.cyan.withAlphaComponent(0.5)
+        }
     }
 
     /// Eases the drawn turntable and bridge toward their headings (every game frame, so a pause holds them).

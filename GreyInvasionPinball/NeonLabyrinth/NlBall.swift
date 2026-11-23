@@ -96,6 +96,23 @@ final class NlBall: SKNode {
         fatalError("init(coder:) is not supported")
     }
 
+    /// T8 M3 v1, the neon look: a white data packet with a cyan halo and a cyan light trail; no shadow.
+    func applyNeon() {
+        visual.color = NlNeon.white
+        visual.colorBlendFactor = 1
+        shadow.isHidden = true
+        let r = NlTableLayout.ballRadius * NlBall.lookScale
+        let halo = SKShapeNode(circleOfRadius: r + 2)
+        halo.strokeColor = NlNeon.cyan.withAlphaComponent(0.4)
+        halo.lineWidth = 7
+        halo.blendMode = .add
+        halo.zPosition = -0.1
+        visual.addChild(halo)
+        trail.particleColor = NlNeon.cyan
+        trail.particleAlpha = 0.7
+        trail.particleScale = 0.6
+    }
+
     /// Keeps the highlight and the shadow fixed in world space while the body rolls (after physics).
     func updateLook() {
         let a = -zRotation

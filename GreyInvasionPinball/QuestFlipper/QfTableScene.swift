@@ -143,6 +143,29 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private var exitLit = false
     private var forestGate: SKShapeNode!
     private var wisps: [Wisp] = []
+    // T9 M1 v7: the Lantern Witch. She hides in one of three lanterns: 0 the Old Well, 1 the stump, 2 the East lantern.
+    private struct Witch {
+        var active = false
+        var hp = QfMonsterHP.witch
+        var lantern = 0
+        var moveAt: TimeInterval = 0
+        var lastHit: TimeInterval = -10
+        var banishPending = false
+        var fleeing = false                                    // the next move follows a hit
+
+    }
+    private static let lanternNames = ["OLD WELL", "STUMP", "EAST LANTERN"]
+    private var witch = Witch()
+    private var witchStartAt: TimeInterval?
+    private var witchMarker: SKShapeNode!
+    private var lanternLamps: [SKShapeNode] = []
+    private var gravestone: SKShapeNode!
+    private var graveUp = false
+    private var graveWanted = false
+    private var graveHits = 0
+    private var graveLastHit: TimeInterval = -10
+    private var graveSinkPending = false
+    private var graveDownUntil: TimeInterval = 0
     // The drifting ghost (no physics body: touches are found by distance, the ball passes through).
     private var drifter: SKShapeNode!
     private var drifterStart: TimeInterval = 0
@@ -222,7 +245,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M1 v6"
+    static let buildTagText = "T9 M1 v7"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -314,6 +337,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         addGhost()
         addDrifter()
         addRoots()
+        addWitchParts()
         addAreaLabels()
     }
 
@@ -617,6 +641,194 @@ final class QfTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    // MARK: - The Lantern Witch (T9 M1 v7)
+
+    private static var lanternSpots: [CGPoint] {
+        let F = QfForestLayout.self
+        let (ta, tb) = F.trunkFace, (la, lb) = F.lanternFace
+        return [CGPoint(x: F.wellHole.x, y: F.wellHole.y + 36),
+                CGPoint(x: (ta.x + tb.x) / 2, y: (ta.y + tb.y) / 2 + 30),
+                CGPoint(x: (la.x + lb.x) / 2 - 22, y: (la.y + lb.y) / 2 + 24)]
+    }
+    static let witchColor = SKColor(red: 0.72, green: 0.35, blue: 1.0, alpha: 1)
+    static let lampColor = SKColor(red: 1.0, green: 0.68, blue: 0.25, alpha: 1)
+
+    private func addWitchParts() {
+        for spot in Self.lanternSpots {
+            let lamp = SKShapeNode(circleOfRadius: 8)
+            lamp.position = spot
+            lamp.fillColor = Self.lampColor
+            lamp.strokeColor = Self.lampColor
+            lamp.glowWidth = 5
+            lamp.zPosition = -16
+            lamp.alpha = 0
+            addChild(lamp)
+            lanternLamps.append(lamp)
+        }
+        let marker = SKShapeNode(circleOfRadius: 20)
+        marker.strokeColor = Self.witchColor
+        marker.fillColor = Self.witchColor.withAlphaComponent(0.25)
+        marker.lineWidth = 3
+        marker.glowWidth = 6
+        marker.zPosition = -15.5
+        marker.alpha = 0
+        addChild(marker)
+        witchMarker = marker
+        // The gravestone: a pop-up in the centre (drawn only while it's down).
+        let pts = Array(QfForestLayout.gravestone.dropLast())
+        let path = CGMutablePath()
+        path.addLines(between: pts)
+        path.closeSubpath()
+        let stone = SKShapeNode(path: path)
+        stone.fillColor = SKColor(red: 0.42, green: 0.42, blue: 0.50, alpha: 1)
+        stone.strokeColor = SKColor(red: 0.70, green: 0.70, blue: 0.80, alpha: 1)
+        stone.lineWidth = 2
+        stone.zPosition = -17
+        stone.alpha = 0
+        addChild(stone)
+        gravestone = stone
+    }
+
+    private static func gravestoneBody() -> SKPhysicsBody {
+        let path = CGMutablePath()
+        path.addLines(between: Array(QfForestLayout.gravestone.dropLast()))
+        path.closeSubpath()
+        let body = SKPhysicsBody(polygonFrom: path)
+        body.isDynamic = false
+        body.friction = 0.1
+        body.restitution = 0.35
+        body.categoryBitMask = QfPhysicsCategory.target
+        body.collisionBitMask = QfPhysicsCategory.ball
+        body.contactTestBitMask = QfPhysicsCategory.ball
+        return body
+    }
+
+    /// Raises the gravestone unless a ball is where it would rise (then it tries again next frame).
+    private func raiseGravestone() -> Bool {
+        let r = QfTableLayout.ballRadius + 4
+        if balls.contains(where: { $0.isOnFloor && $0.position.x > 284 - r && $0.position.x < 316 + r
+                                   && $0.position.y > 548 - r && $0.position.y < 587 + r }) { return false }
+        gravestone.physicsBody = Self.gravestoneBody()
+        gravestone.removeAllActions()
+        gravestone.run(.fadeIn(withDuration: 0.25))
+        graveUp = true
+        graveHits = 0
+        return true
+    }
+
+    private func sinkGravestone() {
+        gravestone.physicsBody = nil
+        gravestone.removeAllActions()
+        gravestone.run(.fadeAlpha(to: 0, duration: 0.3))
+        graveUp = false
+    }
+
+    private func startWitch() {
+        witch = Witch()
+        witch.active = true
+        witch.lantern = Int.random(in: 0..<3)
+        witch.moveAt = gameTime + QfTableLayout.witchMoveEvery
+        for lamp in lanternLamps { lamp.removeAllActions(); lamp.run(.fadeIn(withDuration: 0.4)) }
+        placeWitchMarker()
+        witchMarker.removeAllActions()
+        witchMarker.alpha = 1
+        witchMarker.run(.repeatForever(.sequence([.scale(to: 1.15, duration: 0.45), .scale(to: 0.9, duration: 0.45)])),
+                        withKey: "pulse")
+        graveWanted = true
+        graveDownUntil = gameTime + QfTableLayout.bannerSeconds   // review: after her banner, not over it
+        barkDownAt = nil                                         // (the bark stays down through her fight)
+        showBanner("THE LANTERN WITCH RISES")
+        cameraRig.shake(strength: 3, duration: 0.3)
+        updateStatus()
+    }
+
+    /// Ends her fight: banished (rewarded) or a new game (not).
+    private func endWitch() {
+        witch.active = false
+        witch.banishPending = false
+        witchStartAt = nil
+        for lamp in lanternLamps { lamp.removeAllActions(); lamp.run(.fadeOut(withDuration: 0.4)) }
+        witchMarker.removeAllActions()
+        witchMarker.run(.fadeOut(withDuration: 0.3))
+        graveWanted = false
+        graveSinkPending = false
+        if graveUp { sinkGravestone() }
+    }
+
+    private func placeWitchMarker() {
+        witchMarker.position = Self.lanternSpots[witch.lantern]
+        Effects.burst(in: self, at: witchMarker.position, color: Self.witchColor, count: 10, speed: 120,
+                      lifetime: 0.35, size: 0.25)
+    }
+
+    private func moveWitch(_ now: TimeInterval, quiet: Bool = false) {
+        let others = [0, 1, 2].filter { $0 != witch.lantern }
+        witch.lantern = others.randomElement() ?? 0
+        witch.moveAt = now + QfTableLayout.witchMoveEvery
+        placeWitchMarker()
+        if !quiet { showBanner("THE WITCH FLITS TO THE \(Self.lanternNames[witch.lantern])") }
+        updateStatus()
+    }
+
+    /// A lantern was hit (or the well caught a ball). Her lantern takes damage; an empty one tells where she is.
+    private func witchLanternHit(_ lantern: Int, damage: Int) {
+        guard witch.active, !witch.banishPending, gameTime - witch.lastHit > 0.3 else { return }
+        witch.lastHit = gameTime
+        guard lantern == witch.lantern else {
+            showBanner("EMPTY LANTERN · SHE'S IN THE \(Self.lanternNames[witch.lantern])")
+            return
+        }
+        witch.hp = max(0, witch.hp - damage)
+        game.add(QfPoints.target * 2)
+        hitHaptic.impactOccurred(intensity: 1)
+        Effects.burst(in: self, at: witchMarker.position, color: Self.witchColor, count: 16, speed: 220,
+                      lifetime: 0.4, size: 0.3)
+        if witch.hp == 0 {
+            witch.banishPending = true                         // banished in update()
+        } else {
+            showBanner("WITCH −\(damage) · \(witch.hp) HP LEFT")
+            witch.moveAt = gameTime + QfTableLayout.witchFleeAfterHit
+            witch.fleeing = true
+        }
+        updateStatus()
+    }
+
+    /// Every frame: her start, her moves, her banishing, and the gravestone (body changes here only).
+    private func updateWitch(_ now: TimeInterval) {
+        if game.isGameOver {                                   // review: she stops when the visit ends
+            if witch.active || witchStartAt != nil { endWitch() }
+            return
+        }
+        if let start = witchStartAt, now >= start {
+            witchStartAt = nil
+            startWitch()
+        }
+        if graveSinkPending {
+            graveSinkPending = false
+            sinkGravestone()
+            graveDownUntil = now + QfTableLayout.gravestoneDownFor
+            showBanner("THE GRAVESTONE SINKS · THE STUMP IS OPEN")
+        }
+        if graveWanted, !graveUp, now >= graveDownUntil {
+            if raiseGravestone(), witch.active { showBanner("THE GRAVESTONE RISES") }
+        }
+        guard witch.active else { return }
+        if witch.banishPending {
+            endWitch()
+            showBanner("LANTERN WITCH BANISHED · +\(QfGold.witch) GOLD")
+            game.add(QfPoints.treantFelled * 2)
+            game.run.gold += QfGold.witch
+            cameraRig.shake(strength: 7, duration: 0.6)
+            monsterDefeated()
+            barkDownAt = now - QfTableLayout.barkRegrow + 1.5          // a new Treant: its bark rises in 1.5 s
+            return
+        }
+        if now >= witch.moveAt {
+            moveWitch(now, quiet: witch.fleeing)
+            witch.fleeing = false
+        }
+    }
+
     private func addDrifter() {
         let node = SKShapeNode(circleOfRadius: QfTableLayout.drifterRadius)
         node.fillColor = Self.ghostColor.withAlphaComponent(0.45)
@@ -867,8 +1079,16 @@ final class QfTableScene: SKScene, RendererHostedScene {
         setExitLit(false)
         resetMonsters()
         resetDrifterAndRoots()
+        endWitch()
+        graveDownUntil = 0
         raiseBark()
         game.reset()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-questWitch") {     // test her fight without the Treant
+            for i in bark.indices { bark[i].hitPending = true }
+            witchStartAt = gameTime + 2
+        }
+        #endif
         updateStatus()
         padAArmed = false                          // the A press that started the game isn't a plunger pull
         plungerPull = 0
@@ -883,7 +1103,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     private func updateStatus() {
-        if exitLit {
+        if witch.active {
+            game.status = "LANTERN WITCH · \(witch.hp) HP · IN THE \(Self.lanternNames[witch.lantern])"
+                + (exitLit ? " · EXIT LIT" : "")
+        } else if exitLit {
             game.status = "EXIT LIT · THE OLD ROAD LEAVES THE FOREST"
         } else {
             game.status = "MONSTERS \(defeats)/\(QfTableLayout.exitAfterDefeats) · THEN THE OLD ROAD OUT"
@@ -1072,6 +1295,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         updateGhost(now)
         updateDrifter(now)
         updateRoots(now)
+        updateWitch(now)
         let onPlunger = isBallOnPlunger
         if game.ballOnPlunger != onPlunger { game.ballOnPlunger = onPlunger }
 
@@ -1152,7 +1376,12 @@ final class QfTableScene: SKScene, RendererHostedScene {
             sfx(.scoopIn)
             hitHaptic.impactOccurred(intensity: 0.8)
             switch scoops[i].kind {
-            case .well: showBanner("OLD WELL · SEARCHED")
+            case .well:
+                if witch.active {
+                    witchLanternHit(0, damage: max(1, Int((QfTableLayout.witchWellDamage * game.run.ballStrength).rounded())))
+                } else {
+                    showBanner("OLD WELL · SEARCHED")
+                }
             case .log: showBanner("HOLLOW LOG · SEARCHED")
             }
             return
@@ -1434,7 +1663,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
 
     /// The Treant fight: any bark down, or the Treant already hurt.
     private var treantFight: Bool {
-        bark.contains(where: { $0.isDown }) || treantHP < QfMonsterHP.treant
+        guard !witch.active, witchStartAt == nil else { return false }   // v7: not during the Witch's fight
+        return bark.contains(where: { $0.isDown }) || treantHP < QfMonsterHP.treant
     }
 
     private func setRootsUp(_ up: Bool) {
@@ -1815,6 +2045,20 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 }
                 break
             }
+            if node === gravestone {
+                guard graveUp, !graveSinkPending, gameTime - graveLastHit > 0.15 else { break }
+                graveLastHit = gameTime
+                graveHits += 1
+                sfx(.standup)
+                hitHaptic.impactOccurred(intensity: 0.7)
+                game.add(QfPoints.target)
+                if graveHits >= QfTableLayout.gravestoneHits {
+                    graveSinkPending = true                    // sinks in update()
+                } else {
+                    showBanner("GRAVESTONE \(graveHits)/\(QfTableLayout.gravestoneHits)")
+                }
+                break
+            }
             if let i = bark.firstIndex(where: { $0.node === node }) {
                 guard !bark[i].isDown, !bark[i].hitPending else { break }
                 bark[i].hitPending = true                     // drops in update()
@@ -1830,6 +2074,14 @@ final class QfTableScene: SKScene, RendererHostedScene {
             hitHaptic.impactOccurred(intensity: 0.7)
             t.node.strokeColor = .white                     // back to its colour in update()
             targetFlashUntil[t.name] = gameTime + 0.12
+            if t.name == "TRUNK", witch.active || witchStartAt != nil {
+                witchLanternHit(1, damage: damage)
+                break
+            }
+            if t.name == "EAST LANTERN", witch.active {
+                witchLanternHit(2, damage: damage)
+                break
+            }
             if t.name == "TRUNK" {
                 guard bark.allSatisfy({ $0.isDown }) else {
                     showBanner("THE BARK HOLDS")
@@ -1843,8 +2095,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
                     game.run.gold += QfGold.treant
                     monsterDefeated()
                     cameraRig.shake(strength: 6, duration: 0.5)
-                    treantHP = QfMonsterHP.treant              // M1 placeholder: a new Treant takes its place
-                    barkDownAt = gameTime - QfTableLayout.barkRegrow + 1.5     // the bark rises again in 1.5 s
+                    treantHP = QfMonsterHP.treant              // the next Treant, after the Witch
+                    barkDownAt = nil                            // v7: the bark stays down through the Witch's fight
+                    witchStartAt = gameTime + QfTableLayout.witchStartDelay
                 } else {
                     showBanner("TRUNK −\(damage) · \(treantHP) HP LEFT")
                 }

@@ -40,6 +40,8 @@ enum QfMonsterHP {
     static let ghost = 20
     /// T9 M1 v4: the drifting ghost in the lower table; one good touch while it's visible.
     static let drifter = 15
+    /// T9 M1 v7: the Lantern Witch, the forest's boss.
+    static let witch = 60
 }
 
 /// Gold each monster drops (placeholders; spent at merchants on the map later).
@@ -48,4 +50,5 @@ enum QfGold {
     static let ghost = 10
     static let drifter = 10
     static let treant = 25
+    static let witch = 50
 }

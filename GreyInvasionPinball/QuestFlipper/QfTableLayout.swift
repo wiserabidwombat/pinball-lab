@@ -134,6 +134,18 @@ enum QfTableLayout {
     /// After letting a ball go, the roots ignore it this long.
     static let rootsIgnore: TimeInterval = 1.5
 
+    // MARK: The Lantern Witch (T9 M1 v7)
+    /// She rises this long after the Treant falls, and hides in one of three lanterns (the Old Well, the stump, the
+    /// East lantern); she moves to another every witchMoveEvery, and witchFleeAfterHit after each hit.
+    static let witchStartDelay: TimeInterval = 1.5
+    static let witchMoveEvery: TimeInterval = 8
+    static let witchFleeAfterHit: TimeInterval = 0.8
+    /// A catch in the Old Well while she's there deals this × ball strength (a scoop has no impact speed).
+    static let witchWellDamage: CGFloat = 20
+    /// The gravestone guards the centre during her fight; this many hits sink it for gravestoneDownFor.
+    static let gravestoneHits = 3
+    static let gravestoneDownFor: TimeInterval = 10
+
     // MARK: Game
     static let bannerSeconds: TimeInterval = 1.6
     /// The bark rises again this long after it all fell, if the Treant hasn't been felled.

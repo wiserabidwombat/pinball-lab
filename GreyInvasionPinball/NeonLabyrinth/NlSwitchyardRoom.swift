@@ -56,7 +56,10 @@ final class NlSwitchyardRoom: NlRoom {
     private var railNodes: [[SKShapeNode]] = []
     private var routeLamps: [(lamp: SKShapeNode, label: SKLabelNode)] = []
     private var nextNorthDerailRight = true
-    private var routeOpen: Bool { turntable == bridge }
+    /// Lined up, and (T8 M4 v1) not at an exit the maze walls off: a ramp shot aimed at a wall derails.
+    private var routeOpen: Bool {
+        turntable == bridge && !(NlExit(rawValue: turntable).map { cell?.walled.contains($0) ?? false } ?? false)
+    }
 
     // MARK: NlRoom
 
@@ -422,10 +425,11 @@ final class NlSwitchyardRoom: NlRoom {
     /// still needs for the outlane save; then the ramp and the rest.
     func robotWanted(saveNeeds: [String]) -> [String] {
         var route: [String] = ["ramp"]
-        if !routeOpen {
-            let switchHits = abs(turntable - bridge)
-            let railsHits = (turntable - bridge + 3) % 3
-            route = railsHits <= switchHits ? ["rails"] : [turntable > bridge ? "switchLeft" : "switchRight"]
+        // T8 M4 v1: aim for the open heading (not walled by the maze) that takes the fewest target hits to line up.
+        // With every heading walled, the ramp (a derail) is all there is.
+        let headings = (0...2).filter { h in !(NlExit(rawValue: h).map { cell?.walled.contains($0) ?? false } ?? false) }
+        if !routeOpen, let aim = headings.min(by: { cost($0) < cost($1) }) {
+            route = turntable != aim ? [turntable > aim ? "switchLeft" : "switchRight"] : ["rails"]
         }
         var out: [String] = []
         for s in route + saveNeeds + ["ramp", "switchLeft", "switchRight", "rails"] where !out.contains(s) {
@@ -433,5 +437,8 @@ final class NlSwitchyardRoom: NlRoom {
         }
         return out
     }
+
+    /// Target hits to line the route up on heading `h`: SWITCH hits to turn the turntable, RAILS hits to step the bridge.
+    private func cost(_ h: Int) -> Int { abs(turntable - h) + (h - bridge + 3) % 3 }
     #endif
 }

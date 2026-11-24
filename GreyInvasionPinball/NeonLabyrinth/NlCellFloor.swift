@@ -28,6 +28,9 @@ final class NlCellFloor: SKNode {
     var saveLit = false
     var targetsHitForSave: Set<String> = []
     private var exitPortals: [NlExit: SKShapeNode] = [:]
+    /// T8 M4 v1: the room's exits a maze wall closes (set by the scene before build). A walled exit is a solid orange
+    /// wall that never opens, and its side has no entry portal or stub (nothing can come in that way).
+    var walled: Set<NlExit> = []
     private var exitsLit: Set<NlExit> = []
     /// T8 M3 v1: the neon look (the table's column opts in). `halos` collects the fixed parts' halos while the floor
     /// builds (the kit's and the room's); they're baked into one sprite at the end of build().
@@ -319,8 +322,8 @@ final class NlCellFloor: SKNode {
     private func addWires() {
         typealias C = NlCellLayout
         var wires = [C.returnWireLeft, C.returnWireRight]
-        if room.exits.contains(.left) { wires.append(C.entryStubLeft) }
-        if room.exits.contains(.right) { wires.append(C.entryStubRight) }
+        if room.exits.contains(.left), !walled.contains(.left) { wires.append(C.entryStubLeft) }
+        if room.exits.contains(.right), !walled.contains(.right) { wires.append(C.entryStubRight) }
         for wire in wires { addRails(wire, halfWidth: 17, z: 17) }
     }
 
@@ -356,7 +359,7 @@ final class NlCellFloor: SKNode {
     /// The room's way out `exit` is open (lit) or not: its portal glows.
     func setExitLit(_ exit: NlExit, _ lit: Bool) {
         if lit { exitsLit.insert(exit) } else { exitsLit.remove(exit) }
-        guard let node = exitPortals[exit] else { return }
+        guard let node = exitPortals[exit], !walled.contains(exit) else { return }   // a wall stays a wall
         if neon {                                  // locked = an orange barrier; open = a magenta bloom
             NlNeon.setColor(node, lit ? NlNeon.magenta : NlNeon.orange)
             NlNeon.setBloom(node, lit, base: 14)
@@ -411,27 +414,49 @@ final class NlCellFloor: SKNode {
             addChild(l)
             exitHatches[exit] = [l]
         }
+        /// T8 M4 v1: a maze wall across an exit: a solid orange bar (neon: a steady core, a faint baked halo).
+        func wall(_ a: CGPoint, _ b: CGPoint) {
+            let path = CGMutablePath()
+            path.addLines(between: [a, b])
+            let node = SKShapeNode(path: path)
+            node.strokeColor = S.exitColor.withAlphaComponent(0.55)
+            node.lineWidth = 10
+            node.lineCap = .butt
+            node.zPosition = -18.5
+            addChild(node)
+            if neon {
+                NlNeon.core(node, NlNeon.orange, width: 6, alpha: 0.8)
+                node.lineCap = .butt
+                halos.add(points: [a, b], NlNeon.orange, width: 16, alpha: 0.45)
+            }
+        }
+        /// The exit's portal, or its wall when the maze closes it. A walled TOP stays a locked portal that never opens:
+        /// a drain from the cell above still drops in through it (drains always drop a cell).
+        func exitBar(_ exit: NlExit, _ a: CGPoint, _ b: CGPoint, into n: CGVector) {
+            if walled.contains(exit), exit != .top { wall(a, b); return }
+            let portal = bar(a, b, S.exitColor)
+            if !walled.contains(exit) { exitPortals[exit] = portal }
+            hatch(exit, along: a, b, into: n)
+        }
         let entryX = C.entryStubLeft.first!.x + 6
         if room.exits.contains(.left) {
-            bar(CGPoint(x: entryX, y: C.entryPortalY.lowerBound), CGPoint(x: entryX, y: C.entryPortalY.upperBound), S.entryColor)
-            exitPortals[.left] = bar(CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound),
-                                     CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), S.exitColor)
-            hatch(.left, along: CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound),
-                  CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), into: CGVector(dx: 1, dy: 0))
+            if !walled.contains(.left) {
+                bar(CGPoint(x: entryX, y: C.entryPortalY.lowerBound), CGPoint(x: entryX, y: C.entryPortalY.upperBound), S.entryColor)
+            }
+            exitBar(.left, CGPoint(x: C.wallLeftX, y: C.sideExitY.lowerBound),
+                    CGPoint(x: C.wallLeftX, y: C.sideExitY.upperBound), into: CGVector(dx: 1, dy: 0))
         }
         if room.exits.contains(.right) {
-            bar(CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.lowerBound),
-                CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.upperBound), S.entryColor)
-            exitPortals[.right] = bar(CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound),
-                                      CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), S.exitColor)
-            hatch(.right, along: CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound),
-                  CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), into: CGVector(dx: -1, dy: 0))
+            if !walled.contains(.right) {
+                bar(CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.lowerBound),
+                    CGPoint(x: 2 * C.centerX - entryX, y: C.entryPortalY.upperBound), S.entryColor)
+            }
+            exitBar(.right, CGPoint(x: C.wallRightX, y: C.sideExitY.lowerBound),
+                    CGPoint(x: C.wallRightX, y: C.sideExitY.upperBound), into: CGVector(dx: -1, dy: 0))
         }
         if room.exits.contains(.top) {
-            exitPortals[.top] = bar(CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1),
-                                    CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), S.exitColor)
-            hatch(.top, along: CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1),
-                  CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), into: CGVector(dx: 0, dy: -1))
+            exitBar(.top, CGPoint(x: C.topPortX.lowerBound, y: C.topY - 1),
+                    CGPoint(x: C.topPortX.upperBound, y: C.topY - 1), into: CGVector(dx: 0, dy: -1))
         }
         for exit in NlExit.allCases { setExitLit(exit, exitsLit.contains(exit)) }
     }

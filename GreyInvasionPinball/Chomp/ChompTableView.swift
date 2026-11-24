@@ -316,6 +316,13 @@ struct ChompTableView: View {
             volumeRow
             overlayButton("Restart", action: startGame)
             overlayButton("Menu", action: goToMenu)
+            #if DEBUG
+            // M5 v6c: light Kevin Multiball 2 or 3 now, to test them without playing up to them.
+            HStack(spacing: 10) {
+                overlayButton("KMB 2") { scene.debugReadyKMB(2); setPaused(false) }
+                overlayButton("KMB 3") { scene.debugReadyKMB(3); setPaused(false) }
+            }
+            #endif
         }
     }
 

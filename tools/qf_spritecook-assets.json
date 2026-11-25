@@ -1,0 +1,66 @@
+{
+  "project_id": "c9da2281-7bdd-4633-b0c3-b95be9f989b2",
+  "assets": [
+    {
+      "asset_id": "e37a7807-12ee-41f3-a63d-56d226fa71f9",
+      "sha12": "5084538700f5",
+      "label": "style: Haunted Forest glade mood test (upload)"
+    },
+    {
+      "asset_id": "faa53237-7aed-432e-9c2e-ad175df77507",
+      "sha12": "ad22f2d60ddc",
+      "label": "wisp test A: gpt-image-2 low + style ref"
+    },
+    {
+      "asset_id": "4eff445d-8fed-408e-8ec0-3a68179eb596",
+      "sha12": "719b1e8b89a3",
+      "label": "wisp test B: pixel-engine-image-v1"
+    },
+    {
+      "asset_id": "faa53237-7aed-432e-9c2e-ad175df77507",
+      "sha12": "f9dcc36b5b8f",
+      "label": "qf_wisp (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "b745281c-d4a6-4b16-af4e-31a75bd59945",
+      "sha12": "601f28619e88",
+      "label": "qf_ghost (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "abd66200-d3af-4e8d-a1a2-39279b49a8e9",
+      "sha12": "b36ac6766e0c",
+      "label": "qf_treant_face (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "f5860e83-01a7-4b0b-a09f-6625b25144be",
+      "sha12": "2e28cd695c03",
+      "label": "qf_treant_hurt (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "b53a495e-4468-46e5-a6f9-93725e950d26",
+      "sha12": "2e32fab866ec",
+      "label": "qf_treant_felled (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "43fdbba9-a423-4786-8846-2737e8f31e33",
+      "sha12": "cfc2ed3d93ef",
+      "label": "qf_witch (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "a2d707de-7d6b-4a5c-a08f-d4833964687e",
+      "sha12": "f42dbb7e1e13",
+      "label": "qf_lantern (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "b77c27d4-ea68-4fc3-b931-d4da581cf942",
+      "sha12": "6fb46ecc3fee",
+      "label": "qf_gravestone (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "bc74636b-b9e2-4db0-8636-757795744347",
+      "sha12": "77a50f027f92",
+      "label": "qf_roots (palette-locked game asset; sha12 is of the locked PNG)"
+    }
+  ],
+  "note": "Picks are palette-locked to qf_render_m1.PAL by build/qf_art scripts; sha12 of game assets is of the locked PNG in Assets.xcassets/QfArt."
+}

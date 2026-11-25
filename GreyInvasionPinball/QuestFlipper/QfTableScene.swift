@@ -245,7 +245,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M1 v7"
+    static let buildTagText = "T9 M2 v2"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -338,6 +338,12 @@ final class QfTableScene: SKScene, RendererHostedScene {
         addDrifter()
         addRoots()
         addWitchParts()
+        let face = SKSpriteNode()
+        face.position = CGPoint(x: QfForestLayout.centerX, y: 1056)     // bottom at 1014, just above the trunk plate
+        face.zPosition = -16.5
+        addChild(face)
+        treantFace = face
+        updateTreantFace()
         addAreaLabels()
     }
 
@@ -634,6 +640,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
             body.collisionBitMask = QfPhysicsCategory.ball
             body.contactTestBitMask = 0
             node.physicsBody = body
+            Self.hideShape(node)
+            addSprite("qf_wisp", to: node, height: 34)
             let wisp = Wisp(node: node, center: w.0, amplitude: w.1, period: w.2)
             node.position = wisp.position(at: gameTime)
             addChild(node)
@@ -641,13 +649,56 @@ final class QfTableScene: SKScene, RendererHostedScene {
         }
     }
 
+    // MARK: - Sprites (T9 M2 art round 1: SpriteCook picks in Assets.xcassets/QfArt)
+
+    /// Adds a QfArt sprite to a node, drawn `height` pt tall (aspect kept), with nearest filtering.
+    @discardableResult
+    private func addSprite(_ name: String, to parent: SKNode, height: CGFloat, at p: CGPoint = .zero,
+                           z: CGFloat = 0.1) -> SKSpriteNode {
+        let tex = SKTexture(imageNamed: name)
+        tex.filteringMode = .nearest
+        let sprite = SKSpriteNode(texture: tex)
+        let size = tex.size()
+        sprite.size = CGSize(width: height * size.width / max(size.height, 1), height: height)
+        sprite.position = p
+        sprite.zPosition = z
+        parent.addChild(sprite)
+        return sprite
+    }
+
+    /// A shape node whose drawing the sprite replaces (its body, position and alpha still drive the monster).
+    private static func hideShape(_ node: SKShapeNode) {
+        node.fillColor = .clear
+        node.strokeColor = .clear
+        node.glowWidth = 0
+    }
+
+    private var treantFace: SKSpriteNode!
+    private var treantFaceName = ""
+
+    /// The Treant's face over its trunk: calm, hurt (once damaged), felled (from its fall until the next one's bark rises).
+    private func updateTreantFace() {
+        let felled = witch.active || witchStartAt != nil || treantRegrowing
+        let name = felled ? "qf_treant_felled" : (treantHP < QfMonsterHP.treant ? "qf_treant_hurt" : "qf_treant_face")
+        guard name != treantFaceName else { return }
+        treantFaceName = name
+        let tex = SKTexture(imageNamed: name)
+        tex.filteringMode = .nearest
+        treantFace.texture = tex
+        let size = tex.size()
+        treantFace.size = CGSize(width: Self.treantFaceHeight * size.width / max(size.height, 1), height: Self.treantFaceHeight)
+    }
+    private static let treantFaceHeight: CGFloat = 84      // M2 v2: bigger (Aaron); grows out over the block's top
+    /// From the Witch's banishing until the new Treant's bark rises (the face stays felled).
+    private var treantRegrowing = false
+
     // MARK: - The Lantern Witch (T9 M1 v7)
 
     private static var lanternSpots: [CGPoint] {
         let F = QfForestLayout.self
         let (ta, tb) = F.trunkFace, (la, lb) = F.lanternFace
         return [CGPoint(x: F.wellHole.x, y: F.wellHole.y + 36),
-                CGPoint(x: (ta.x + tb.x) / 2, y: (ta.y + tb.y) / 2 + 30),
+                CGPoint(x: (ta.x + tb.x) / 2, y: (ta.y + tb.y) / 2 + 31),       // on the stump (over the felled face)
                 CGPoint(x: (la.x + lb.x) / 2 - 22, y: (la.y + lb.y) / 2 + 24)]
     }
     static let witchColor = SKColor(red: 0.72, green: 0.35, blue: 1.0, alpha: 1)
@@ -657,9 +708,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
         for spot in Self.lanternSpots {
             let lamp = SKShapeNode(circleOfRadius: 8)
             lamp.position = spot
-            lamp.fillColor = Self.lampColor
-            lamp.strokeColor = Self.lampColor
-            lamp.glowWidth = 5
+            lamp.fillColor = .clear
+            lamp.strokeColor = Self.lampColor.withAlphaComponent(0.35)
+            lamp.glowWidth = 6
+            addSprite("qf_lantern", to: lamp, height: 26)
             lamp.zPosition = -16
             lamp.alpha = 0
             addChild(lamp)
@@ -672,6 +724,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         marker.glowWidth = 6
         marker.zPosition = -15.5
         marker.alpha = 0
+        addSprite("qf_witch", to: marker, height: 74, at: CGPoint(x: 0, y: 22), z: 0.2)      // M2 v2: bigger (Aaron)
         addChild(marker)
         witchMarker = marker
         // The gravestone: a pop-up in the centre (drawn only while it's down).
@@ -685,6 +738,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         stone.lineWidth = 2
         stone.zPosition = -17
         stone.alpha = 0
+        Self.hideShape(stone)
+        addSprite("qf_gravestone", to: stone, height: 44, at: CGPoint(x: 300, y: 567.5))
         addChild(stone)
         gravestone = stone
     }
@@ -821,6 +876,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             cameraRig.shake(strength: 7, duration: 0.6)
             monsterDefeated()
             barkDownAt = now - QfTableLayout.barkRegrow + 1.5          // a new Treant: its bark rises in 1.5 s
+            treantRegrowing = true
             return
         }
         if now >= witch.moveAt {
@@ -837,6 +893,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         node.glowWidth = 3
         node.zPosition = 12                                   // over the floor ball: it passes through
         node.alpha = 0
+        Self.hideShape(node)
+        addSprite("qf_ghost", to: node, height: 54).alpha = 0.65
         addChild(node)
         drifter = node
         drifterStart = gameTime + QfTableLayout.drifterPause / 2
@@ -850,6 +908,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         node.lineWidth = 2
         node.zPosition = -17
         node.alpha = 0
+        Self.hideShape(node)
+        addSprite("qf_roots", to: node, height: 34)
         let body = SKPhysicsBody(circleOfRadius: QfForestLayout.rootsRadius)
         body.isDynamic = false
         body.restitution = 0.2
@@ -870,6 +930,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         node.zPosition = -17
         node.alpha = 0
         node.position = QfForestLayout.ghostHaunts[1]
+        Self.hideShape(node)
+        addSprite("qf_ghost", to: node, height: 54)
         let body = SKPhysicsBody(circleOfRadius: r)
         body.isDynamic = false
         body.restitution = 0.4
@@ -885,7 +947,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         typealias F = QfForestLayout
         let items: [(String, CGPoint)] = [
             ("OLD WELL", CGPoint(x: 78, y: 690)), ("GRAVEYARD", CGPoint(x: 46, y: 1000)),
-            ("HOLLOW LOG", CGPoint(x: F.logHole.x, y: 960)), ("TREANT", CGPoint(x: F.centerX, y: 1052)),
+            ("HOLLOW LOG", CGPoint(x: F.logHole.x, y: 960)),
             ("OLD ROAD", CGPoint(x: F.rampCenterX, y: 940)), ("WITCH'S GLADE", CGPoint(x: 318, y: 1290)),
             ("FOREST GATE", CGPoint(x: F.forestGate.x - 4, y: F.forestGate.y + 26)),
         ]
@@ -1296,6 +1358,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         updateDrifter(now)
         updateRoots(now)
         updateWitch(now)
+        updateTreantFace()
         let onPlunger = isBallOnPlunger
         if game.ballOnPlunger != onPlunger { game.ballOnPlunger = onPlunger }
 
@@ -1453,6 +1516,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             }
         }
         barkDownAt = nil
+        treantRegrowing = false
         return true
     }
 

@@ -56,6 +56,15 @@ struct NlColumn {
     var width = 1
     /// T8 M4 v1: whether a maze wall closes this cell's exit (cell index, row by row from the bottom-left).
     var isWalled: (_ cell: Int, _ exit: NlExit) -> Bool = { _, _ in false }
+    /// T10 M3 v1 (for 9 to Alive): a drain cost a ball on this cell; returns the cell the next ball comes up on (from
+    /// below). Neon's: the bottom-left cell, as before.
+    var ballLost: (_ cell: Int) -> Int = { _ in 0 }
+    /// T10 M3 v1 (for 9 to Alive's horde): every game frame while a game is on, with the ball's cell; returns a banner
+    /// to show, or nil. Neon has none.
+    var tick: ((_ dt: CGFloat, _ ballCell: Int) -> String?)?
+    /// T8 M4 v3: moving between cells pulls the camera back to the whole grid, then dives into the next cell
+    /// (Neon's; off = the plain pan, as 9 to Alive has).
+    var cellTransition = false
 
     /// T8 M4 v1: a cell's name on the grid (column letter, row number from the bottom: A1 is the bottom-left).
     func cellName(_ i: Int) -> String {
@@ -80,6 +89,7 @@ struct NlColumn {
         var column = NlColumn(makeRooms: { (0..<9).map { _ in NlSwitchyardRoom() } },
                               drainCostsBall: { $0 == 0 })
         column.neon = true
+        column.cellTransition = true
         column.width = w
         column.isWalled = { cell, exit in
             switch exit {
@@ -149,7 +159,30 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private var fpsWorstWhere = ""
     private var lastCameraOrigin = CGPoint.zero
     private var panUntil: TimeInterval = 0
+    /// T8 M4 v3: the tracer ignores the first 2 s of a game (the build and first draw of every cell).
+    private var tracerFrom: TimeInterval = 0
+    /// T8 M4 v4: the last thing that happened (its sound, flippers aside) and when, so the worst frame can name it.
+    private var lastHappening = ""
+    private var lastHappeningAt: TimeInterval = -10
+    /// T8 M4 v3: the transition's marks on the grid: where the ball was (white) and where it's going (magenta).
+    private var moveMarks: [SKShapeNode] = []
+    #if DEBUG
+    /// T8 M4 v3: `-nlFlyTest` flies the camera to the next cell every 3 s (no ball moves), to check the transition.
+    /// Test only: it moves the camera off the ball's cell and can hide it, so don't play with it on.
+    private lazy var flyTest = ProcessInfo.processInfo.arguments.contains("-nlFlyTest")
+    private var flyTestCell = 0
+    private var flyTestNext: TimeInterval = 3
+    #endif
     private var lastStep: CGFloat = 0
+    /// T8 M4 v3: every frame's step, set before the Shot Lab and menu returns (the camera's clock).
+    private var frameStep: CGFloat = 0
+    /// The camera's step: the Shot Lab's own, else every frame's.
+    private var cameraStep: CGFloat {
+        #if DEBUG
+        if shotLab != nil { return lastStep }
+        #endif
+        return frameStep
+    }
 
     private var balls: [NlBall] = []
     private var rides: [Ride] = []
@@ -187,6 +220,9 @@ final class NlTableScene: SKScene, RendererHostedScene {
     /// The next ball in: how it arrives and on which floor (set by a drain or an exit; a new ball is FROM BELOW on the
     /// bottom floor).
     private var pendingArrival: (arrival: Arrival, floor: Int)?
+    /// T10 M3 v1: where a new ball comes up (from below) when there's no pending arrival: the column's choice after a
+    /// lost ball (NlColumn.ballLost), the bottom-left cell at a new game.
+    private var newBallCell = 0
 
     #if DEBUG
     /// M1 v2: the Shot Lab robot (shared ShotLab) and its own clock.
@@ -251,7 +287,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M4 v2"
+    static let buildTagText = "T8 M4 v4"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -290,7 +326,16 @@ final class NlTableScene: SKScene, RendererHostedScene {
     func refreshCamera() {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
+        endCellTransition()                        // a snap ends any transition (even while paused)
         placeBuildTag()
+    }
+
+    /// T8 M4 v3: the transition's marks go and every cell draws in full again.
+    private func endCellTransition() {
+        guard !moveMarks.isEmpty || floors.contains(where: { $0.inOverview }) else { return }
+        moveMarks.forEach { $0.removeFromParent() }
+        moveMarks = []
+        floors.forEach { $0.setOverview(false) }
     }
 
     // MARK: - Table
@@ -327,7 +372,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         refreshKickLamps()
         // T8 M4 v2: every cell's baked glow goes to the GPU now, not the first time its cell comes on screen
         // (Aaron's 9-cell test: worst frame 34 ms, low 101 fps).
-        let halos = floors.compactMap { ($0.childNode(withName: "neonHalos") as? SKSpriteNode)?.texture }
+        let halos = floors.flatMap { f in ["neonHalos", "neonCores"].compactMap { (f.childNode(withName: $0) as? SKSpriteNode)?.texture } }
         if !halos.isEmpty { SKTexture.preload(halos) {} }
     }
 
@@ -364,9 +409,9 @@ final class NlTableScene: SKScene, RendererHostedScene {
         }
         if let next {
             pendingArrival = (next.arrival, next.cell)
-            cameraRig.origin = floors[next.cell].position          // the pan starts now
+            let delay = moveCamera(to: next.cell, from: from.index)    // the pan (or the transition) starts now
             labEvent(next.event)
-            if balls.isEmpty, nextBallAt == nil { nextBallAt = gameTime + Self.floorMoveDelay }
+            if balls.isEmpty, nextBallAt == nil { nextBallAt = gameTime + delay }
             return
         }
         let back: Arrival = [Arrival.fromRight, .fromBelow, .fromLeft][exit.rawValue]
@@ -376,6 +421,38 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
     /// From a drain or a top exit to the next floor's arrival (the camera pans meanwhile).
     static let floorMoveDelay: TimeInterval = 0.3
+
+    /// T8 M4 v3: points the camera at cell `to`. With the cell transition it pulls back to the whole grid (the cell the
+    /// ball left outlined white, the one it's going to magenta), holds, and dives in. Returns how long until the ball
+    /// comes in (it arrives as the dive settles).
+    private func moveCamera(to cell: Int, from: Int) -> TimeInterval {
+        cameraRig.origin = floors[cell].position
+        guard column.cellTransition else { return Self.floorMoveDelay }
+        let cols = column.width, rows = floors.count / column.width
+        let cw = NlCellLayout.cellSize.width, ch = NlCellLayout.cellSize.height, gap = column.floorGap
+        let grid = CGRect(x: 0, y: 0, width: CGFloat(cols) * cw + CGFloat(cols - 1) * gap,
+                          height: CGFloat(rows) * ch + CGFloat(rows - 1) * gap)
+            .insetBy(dx: -70, dy: -70)                     // room for the marks round the edge cells
+        cameraRig.flyVia(gridBounds: grid, viewSize: size)
+        guard cameraRig.isFlying else { return Self.floorMoveDelay }    // Reduce Motion: the plain pan
+        // Every cell but the two the move is between draws as its baked stand-in while the camera is out.
+        for f in floors { f.setOverview(f.index != cell && f.index != from) }
+        moveMarks.forEach { $0.removeFromParent() }
+        moveMarks = []
+        let px = cameraRig.overviewScale                    // world points per screen point at the grid framing
+        for (i, color) in [(from, NlNeon.white), (cell, NlNeon.magenta)] {
+            let rect = CGRect(origin: floors[i].position, size: NlCellLayout.cellSize).insetBy(dx: -8 * px, dy: -8 * px)
+            let mark = SKShapeNode(rect: rect, cornerRadius: 6 * px)
+            mark.fillColor = color.withAlphaComponent(i == cell ? 0.10 : 0.04)
+            NlNeon.core(mark, color, width: (i == cell ? 3 : 2) * px)
+            NlNeon.addHalo(to: mark, color, width: 12 * px, alpha: 0.35)
+            mark.zPosition = 40
+            mark.alpha = 0
+            addChild(mark)
+            moveMarks.append(mark)
+        }
+        return TimeInterval(NlCameraRig.flightTotal - 0.2)
+    }
 
     /// The arrivals that can happen on a floor: below and above always, a side only if its room has that side.
     private func availableArrivals(on f: NlCellFloor) -> [Arrival] {
@@ -428,11 +505,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
             if window >= 0.5 {
                 fpsShown = Int((Double(fpsFrames) / window).rounded())
                 fpsWorstShown = Int((fpsWorstGap * 1000).rounded())
-                if fpsLow == 0 || fpsShown < fpsLow { fpsLow = fpsShown }
-                if fpsWorstShown > fpsWorstEver {
+                if gameTime >= tracerFrom, fpsLow == 0 || fpsShown < fpsLow { fpsLow = fpsShown }
+                if fpsWorstShown > fpsWorstEver, gameTime >= tracerFrom {
                     fpsWorstEver = fpsWorstShown
                     let cell = column.width > 1 ? column.cellName(activeFloor) : "floor \(activeFloor + 1)"
-                    fpsWorstWhere = "\(cell) \(Int(gameTime))s\(gameTime < panUntil ? " pan" : "")"
+                    let ago = gameTime - lastHappeningAt          // within this 0.5 s window (+ a little)
+                    let what = ago < 0.7 ? " after \(lastHappening)" : ""
+                    fpsWorstWhere = "\(cell) \(Int(gameTime))s\(gameTime < panUntil ? " pan" : "")\(what)"
                 }
                 fpsWindowStart = t; fpsFrames = 0; fpsWorstGap = 0
             }
@@ -588,6 +667,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         fpsLow = 0
         fpsWorstEver = 0
         fpsWorstWhere = ""
+        tracerFrom = gameTime + 2
         isAttractMode = false
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
@@ -605,6 +685,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         }
         refreshKickLamps()
         pendingArrival = nil
+        newBallCell = 0
         floors.forEach { $0.room.newGame() }
         drains = 0
         floorDrops = 0
@@ -626,6 +707,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     }
 
     func sfx(_ s: MonSound) {
+        if s != .flipper { lastHappening = s.rawValue; lastHappeningAt = gameTime }
         #if DEBUG
         if shotLab != nil { return }
         if playLab != nil, playLab?.isWatching != true { return }   // the robot plays silently unless watched
@@ -738,6 +820,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         #endif
         lastRealTime = realTime
         gameTime += step
+        frameStep = CGFloat(step)
         let now = gameTime
         #if DEBUG
         if shotLab != nil {                        // Shot Lab: the robot's frame instead of a game frame
@@ -759,6 +842,10 @@ final class NlTableScene: SKScene, RendererHostedScene {
         }
         updateRides(dt)
         floors.forEach { $0.room.update(dt) }
+        // T10 M3 v1: during a move between floors the ball's cell is the one it's going to.
+        if let tick = column.tick, !game.isGameOver, let banner = tick(dt, pendingArrival?.floor ?? activeFloor) {
+            showBanner(banner)
+        }
         if game.status != room.status { game.status = room.status }   // the ball's room owns the HUD status line
         handBallsToSwingingFlippers()
         for f in floors { f.slingshots.forEach { $0.settle() } }
@@ -793,15 +880,16 @@ final class NlTableScene: SKScene, RendererHostedScene {
                     cameraRig.shake(strength: 3, duration: 0.25)
                     sfx(.drain)
                     game.ballDrained()
-                    pendingArrival = nil            // a new ball (FROM BELOW on the bottom floor)
+                    newBallCell = column.ballLost(from)    // T10 M3 v1: the column says where the next ball comes up
+                    pendingArrival = nil            // a new ball (FROM BELOW on that cell; Neon's: the bottom floor)
                     if !game.isGameOver { nextBallAt = now + 0.8 }
                 } else {
                     pendingArrival = (.fromAbove, from - column.width)
                     floorDrops += 1
-                    cameraRig.origin = floors[from - column.width].position     // the pan starts now
+                    let delay = moveCamera(to: from - column.width, from: from)   // the pan (or transition) starts now
                     labEvent("floorDown")
                     sfx(.gate)
-                    nextBallAt = now + Self.floorMoveDelay
+                    nextBallAt = now + delay
                 }
             }
         }
@@ -810,7 +898,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
             nextBallAt = nil
             // No pending arrival = a new ball (after a lost ball or a watchdog rescue): up from below on the bottom floor.
             let isNewBall = pendingArrival == nil
-            let next = pendingArrival ?? (.fromBelow, 0)
+            let next = pendingArrival ?? (.fromBelow, newBallCell)
             pendingArrival = nil
             arrive(next.arrival, on: next.floor, newBall: isNewBall)
         }
@@ -906,10 +994,24 @@ final class NlTableScene: SKScene, RendererHostedScene {
 
     override func didFinishUpdate() {
         guard isBuilt, !isPaused else { return }
-        cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: lastStep)
+        #if DEBUG
+        if flyTest, !cameraRig.isFlying, gameTime >= flyTestNext, floors.count > 1 {
+            let to = (flyTestCell + 1) % floors.count
+            _ = moveCamera(to: to, from: flyTestCell)
+            flyTestCell = to
+            flyTestNext = gameTime + 3
+        }
+        #endif
+        cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: cameraStep)
         if cameraRig.origin != lastCameraOrigin {          // a pan to another cell: count the next second as "pan"
             lastCameraOrigin = cameraRig.origin
             panUntil = gameTime + 1
+        }
+        if cameraRig.isFlying { panUntil = max(panUntil, gameTime + 0.3) }
+        if !moveMarks.isEmpty {                            // T8 M4 v3: the marks show while the camera is pulled back
+            let a = cameraRig.overviewAmount
+            moveMarks.forEach { $0.alpha = a }
+            if !cameraRig.isFlying { endCellTransition() }
         }
         placeBuildTag()
     }
@@ -1045,13 +1147,20 @@ extension NlTableScene: ShotLabHost {
     var shotLabMajorEvents: Set<String> { room.shotLabMajorEvents }
 
     /// CHOMP!'s gravity (−6.0) rolls a cradled ball slowly; its sweep runs to 0.85 s, so this one does too.
-    var shotLabCradleDelays: ClosedRange<Double> { 0.20...0.85 }
+    var shotLabCradleDelays: ClosedRange<Double> { 0.20...1.00 }   // T10 M3 v2: from the new cradle the roll is longer
+
+    /// T10 M3 v2: the kit's angled feeds (T11 port, 2026-11-24) bring an inlane ball to the flipper ~0.9 s after the
+    /// release (it was ~0.6 s with the r 120 bend), past the default 0.30–0.90 sweep.
+    var shotLabInlaneDelays: ClosedRange<Double>? { 0.30...1.30 }
 
     /// Cradled as on CHOMP! (same flipper: 80 long, 30° rest, 51° stroke, 30 pt ball): dropped 40 pt out, above the raised
     /// flipper by the ball's radius + 5. The inlane start is the inlane's centre line under the guide post.
     var shotLabFlippers: [ShotLab.FlipperSpec] {
         let up = NlTableLayout.flipperTravel - NlTableLayout.flipperRestAngle
-        let along: CGFloat = 40, above: CGFloat = NlTableLayout.ballRadius + 5
+        // T10 M3 v2: with the angled feeds a held ball rests in the V between the guide's 20° slant and the raised
+        // flipper, (203, 229) on the left (12 along, 26 above). Dropped at the old spot (40 out) it rolled into the V and
+        // was still rocking at ~60 pt/s at the 1.2 s check, so every cradle trial was invalid.
+        let along: CGFloat = 12, above: CGFloat = NlTableLayout.ballRadius + 11
         let l = NlCellLayout.pivotLeft
         let left = CGPoint(x: l.x + along * cos(up) - above * sin(up), y: l.y + along * sin(up) + above * cos(up))
         let right = CGPoint(x: NlTableLayout.mirrorSum - left.x, y: left.y)

@@ -41,6 +41,11 @@ final class NlCellFloor: SKNode {
     /// The room's solid blocks (a floor ball inside one is pushed back out).
     private(set) lazy var solidBlocks: [[CGPoint]] = room.solidBlocks
     private weak var column: NlTableScene?
+    /// T8 M4 v3: the grid overview's stand-in (the baked cores) and what it hid.
+    private var floorFill: SKNode?
+    private var overviewSprite: SKSpriteNode?
+    private var overviewHidden: [SKNode] = []
+    private(set) var inOverview = false
 
     init(index: Int, room: NlRoom, column: NlTableScene, neon: Bool = false) {
         self.index = index
@@ -111,6 +116,12 @@ final class NlCellFloor: SKNode {
                 sprite.zPosition = -19.6               // under every core line, over the grid
                 addChild(sprite)
             }
+            if let cores = halos.makeSprite(size: NlCellLayout.cellSize, pixelsPerPoint: 0.5, cores: true) {
+                cores.zPosition = -19.5
+                cores.isHidden = true
+                addChild(cores)
+                overviewSprite = cores
+            }
         }
     }
 
@@ -151,6 +162,23 @@ final class NlCellFloor: SKNode {
         }
     }
 
+    /// T8 M4 v3: on the grid overview this cell draws only its floor, its baked glow and its baked lines (two sprites
+    /// instead of hundreds of shapes); everything else is hidden until it's back. Physics is untouched.
+    func setOverview(_ on: Bool) {
+        guard on != inOverview, overviewSprite != nil else { return }
+        inOverview = on
+        if on {
+            overviewHidden = children.filter { !$0.isHidden && $0 !== floorFill && $0.name != "neonHalos" && $0 !== overviewSprite }
+            overviewHidden.forEach { $0.isHidden = true }
+            overviewSprite?.isHidden = false
+        } else {
+            overviewHidden.forEach { $0.isHidden = false }
+            overviewHidden = []
+            overviewSprite?.isHidden = true
+            for exit in NlExit.allCases { setExitLit(exit, exitsLit.contains(exit)) }   // the hatches as they should be
+        }
+    }
+
     // MARK: - Services for the room (forwarded to the column)
 
     var isTilted: Bool { column?.isTilted ?? false }
@@ -184,6 +212,7 @@ final class NlCellFloor: SKNode {
         floor.strokeColor = .clear
         floor.zPosition = -20
         addChild(floor)
+        floorFill = floor
         let grid = CGMutablePath()
         let w = NlCellLayout.cellSize.width, h = NlCellLayout.cellSize.height
         for x in stride(from: CGFloat(0), through: w, by: 50) {

@@ -97,7 +97,9 @@ final class NlHaloBaker {
     /// One sprite (anchor at the floor's origin, `size` world points) holding every halo, blurred. `pixelsPerPoint`
     /// 0.75 keeps it small (a 600 × 1060 floor is 450 × 795 px, ~1.4 MB); halos are soft, so the low resolution
     /// doesn't show.
-    func makeSprite(size: CGSize, pixelsPerPoint k: CGFloat = 0.75) -> SKSpriteNode? {
+    /// T8 M4 v3: `cores` bakes the same paths as thin sharp lines instead (no blur): the cell's stand-in on the grid
+    /// overview, where drawing every cell's live nodes was too much (sprite "neonCores").
+    func makeSprite(size: CGSize, pixelsPerPoint k: CGFloat = 0.75, cores: Bool = false) -> SKSpriteNode? {
         guard !items.isEmpty else { return nil }
         let px = CGSize(width: ceil(size.width * k), height: ceil(size.height * k))
         let format = UIGraphicsImageRendererFormat()
@@ -111,6 +113,14 @@ final class NlHaloBaker {
             cg.setLineJoin(.round)
             for it in items {
                 cg.saveGState()
+                if cores {
+                    cg.setStrokeColor(it.color.withAlphaComponent(min(1, it.alpha * 1.4)).cgColor)
+                    cg.setLineWidth(max(2.4, 1.2 / k))      // at least ~1 px
+                    cg.addPath(it.path)
+                    cg.strokePath()
+                    cg.restoreGState()
+                    continue
+                }
                 // The shadow's blur is in pixels (not scaled by the transform).
                 cg.setShadow(offset: .zero, blur: NlNeon.haloBlur * k * 2,
                              color: it.color.withAlphaComponent(it.alpha).cgColor)
@@ -127,7 +137,7 @@ final class NlHaloBaker {
         sprite.anchorPoint = .zero
         sprite.position = .zero
         sprite.blendMode = .add
-        sprite.name = "neonHalos"
+        sprite.name = cores ? "neonCores" : "neonHalos"
         return sprite
     }
 }

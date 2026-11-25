@@ -21,6 +21,45 @@ final class NlCameraRig {
     /// cell at this origin and eases across when it changes (a floor change pans).
     var origin = CGPoint.zero
 
+    // MARK: T8 M4 v3: the cell transition (Notion: "camera pulls back to the whole wireframe grid with your position
+    // lit, then dives into the next cell"). Pull back to the grid, hold, then dive into the new origin's framing.
+    static let flightOut: CGFloat = 0.45
+    static let flightHold: CGFloat = 0.35
+    static let flightIn: CGFloat = 0.5
+    static var flightTotal: CGFloat { flightOut + flightHold + flightIn }
+    private struct Flight {
+        var t: CGFloat = 0
+        let startPosition: CGPoint
+        let startScale: CGFloat
+        let overPosition: CGPoint
+        let overScale: CGFloat
+    }
+    private var flight: Flight?
+    var isFlying: Bool { flight != nil }
+    /// How far pulled back to the grid (0 = framing the cell, 1 = the whole grid), for the scene's highlights.
+    private(set) var overviewAmount: CGFloat = 0
+    /// The grid framing's scale while a flight runs (the scene sizes its highlight lines with it).
+    var overviewScale: CGFloat { flight?.overScale ?? 1 }
+
+    /// Starts a transition: out to frame `gridBounds` (world) under the HUD, hold, then in to the current origin.
+    /// Skipped with Reduce Motion (the plain pan).
+    func flyVia(gridBounds: CGRect, viewSize: CGSize) {
+        guard !UIAccessibility.isReduceMotionEnabled, viewSize.width > 0, viewSize.height > 0 else { return }
+        let m = CameraTuning.margin, hud = CameraTuning.hudHeight
+        let usable = max(viewSize.height - hud, 1)
+        let scale = max((gridBounds.width + 2 * m) / viewSize.width, (gridBounds.height + 2 * m) / usable)
+        // centred in the area under the HUD
+        let position = CGPoint(x: gridBounds.midX, y: gridBounds.midY + hud * scale / 2)
+        flight = Flight(startPosition: base, startScale: node.xScale, overPosition: position, overScale: scale)
+    }
+
+    /// Smoothstep, and a zoom that's even in log space (so the pull-back doesn't rush at the start).
+    private static func ease(_ k: CGFloat) -> CGFloat { let x = min(max(k, 0), 1); return x * x * (3 - 2 * x) }
+    private static func zoom(_ a: CGFloat, _ b: CGFloat, _ k: CGFloat) -> CGFloat { exp(log(a) + (log(b) - log(a)) * k) }
+    private static func lerp(_ a: CGPoint, _ b: CGPoint, _ k: CGFloat) -> CGPoint {
+        CGPoint(x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k)
+    }
+
     /// `strength` is the largest offset in SCREEN points. Skipped with Reduce Motion.
     func shake(strength: CGFloat, duration: TimeInterval = 0.3) {
         guard !UIAccessibility.isReduceMotionEnabled else { return }
@@ -51,8 +90,40 @@ final class NlCameraRig {
         let goal = target(viewSize: viewSize, ball: ball, mode: mode)
 
         if snap || dt <= 0 {
+            flight = nil
+            overviewAmount = 0
             node.setScale(goal.scale)
             base = goal.position
+            node.position = base
+            return
+        }
+
+        if var f = flight {                        // T8 M4 v3: the cell transition owns the camera while it runs
+            f.t += dt
+            let out = Self.flightOut, hold = Self.flightHold, inn = Self.flightIn
+            var position: CGPoint, scale: CGFloat
+            if f.t < out {
+                let k = Self.ease(f.t / out)
+                position = Self.lerp(f.startPosition, f.overPosition, k)
+                scale = Self.zoom(f.startScale, f.overScale, k)
+                overviewAmount = k
+            } else if f.t < out + hold {
+                position = f.overPosition
+                scale = f.overScale
+                overviewAmount = 1
+            } else if f.t < out + hold + inn {
+                let k = Self.ease((f.t - out - hold) / inn)
+                position = Self.lerp(f.overPosition, goal.position, k)
+                scale = Self.zoom(f.overScale, goal.scale, k)
+                overviewAmount = 1 - k
+            } else {
+                position = goal.position
+                scale = goal.scale
+                overviewAmount = 0
+            }
+            flight = f.t < out + hold + inn ? f : nil
+            node.setScale(scale)
+            base = position
             node.position = base
             return
         }

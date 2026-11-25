@@ -69,17 +69,16 @@ GUIDE_POST_R = 5.0
 GUIDE_X = WALL_L + OUTLANE_W + GUIDE_POST_R            # 75
 GUIDE_TOP_Y = 470.0
 GUIDE_END_L = (PIVOT_L[0] + (FLIP_RP + 1) * math.sin(FLIP_REST), PIVOT_L[1] + (FLIP_RP + 1) * math.cos(FLIP_REST))
-SLANT = math.radians(32)
+# T11 M1 r2 port (Aaron 2026-11-24): traditional angled inlane feeds. Straight guide, sharp corner, straight
+# 20 deg slant to just above the pivot (was 32 deg with an r 120 bend, which let inlane balls reach a held
+# flipper at ~620 pt/s; now ~340). Sling corner 352 -> 300, tip recomputed along the new slant.
+SLANT = math.radians(20)            # the guide's slant down to the pivot
 GUIDE_BEND_L = (GUIDE_X, GUIDE_END_L[1] + (GUIDE_END_L[0] - GUIDE_X) * math.tan(SLANT))
 OUTLANE_POST_L = (GUIDE_X - 3.0, GUIDE_TOP_Y + 12.0)
-GUIDE_BEND_R = 120.0
+GUIDE_BEND_R = 0.0                  # T11 M1 r2: a sharp corner (was r 120)
 def lane_guide_curve():
-    u = unit(GUIDE_BEND_L, GUIDE_END_L)
-    n = (-u[1], u[0])
-    cx = GUIDE_X + GUIDE_BEND_R
-    cy = GUIDE_END_L[1] + (GUIDE_BEND_R - (cx - GUIDE_END_L[0]) * n[0]) / n[1]
-    a0, a1 = math.pi, math.atan2(-n[1], -n[0]) + 2 * math.pi
-    return [(cx + GUIDE_BEND_R * math.cos(a0 + (a1 - a0) * i / 12), cy + GUIDE_BEND_R * math.sin(a0 + (a1 - a0) * i / 12)) for i in range(13)]
+    """The guide's corner only (T11 M1 r2: no bend curve any more; the guide is top, corner, end)."""
+    return [GUIDE_BEND_L]
 OUTLANE_WALL_BOTTOM = 256.0
 SLOPE_TOP = (WALL_L, 230.0)
 BULGE = (480.0, 760.0, 36.0)
@@ -102,7 +101,8 @@ _o0 = add(GUIDE_BEND_L, _n, INLANE_W + SLING_POST_CORNER + 0.5)
 _t = (SLING_X - _o0[0]) / _u[0]
 SLING_CORNER_L = (SLING_X, _o0[1] + _u[1] * _t)
 SLING_TIP_L = add(SLING_CORNER_L, _u, 64.0)
-SLING_CORNER_L = (SLING_X, 352.0)
+SLING_CORNER_L = (SLING_X, 300.0)   # T11 M1 r2: the lowest corner keeping the inlane 50 clear
+SLING_TIP_L = add(SLING_CORNER_L, _u, 64.0)
 SLING_TOP_L = (SLING_X, 445.0)
 
 INLANE_X = (GUIDE_X + SLING_X) / 2                     # 103.5

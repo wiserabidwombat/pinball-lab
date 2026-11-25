@@ -76,17 +76,13 @@ enum NlCellLayout {
         CGPoint(x: 538.2, y: 535.4), CGPoint(x: 559.1, y: 525.2), CGPoint(x: 580.0, y: 515.0),
         CGPoint(x: 580.0, y: 230.0), CGPoint(x: 345.0, y: 100.0), CGPoint(x: 345.0, y: 30.0),
     ]
-    /// Left lane guide: top post → straight → r 120 bend → slant to the pivot.
+    /// Left lane guide: top post → straight → corner → 20° slant to the pivot (T11 M1 r2 angled feed).
     static let laneGuideLeft: [CGPoint] = [
-        CGPoint(x: 75.0, y: 470.0), CGPoint(x: 75.0, y: 360.6), CGPoint(x: 75.4, y: 350.5),
-        CGPoint(x: 76.7, y: 340.4), CGPoint(x: 78.8, y: 330.5), CGPoint(x: 81.8, y: 320.8),
-        CGPoint(x: 85.5, y: 311.4), CGPoint(x: 90.0, y: 302.4), CGPoint(x: 95.3, y: 293.8),
-        CGPoint(x: 101.3, y: 285.6), CGPoint(x: 108.0, y: 278.0), CGPoint(x: 115.2, y: 270.9),
-        CGPoint(x: 123.1, y: 264.5), CGPoint(x: 131.4, y: 258.8), CGPoint(x: 207.5, y: 211.3),
+        CGPoint(x: 75.0, y: 470.0), CGPoint(x: 75.0, y: 259.5), CGPoint(x: 207.5, y: 211.3),
     ]
     /// Left outlane channel wall, carried straight down from the bend.
     static let outlaneWallLeft: [CGPoint] = [
-        CGPoint(x: 75.0, y: 360.6), CGPoint(x: 75.0, y: 256.0),
+        CGPoint(x: 75.0, y: 259.5), CGPoint(x: 75.0, y: 256.0),
     ]
     /// Left outlane post rail (guide post → outlane post).
     static let outlanePostRailLeft: [CGPoint] = [
@@ -94,7 +90,7 @@ enum NlCellLayout {
     ]
     /// Left sling: top, corner, tip (the kicking face is tip → top).
     static let slingLeft: [CGPoint] = [
-        CGPoint(x: 132.0, y: 445.0), CGPoint(x: 132.0, y: 352.0), CGPoint(x: 186.3, y: 290.6),
+        CGPoint(x: 132.0, y: 445.0), CGPoint(x: 132.0, y: 300.0), CGPoint(x: 192.1, y: 278.1),
     ]
     /// Left return wire centreline (rail layer, scripted ride): top lane → arch → side wall → inlane.
     static let returnWireLeft: [CGPoint] = [
@@ -118,17 +114,13 @@ enum NlCellLayout {
     static let topLaneWallLeft: [CGPoint] = [
         CGPoint(x: 270.0, y: 975.0), CGPoint(x: 270.0, y: 1040.4),
     ]
-    /// Right lane guide: top post → straight → r 120 bend → slant to the pivot.
+    /// Right lane guide: top post → straight → corner → 20° slant to the pivot (T11 M1 r2 angled feed).
     static let laneGuideRight: [CGPoint] = [
-        CGPoint(x: 525.0, y: 470.0), CGPoint(x: 525.0, y: 360.6), CGPoint(x: 524.6, y: 350.5),
-        CGPoint(x: 523.3, y: 340.4), CGPoint(x: 521.2, y: 330.5), CGPoint(x: 518.2, y: 320.8),
-        CGPoint(x: 514.5, y: 311.4), CGPoint(x: 510.0, y: 302.4), CGPoint(x: 504.7, y: 293.8),
-        CGPoint(x: 498.7, y: 285.6), CGPoint(x: 492.0, y: 278.0), CGPoint(x: 484.8, y: 270.9),
-        CGPoint(x: 476.9, y: 264.5), CGPoint(x: 468.6, y: 258.8), CGPoint(x: 392.5, y: 211.3),
+        CGPoint(x: 525.0, y: 470.0), CGPoint(x: 525.0, y: 259.5), CGPoint(x: 392.5, y: 211.3),
     ]
     /// Right outlane channel wall, carried straight down from the bend.
     static let outlaneWallRight: [CGPoint] = [
-        CGPoint(x: 525.0, y: 360.6), CGPoint(x: 525.0, y: 256.0),
+        CGPoint(x: 525.0, y: 259.5), CGPoint(x: 525.0, y: 256.0),
     ]
     /// Right outlane post rail (guide post → outlane post).
     static let outlanePostRailRight: [CGPoint] = [
@@ -136,7 +128,7 @@ enum NlCellLayout {
     ]
     /// Right sling: top, corner, tip (the kicking face is tip → top).
     static let slingRight: [CGPoint] = [
-        CGPoint(x: 468.0, y: 445.0), CGPoint(x: 468.0, y: 352.0), CGPoint(x: 413.7, y: 290.6),
+        CGPoint(x: 468.0, y: 445.0), CGPoint(x: 468.0, y: 300.0), CGPoint(x: 407.9, y: 278.1),
     ]
     /// Right return wire centreline (rail layer, scripted ride): top lane → arch → side wall → inlane.
     static let returnWireRight: [CGPoint] = [
@@ -160,7 +152,7 @@ enum NlCellLayout {
     static let topLaneWallRight: [CGPoint] = [
         CGPoint(x: 330.0, y: 975.0), CGPoint(x: 330.0, y: 1040.4),
     ]
-    static let guideBendLeft = CGPoint(x: 75.0, y: 294.1)      // the theoretical corner (the guide itself curves, r 120)
+    static let guideBendLeft = CGPoint(x: 75.0, y: 259.5)      // the guide's corner (a sharp, angled feed since T11 M1 r2)
     static let laneGuidePostLeft = CGPoint(x: 75.0, y: 470.0)
     static let laneGuidePostRight = CGPoint(x: 525.0, y: 470.0)
     static let outlanePostLeft = CGPoint(x: 72.0, y: 482.0)

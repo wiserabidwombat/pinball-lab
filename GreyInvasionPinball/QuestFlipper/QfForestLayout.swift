@@ -82,20 +82,12 @@ enum QfForestLayout {
 
     // MARK: lower table (Neon's kit)
     static let laneGuideLeft: [CGPoint] = [
-        CGPoint(x: 75.00, y: 470.00), CGPoint(x: 75.00, y: 360.57), CGPoint(x: 75.43, y: 350.46),
-        CGPoint(x: 76.70, y: 340.42), CGPoint(x: 78.82, y: 330.53), CGPoint(x: 81.77, y: 320.84),
-        CGPoint(x: 85.52, y: 311.44), CGPoint(x: 90.05, y: 302.39), CGPoint(x: 95.32, y: 293.76),
-        CGPoint(x: 101.30, y: 285.60), CGPoint(x: 107.96, y: 277.97), CGPoint(x: 115.22, y: 270.93),
-        CGPoint(x: 123.06, y: 264.52), CGPoint(x: 131.41, y: 258.80), CGPoint(x: 207.50, y: 211.26),
+        CGPoint(x: 75.00, y: 470.00), CGPoint(x: 75.00, y: 259.48), CGPoint(x: 207.50, y: 211.26),
     ]
     static let laneGuideRight: [CGPoint] = [
-        CGPoint(x: 525.00, y: 470.00), CGPoint(x: 525.00, y: 360.57), CGPoint(x: 524.57, y: 350.46),
-        CGPoint(x: 523.30, y: 340.42), CGPoint(x: 521.18, y: 330.53), CGPoint(x: 518.23, y: 320.84),
-        CGPoint(x: 514.48, y: 311.44), CGPoint(x: 509.95, y: 302.39), CGPoint(x: 504.68, y: 293.76),
-        CGPoint(x: 498.70, y: 285.60), CGPoint(x: 492.04, y: 277.97), CGPoint(x: 484.78, y: 270.93),
-        CGPoint(x: 476.94, y: 264.52), CGPoint(x: 468.59, y: 258.80), CGPoint(x: 392.50, y: 211.26),
+        CGPoint(x: 525.00, y: 470.00), CGPoint(x: 525.00, y: 259.48), CGPoint(x: 392.50, y: 211.26),
     ]
-    static let guideBendLeft = CGPoint(x: 75.00, y: 294.05)
+    static let guideBendLeft = CGPoint(x: 75.00, y: 259.48)
     static let laneGuidePostLeft = CGPoint(x: 75.00, y: 470.00)
     static let laneGuidePostRight = CGPoint(x: 525.00, y: 470.00)
     static let laneGuidePostRadius: CGFloat = 5.00
@@ -108,17 +100,17 @@ enum QfForestLayout {
         CGPoint(x: 525.00, y: 470.00), CGPoint(x: 528.00, y: 482.00),
     ]
     static let outlaneWallLeft: [CGPoint] = [
-        CGPoint(x: 75.00, y: 360.57), CGPoint(x: 75.00, y: 256.00),
+        CGPoint(x: 75.00, y: 259.48), CGPoint(x: 75.00, y: 256.00),
     ]
     static let outlaneWallRight: [CGPoint] = [
-        CGPoint(x: 525.00, y: 360.57), CGPoint(x: 525.00, y: 256.00),
+        CGPoint(x: 525.00, y: 259.48), CGPoint(x: 525.00, y: 256.00),
     ]
     /// [top, corner, tip] of each sling.
     static let slingLeft: [CGPoint] = [
-        CGPoint(x: 132.00, y: 445.00), CGPoint(x: 132.00, y: 352.00), CGPoint(x: 186.28, y: 290.56),
+        CGPoint(x: 132.00, y: 445.00), CGPoint(x: 132.00, y: 300.00), CGPoint(x: 192.14, y: 278.11),
     ]
     static let slingRight: [CGPoint] = [
-        CGPoint(x: 468.00, y: 445.00), CGPoint(x: 468.00, y: 352.00), CGPoint(x: 413.72, y: 290.56),
+        CGPoint(x: 468.00, y: 445.00), CGPoint(x: 468.00, y: 300.00), CGPoint(x: 407.86, y: 278.11),
     ]
     static let slingTopPostRadius: CGFloat = 7.00
     static let slingTipPostRadius: CGFloat = 6.00

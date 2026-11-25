@@ -34,7 +34,7 @@ left, right = L.ramp_outline()
 blocks = []
 for side in ("L", "R"):
     s = "Left" if side == "L" else "Right"
-    blocks.append(pts(f"laneGuide{s}", P[f"lane guide {side}"][1], f"{s} lane guide: top post → straight → r {L.GUIDE_BEND_R:.0f} bend → slant to the pivot."))
+    blocks.append(pts(f"laneGuide{s}", P[f"lane guide {side}"][1], f"{s} lane guide: top post → straight → corner → 20° slant to the pivot (T11 M1 r2 angled feed)."))
     blocks.append(pts(f"outlaneWall{s}", P[f"outlane wall {side}"][1], f"{s} outlane channel wall, carried straight down from the bend."))
     blocks.append(pts(f"outlanePostRail{s}", P[f"outlane post rail {side}"][1], f"{s} outlane post rail (guide post → outlane post)."))
     blocks.append(pts(f"sling{s}", P[f"sling {side}"][1][:3], f"{s} sling: top, corner, tip (the kicking face is tip → top)."))
@@ -88,7 +88,7 @@ enum NlCellLayout {{
 {chr(10).join("        " + ", ".join(pt(p) for p in L.outer_wall()[i:i + 3]) + "," for i in range(0, len(L.outer_wall()), 3))}
     ]
 {chr(10).join(blocks)}
-    static let guideBendLeft = {pt(L.GUIDE_BEND_L)}      // the theoretical corner (the guide itself curves, r {L.GUIDE_BEND_R:.0f})
+    static let guideBendLeft = {pt(L.GUIDE_BEND_L)}      // the guide's corner (a sharp, angled feed since T11 M1 r2)
     static let laneGuidePostLeft = {pt((L.GUIDE_X, L.GUIDE_TOP_Y))}
     static let laneGuidePostRight = {pt(L.M((L.GUIDE_X, L.GUIDE_TOP_Y)))}
     static let outlanePostLeft = {pt(L.OUTLANE_POST_L)}

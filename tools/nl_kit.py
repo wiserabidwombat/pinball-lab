@@ -59,23 +59,20 @@ GUIDE_X = WALL_L + OUTLANE_W + GUIDE_POST_R        # 75: the lane guide's straig
 GUIDE_TOP_Y = 470.0
 # The guide ends just above the top edge of the pivot at rest: pivot + (r + 1) along the top edge's normal.
 GUIDE_END_L = (PIVOT_L[0] + (FLIP_RP + 1) * math.sin(FLIP_REST), PIVOT_L[1] + (FLIP_RP + 1) * math.cos(FLIP_REST))
-SLANT = math.radians(32)            # the guide's slant down to the pivot
+# T11 M1 r2 port (Aaron 2026-11-24): traditional angled inlane feeds. Straight guide, sharp corner, straight
+# 20 deg slant to just above the pivot (was 32 deg with an r 120 bend, which let inlane balls reach a held
+# flipper at ~620 pt/s; now ~340). Sling corner 352 -> 300, tip recomputed along the new slant.
+SLANT = math.radians(20)            # the guide's slant down to the pivot
 GUIDE_BEND_L = (GUIDE_X, GUIDE_END_L[1] + (GUIDE_END_L[0] - GUIDE_X) * math.tan(SLANT))
 # Adjustable-style outlane post (Monsoon): a rail from the guide post up and out to a second post 10 pt farther out,
 # so balls falling on the guide post's outer side get turned back in rather than down the outlane.
 OUTLANE_POST_L = (GUIDE_X - 3.0, GUIDE_TOP_Y + 12.0)
 # The inlane side of the bend is a curve (r GUIDE_BEND_R), so a ball coming down the inlane at speed follows it onto
 # the slant instead of glancing off a corner and across the flipper (a sharp corner sent 450-800 pt/s balls into the gap).
-GUIDE_BEND_R = 120.0
+GUIDE_BEND_R = 0.0                  # T11 M1 r2: a sharp corner (was r 120)
 def lane_guide_curve():
-    u = unit(GUIDE_BEND_L, GUIDE_END_L)
-    n = (-u[1], u[0])
-    cx = GUIDE_X + GUIDE_BEND_R
-    # centre at distance R from the slant line, on its playfield side
-    cy = GUIDE_END_L[1] + (GUIDE_BEND_R - (cx - GUIDE_END_L[0]) * n[0]) / n[1]
-    a0, a1 = math.pi, math.atan2(-n[1], -n[0]) + 2 * math.pi
-    pts = [(cx + GUIDE_BEND_R * math.cos(a0 + (a1 - a0) * i / 12), cy + GUIDE_BEND_R * math.sin(a0 + (a1 - a0) * i / 12)) for i in range(13)]
-    return pts
+    """The guide's corner only (T11 M1 r2: no bend curve any more; the guide is top, corner, end)."""
+    return [GUIDE_BEND_L]
 # The outlane stays a channel past the bend: a wall carried straight down, stopping >= 1.5 balls above the slope.
 OUTLANE_WALL_BOTTOM = 256.0
 # Below the outlane the outer wall slopes under the flipper to the centre drain chute (Grey Invasion's pattern).
@@ -110,7 +107,8 @@ _t = (SLING_X - _o0[0]) / _u[0]
 SLING_CORNER_L = (SLING_X, _o0[1] + _u[1] * _t)
 SLING_TIP_L = add(SLING_CORNER_L, _u, 64.0)        # short of the swinging flipper
 # The lane guide's bend is a r 120 curve (below), which bulges into the inlane: lift the corner so it keeps 50 clear.
-SLING_CORNER_L = (SLING_X, 352.0)
+SLING_CORNER_L = (SLING_X, 300.0)   # T11 M1 r2: the lowest corner keeping the inlane 50 clear
+SLING_TIP_L = add(SLING_CORNER_L, _u, 64.0)
 SLING_TOP_L = (SLING_X, 445.0)
 
 # ---------------------------------------------------------------- KIT: return wires (every arrival ends in an inlane)

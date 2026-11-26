@@ -337,7 +337,7 @@ enum ChompTableLayout {
     static let buoyFacingDegrees: CGFloat = 205
     static let buoySize = CGSize(width: 26, height: 8)
     /// Two buoy hits this close together light the inner tube.
-    static let buoyDoubleHitWindow: TimeInterval = 2
+    static let buoyDoubleHitWindow: TimeInterval = 4      // M5 v7: 2 → 4 s while the lamp flashes (placeholder)
 
     // MARK: Milestone 2 v1: the left side (tools/chomp_layout.py, checked in tools/chomp_render_m2.py)
     // Traced over the Jaws Pro manual's top-down drawing (p. 40), registered on the flippers: the harpoon lane down the
@@ -682,6 +682,11 @@ enum ChompTableLayout {
     /// M1 scaffolding: lit at the start of every ball (the rules qualify it with the buoy).
     static let kickbackLamp = CGPoint(x: 47, y: 300)
     static let innerTubeArmSeconds: TimeInterval = 0.6
+    /// M5 v7 placeholders (the rulesheet: "the timer shortens with each successful use", no numbers): −0.1 s a save,
+    /// down to 0.3 s; after the first save only a ball within 60 pt below the trigger is caught.
+    static let innerTubeArmStep: TimeInterval = 0.1
+    static let innerTubeArmMin: TimeInterval = 0.3
+    static let innerTubeLateDepth: CGFloat = 60
     static let innerTubeCooldown: TimeInterval = 1.5
     static let kickbackMaxX: CGFloat = 74          // M2 v3: the left outlane is x 20–74
     static let kickbackTriggerY: CGFloat = 240

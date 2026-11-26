@@ -60,6 +60,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var bumper: ChompBumper?
     private var buoy: SKShapeNode?
     private var buoyLastHit: TimeInterval = -10
+    /// M5 v7: inner tube saves this game (each one shortens the ACTION window; the first has a grace).
+    private var innerTubeSaves = 0
     /// The inner tube (the old kickback): lit = qualified; armed for a moment by the action button.
     private var kickbackLit = true
     private var kickbackLamp: SKShapeNode?
@@ -171,6 +173,12 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var lastRealTime: TimeInterval?
     private var gameTime: TimeInterval = 0
     private var nextBallAt: TimeInterval?
+    /// M5 v9: the end-of-ball bonus count, one line at a time in the LED strip (game.bonusText).
+    private var bonusSteps: [String] = []
+    private var bonusStepAt: TimeInterval = 0
+    private var bonusTallyEnd: TimeInterval = 0
+    private static let bonusStepSeconds: TimeInterval = 0.7
+    private static let bonusShots: Set<String> = ["leftLoop", "waveRamp", "centerRamp", "rightRamp", "boat", "reel", "harpoonGate"]
     private var bannerClearAt: TimeInterval?
 
     /// The menu: physics stopped, whole-table camera, touches ignored.
@@ -209,7 +217,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M5 v6d"
+    static let buildTagText = "T7 M5 v9"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -1310,17 +1318,27 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         return true
     }
 
-    /// The inner tube: while lit AND armed by the action button, it fires a ball draining down the left outlane straight
-    /// back up it (the kickback's kicker). M1: lit at the start of every ball; two quick buoy hits relight it.
+    /// The inner tube (the real table's Life Ring): while lit AND armed by the action button, it fires a ball draining
+    /// down the left outlane straight back up it. M5 v7 (Jaws 1.01): lit by the buoy ("light life ring") target — one hit
+    /// sets it flashing, a second while it flashes lights it (no longer lit at the start of each ball); the ACTION
+    /// window shortens with each save in a game; the game's first save has a grace (a ball already deep in the outlane
+    /// is still saved), later ones only catch a ball at the trigger.
+    private var innerTubeArmSeconds: TimeInterval {
+        max(ChompTableLayout.innerTubeArmMin, ChompTableLayout.innerTubeArmSeconds - ChompTableLayout.innerTubeArmStep * Double(innerTubeSaves))
+    }
+
     private func updateKickback() {
         let armed = gameTime <= innerTubeArmedUntil
-        kickbackLamp?.fillColor = !kickbackLit ? Self.lampOffColor
+        let qualifying = !kickbackLit && gameTime - buoyLastHit <= ChompTableLayout.buoyDoubleHitWindow
+        kickbackLamp?.fillColor = !kickbackLit ? (qualifying && Int(gameTime * 4) % 2 == 0 ? Self.lampOnColor : Self.lampOffColor)
             : armed ? (Int(gameTime * 16) % 2 == 0 ? .white : Self.lampOnColor) : Self.lampOnColor
         guard kickbackLit, armed, !nudge.tilted else { return }
+        let lowest = innerTubeSaves == 0 ? 0 : ChompTableLayout.kickbackTriggerY - ChompTableLayout.innerTubeLateDepth
         for ball in balls {
             guard let body = ball.physicsBody else { continue }
             let p = ball.position
-            if p.x < ChompTableLayout.kickbackMaxX, p.y < ChompTableLayout.kickbackTriggerY, p.y > 0, body.velocity.dy < 0 {
+            if p.x < ChompTableLayout.kickbackMaxX, p.y < ChompTableLayout.kickbackTriggerY, p.y > lowest, body.velocity.dy < 0 {
+                innerTubeSaves += 1
                 body.velocity = CGVector(dx: 0, dy: ChompTableLayout.kickbackSpeed)
                 setKickbackLit(false)
                 innerTubeArmedUntil = -1
@@ -1342,7 +1360,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         guard isBuilt, !isAttractMode, !isGamePaused, !game.isGameOver else { return }
         if flipLockAction() { return }                          // M5 v5: flip-lock first, in a multiball
         guard kickbackLit, gameTime >= innerTubeReadyAt else { return }
-        innerTubeArmedUntil = gameTime + ChompTableLayout.innerTubeArmSeconds
+        innerTubeArmedUntil = gameTime + innerTubeArmSeconds                    // M5 v7: shorter after each save
         innerTubeReadyAt = gameTime + ChompTableLayout.innerTubeCooldown
         hitHaptic.impactOccurred(intensity: 0.5)
     }
@@ -1550,7 +1568,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         bannerClearAt = nil
         plunger.position = ChompTableLayout.plungerRestPosition
         rollovers.forEach { $0.isLit = false }
-        setKickbackLit(true)
+        setKickbackLit(false)                      // M5 v7: the buoy lights it (no longer lit at the start)
+        innerTubeSaves = 0
         innerTubeArmedUntil = -1
         innerTubeReadyAt = 0
         buoyLastHit = -10
@@ -1566,6 +1585,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         cameos.newGame()                           // M5 v2
         beaches.newGame()                          // M5 v3
         kevin.newGame()                            // M5 v4
+        bonusSteps = []; bonusTallyEnd = 0         // M5 v9 (game.reset clears the counts and the text)
         #if DEBUG
         // M5 v6c: `-chomp-kmb 2` / `3` (launch argument or `defaults write … chomp-kmb`) starts every game with that KMB lit.
         let kmb = UserDefaults.standard.integer(forKey: "chomp-kmb")
@@ -1584,6 +1604,35 @@ final class ChompTableScene: SKScene, RendererHostedScene {
 
     private static let minorBanners: Set<String> = ["LEFT LOOP", "BOAT", "WAVE RAMP", "CENTER RAMP", "RIGHT RAMP", "FIN",
                                                     "FISH PHONE", "SHARK TOWER", "HARPOON LANE"]
+
+    /// M5 v9: every switch this ball adds to the Ball Bonus (not while tilted; the spinner feeds Feeding Frenzy later).
+    private func countBonus(_ name: String) {
+        guard !nudge.tilted, !balls.isEmpty, name != "spinner" else { return }
+        game.ballBonus += Self.bonusShots.contains(name) ? ChompPoints.bonusShot : ChompPoints.bonusSwitch
+    }
+
+    /// M5 v9: the end-of-ball bonus (Jaws 1.01): (Ball Bonus + Feeding Frenzy) × the bonus X; a tilt loses it.
+    /// Added to the score straight away (not × the playfield multiplier); the count shows line by line.
+    private func awardEndOfBallBonus(_ now: TimeInterval) {
+        let x = game.bonusX + game.ballBonusX
+        let tilted = nudge.tilted
+        let total = tilted ? 0 : (game.ballBonus + game.frenzyBank) * x
+        game.score += total
+        var steps: [String]
+        if tilted {
+            steps = ["TILT · NO BONUS"]
+        } else {
+            steps = ["BALL BONUS " + ChompCameos.millions(game.ballBonus)]
+            if game.frenzyBank > 0 { steps.append("FEEDING FRENZY " + ChompCameos.millions(game.frenzyBank)) }
+            if x > 1 { steps.append("BONUS \(x)X") }
+            steps.append("TOTAL BONUS " + ChompCameos.millions(total))
+        }
+        game.ballBonus = 0
+        game.ballBonusX = 0
+        bonusSteps = steps
+        bonusStepAt = now
+        bonusTallyEnd = now + Double(steps.count) * Self.bonusStepSeconds + 0.4
+    }
 
     private func showBanner(_ text: String, hold: Bool = false) {
         #if DEBUG
@@ -1839,6 +1888,13 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             bannerClearAt = nil
             game.banner = nil
         }
+        // M5 v9: the bonus count, a line every 0.7 s, cleared 0.7 s after the last.
+        if !bonusSteps.isEmpty, now >= bonusStepAt {
+            game.bonusText = bonusSteps.removeFirst()
+            bonusStepAt = now + Self.bonusStepSeconds
+        } else if bonusSteps.isEmpty, game.bonusText != nil, now >= bonusStepAt {
+            game.bonusText = nil
+        }
 
         // Launch = the frame the served ball leaves the plunger area.
         var onPlunger = false
@@ -1877,10 +1933,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                     sfx(.drain)
                     applyCameo(cameos.ballLost())    // M5 v2: a cameo ends with the ball
                     applyBeaches(beaches.ballLost()) // M5 v3: so does a Mayor Meltdown
+                    awardEndOfBallBonus(now)         // M5 v9: before ballDrained, so the high score includes it
                     game.ballDrained()
                     if !game.isGameOver {
-                        nextBallAt = now + 1.0
-                        setKickbackLit(true)         // M1 scaffolding: every ball starts with the inner tube lit
+                        nextBallAt = now + max(1.0, bonusTallyEnd - now)
                         upPostsArmed = false
                     }
                 }
@@ -2143,6 +2199,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                     buoyLastHit = -10
                 } else {
                     buoyLastHit = gameTime
+                    if !kickbackLit { showBanner("INNER TUBE · HIT THE BUOY AGAIN") }   // M5 v7: the lamp flashes
                 }
             }
         case ChompPhysicsCategory.rollover:
@@ -2165,6 +2222,7 @@ extension ChompTableScene {
     fileprivate func labEvent(_ name: String) {
         skillShotSwitch(name)
         cameoEvent(name)                                   // M5 v2
+        countBonus(name)                                   // M5 v9
         #if DEBUG
         if let t = dropProbeT, !catchProbe { print(String(format: "DROPEV %d %.2f ", Int(t / 2), t.truncatingRemainder(dividingBy: 2)) + name) }
         shotLab?.event(name, at: shotLabTime)

@@ -60,6 +60,11 @@
       "asset_id": "bc74636b-b9e2-4db0-8636-757795744347",
       "sha12": "77a50f027f92",
       "label": "qf_roots (palette-locked game asset; sha12 is of the locked PNG)"
+    },
+    {
+      "asset_id": "9004ee48-a34f-47d8-8c73-702262159d44",
+      "sha12": "b74bdb5dcbd6",
+      "label": "forest-floor texture (seamless, tiled at 1 texel per pt by qf_art_playfield.py)"
     }
   ],
   "note": "Picks are palette-locked to qf_render_m1.PAL by build/qf_art scripts; sha12 of game assets is of the locked PNG in Assets.xcassets/QfArt."

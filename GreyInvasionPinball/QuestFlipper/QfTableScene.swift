@@ -245,7 +245,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M2 v2"
+    static let buildTagText = "T9 M2 v4"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -344,16 +344,18 @@ final class QfTableScene: SKScene, RendererHostedScene {
         addChild(face)
         treantFace = face
         updateTreantFace()
-        addAreaLabels()
+        if !Self.artBaked { addAreaLabels() }
     }
 
+    /// T9 M2 v3: the fixed table is one pixel-art painting (tools/qf_art_playfield.py, from qf_layout.py): world
+    /// (0,0)-(640,1360) at 3 px/pt. The walls, island, posts and holes stay as physics only (drawn clear).
+    private static let artBaked = true
+
     private func addFloor() {
-        let path = CGMutablePath()
-        path.addLines(between: QfForestLayout.outerWall)
-        path.closeSubpath()
-        let floor = SKShapeNode(path: path)
-        floor.fillColor = Self.floorColor
-        floor.strokeColor = .clear
+        let floor = SKSpriteNode(imageNamed: "qf_playfield")
+        floor.anchorPoint = .zero
+        floor.position = .zero
+        floor.size = CGSize(width: 640, height: 1360)
         floor.zPosition = -20
         addChild(floor)
     }
@@ -373,8 +375,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
             path.addLines(between: points)
         }
         let node = SKShapeNode(path: path)
-        node.strokeColor = Self.wallColor
-        node.fillColor = fill ?? .clear
+        node.strokeColor = Self.artBaked ? .clear : Self.wallColor
+        node.fillColor = Self.artBaked ? .clear : (fill ?? .clear)
         node.lineWidth = 3
         node.lineCap = .round
         node.lineJoin = .round
@@ -391,8 +393,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private func addPost(at p: CGPoint, radius r: CGFloat) {
         let post = SKShapeNode(circleOfRadius: r)
         post.position = p
-        post.fillColor = SKColor(white: 0.85, alpha: 1)
-        post.strokeColor = Self.wallColor
+        post.fillColor = Self.artBaked ? .clear : SKColor(white: 0.85, alpha: 1)
+        post.strokeColor = Self.artBaked ? .clear : Self.wallColor
         post.lineWidth = 1.5
         post.zPosition = -19
         let body = SKPhysicsBody(circleOfRadius: r)
@@ -575,8 +577,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private func addHole(at p: CGPoint) {
         let hole = SKShapeNode(circleOfRadius: 15)
         hole.position = p
-        hole.fillColor = .black
-        hole.strokeColor = Self.targetColor
+        hole.fillColor = Self.artBaked ? .clear : .black
+        hole.strokeColor = Self.artBaked ? .clear : Self.targetColor
         hole.lineWidth = 2
         hole.zPosition = -18.8
         addChild(hole)

@@ -24,6 +24,10 @@ final class QfBall: SKNode {
     /// Drawn this much bigger than the physics body (Grey Invasion M8 v3: true size looked too small).
     /// T7 M2 v4: drawn at true size now that the ball is real scale (radius 15; was 1.2× a radius-9 ball).
     static let lookScale: CGFloat = 1.0
+    /// T9 M2 v11: 1 while a scoop holds the ball (the hollow log, the Old Well), 0 in the open. The look eases
+    /// towards it: smaller, darker and fading, nudged up into the hole, so it seems to go INTO the scoop.
+    var insideTarget: CGFloat = 0
+    private var inside: CGFloat = 0
     /// Where the ball was last frame (for line-crossing switches).
     var previousPosition: CGPoint
     /// T7 M2 v9: and its velocity then (for the flipper's contact launch).
@@ -121,7 +125,22 @@ final class QfBall: SKNode {
         let lift = Self.lift + drawnHeight * QfTableLayout.oblique
         visual.position = CGPoint(x: -lift * sin(a), y: lift * cos(a))
         visual.setScale(1 + 0.15 * drawnHeight / QfTableLayout.rampTopHeight)
+        inside += (insideTarget - inside) * 0.15
+        if abs(insideTarget - inside) < 0.01 { inside = insideTarget }
+        if inside > 0 {
+            visual.setScale(visual.xScale * (1 - 0.6 * inside))
+            visual.alpha = 1 - 0.9 * inside
+            visual.color = .black
+            visual.colorBlendFactor = 0.6 * inside
+            let d = 6 * inside                                   // up into the hole (world +y)
+            visual.position.x += -d * sin(a)
+            visual.position.y += d * cos(a)
+        } else {
+            visual.alpha = 1
+            visual.colorBlendFactor = 0
+        }
         shadow.zRotation = a
+        shadow.setScale(1 - 0.7 * inside)
         let so = CGVector(dx: shadowOffset.dx, dy: shadowOffset.dy + drawnHeight * QfTableLayout.oblique)
         shadow.position = CGPoint(x: so.dx * cos(a) - so.dy * sin(a),
                                   y: so.dx * sin(a) + so.dy * cos(a))

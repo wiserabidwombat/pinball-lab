@@ -245,7 +245,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M2 v4"
+    static let buildTagText = "T9 M2 v11"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -282,6 +282,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     func refreshCamera() {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
+        updateStacks()
         placeBuildTag()
     }
 
@@ -338,6 +339,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         addDrifter()
         addRoots()
         addWitchParts()
+        addStackedProps()
         let face = SKSpriteNode()
         face.position = CGPoint(x: QfForestLayout.centerX, y: 1056)     // bottom at 1014, just above the trunk plate
         face.zPosition = -16.5
@@ -643,7 +645,13 @@ final class QfTableScene: SKScene, RendererHostedScene {
             body.contactTestBitMask = 0
             node.physicsBody = body
             Self.hideShape(node)
-            addSprite("qf_wisp", to: node, height: 34)
+            let start = Int.random(in: 0..<8)
+            let frames = Array(Self.wispFrames[start...] + Self.wispFrames[..<start])
+            let flame = addSprite("qf_wisp", to: node, height: 40)
+            flame.texture = frames[0]
+            flame.size = CGSize(width: 40, height: 40)         // review: the frames are square (46x46)
+            flame.run(.repeatForever(.animate(with: frames, timePerFrame: 0.11)))
+            addFloat(to: node, sprite: flame, lift: 10, shadowWidth: 22, shadowAlpha: 0.3)     // M2 v8
             let wisp = Wisp(node: node, center: w.0, amplitude: w.1, period: w.2)
             node.position = wisp.position(at: gameTime)
             addChild(node)
@@ -676,6 +684,70 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     private var treantFace: SKSpriteNode!
+    // T9 M2 v5: sprite refs for the hit and defeat effects
+    private var ghostSprite: SKSpriteNode?
+    private var drifterSprite: SKSpriteNode?
+    private var witchSprite: SKSpriteNode?
+    private var graveSprite: SKSpriteNode?
+    /// T9 M2 v7: sprite-stacked props (QfStack), updated after the camera each frame.
+    private var stacks: [QfStack] = []
+    private var graveStack: QfStack?
+
+    /// A floating monster: its sprite drawn `lift` pt up, bobbing, over a shadow on the floor (the hit area).
+    private func addFloat(to node: SKNode, sprite: SKSpriteNode, lift: CGFloat = 12, shadowWidth: CGFloat = 30,
+                          shadowAlpha: CGFloat = 0.5) {
+        let shadow = SKShapeNode(ellipseOf: CGSize(width: shadowWidth, height: shadowWidth * 0.35))
+        shadow.fillColor = SKColor(white: 0, alpha: shadowAlpha)
+        shadow.strokeColor = .clear
+        shadow.position = .zero                                 // review: on the hit area
+        shadow.zPosition = -0.05
+        node.addChild(shadow)
+        sprite.position.y += lift
+        let bob = SKAction.moveBy(x: 0, y: 4, duration: 1.1)
+        bob.timingMode = .easeInEaseOut
+        sprite.run(.repeatForever(.sequence([bob, bob.reversed()])), withKey: "bob")
+        let shrink = SKAction.scale(to: 0.85, duration: 1.1)
+        shrink.timingMode = .easeInEaseOut
+        let grow = SKAction.scale(to: 1, duration: 1.1)
+        grow.timingMode = .easeInEaseOut
+        shadow.run(.repeatForever(.sequence([shrink, grow])))
+    }
+
+    /// A quick white hit flash.
+    private func flash(_ sprite: SKSpriteNode?) {
+        guard let sprite else { return }
+        sprite.run(.sequence([.colorize(with: .white, colorBlendFactor: 0.85, duration: 0.03),
+                              .colorize(withColorBlendFactor: 0, duration: 0.14)]), withKey: "flash")
+    }
+
+    /// A short side-to-side shake that ends where it started.
+    private func shake(_ node: SKNode?, by d: CGFloat = 3) {
+        guard let node, node.action(forKey: "shake") == nil else { return }
+        node.run(.sequence([.moveBy(x: d, y: 0, duration: 0.03), .moveBy(x: -2 * d, y: 0, duration: 0.05),
+                            .moveBy(x: d, y: 0, duration: 0.03)]), withKey: "shake")
+    }
+
+    /// The ghosts fade in steps (pixel-art style), not smoothly.
+    private static func stepFade(_ node: SKNode, to target: CGFloat, duration: TimeInterval, steps: Int = 4) -> SKAction {
+        let from = node.alpha
+        var seq: [SKAction] = []
+        for k in 1...steps {
+            seq.append(.wait(forDuration: duration / Double(steps)))
+            seq.append(.fadeAlpha(to: from + (target - from) * CGFloat(k) / CGFloat(steps), duration: 0))
+        }
+        return .sequence(seq)
+    }
+
+    /// The wisp's 8-frame flicker (SpriteCook animation e78d6d1c, palette-locked), starting on a random frame.
+    private static let wispFrames: [SKTexture] = {
+        let sheet = SKTexture(imageNamed: "qf_wisp_sheet")
+        sheet.filteringMode = .nearest
+        return (0..<8).map { i in
+            let t = SKTexture(rect: CGRect(x: CGFloat(i) / 8, y: 0, width: 1.0 / 8, height: 1), in: sheet)
+            t.filteringMode = .nearest
+            return t
+        }
+    }()
     private var treantFaceName = ""
 
     /// The Treant's face over its trunk: calm, hurt (once damaged), felled (from its fall until the next one's bark rises).
@@ -713,7 +785,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
             lamp.fillColor = .clear
             lamp.strokeColor = Self.lampColor.withAlphaComponent(0.35)
             lamp.glowWidth = 6
-            addSprite("qf_lantern", to: lamp, height: 26)
+            // M2 v8: a stacked lantern (SpriteCook model sheet b2238221, carved: 38 slices of 20x20)
+            let ls = QfStack(sheet: "qf_stack_lantern", count: 38, voxelsX: 20, voxelsY: 20, voxel: 1, at: .zero)
+            lamp.addChild(ls.node)
+            stacks.append(ls)
             lamp.zPosition = -16
             lamp.alpha = 0
             addChild(lamp)
@@ -726,7 +801,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
         marker.glowWidth = 6
         marker.zPosition = -15.5
         marker.alpha = 0
-        addSprite("qf_witch", to: marker, height: 74, at: CGPoint(x: 0, y: 22), z: 0.2)      // M2 v2: bigger (Aaron)
+        let wsp = addSprite("qf_witch", to: marker, height: 74, at: CGPoint(x: 0, y: 22), z: 0.2)  // M2 v2: bigger
+        witchSprite = wsp
+        addFloat(to: marker, sprite: wsp, lift: 6, shadowWidth: 40, shadowAlpha: 0.45)               // M2 v8
         addChild(marker)
         witchMarker = marker
         // The gravestone: a pop-up in the centre (drawn only while it's down).
@@ -741,7 +818,12 @@ final class QfTableScene: SKScene, RendererHostedScene {
         stone.zPosition = -17
         stone.alpha = 0
         Self.hideShape(stone)
-        addSprite("qf_gravestone", to: stone, height: 44, at: CGPoint(x: 300, y: 567.5))
+        // carved from SpriteCook's orthographic model sheet 4c36ef76 (tools/qf_stack_carve.py): 56 slices of 32x40, 1 pt voxels
+        let gs = QfStack(sheet: "qf_stack_gravestone", count: 56, voxelsX: 32, voxelsY: 40, voxel: 1,
+                         at: CGPoint(x: 300, y: 568))
+        stone.addChild(gs.node)                                  // M2 v7: a sprite-stacked grave on its physics footprint
+        stacks.append(gs)
+        graveStack = gs
         addChild(stone)
         gravestone = stone
     }
@@ -812,6 +894,31 @@ final class QfTableScene: SKScene, RendererHostedScene {
         if graveUp { sinkGravestone() }
     }
 
+    /// Her banishing (SpriteCook animation f1ce6874, palette-locked): 12 frames of 112 px. Her eyes flare, her lantern
+    /// gutters out and her robes unravel into smoke and embers. Played once where she stood, then removed.
+    private static let witchBanishFrames: [SKTexture] = {
+        let sheet = SKTexture(imageNamed: "qf_witch_banish")
+        sheet.filteringMode = .nearest
+        return (0..<12).map { i in
+            let t = SKTexture(rect: CGRect(x: CGFloat(i) / 12, y: 0, width: 1.0 / 12, height: 1), in: sheet)
+            t.filteringMode = .nearest
+            return t
+        }
+    }()
+
+    private func witchDissolve() {
+        guard let w = witchSprite else { return }
+        let k = witchMarker.xScale                              // she pulses with her ring
+        let side = 88 * k                                       // the 112 px frame round her 74 pt figure
+        let fx = SKSpriteNode(texture: Self.witchBanishFrames[0], size: CGSize(width: side, height: side))
+        fx.position = CGPoint(x: witchMarker.position.x + w.position.x * k, y: witchMarker.position.y + w.position.y * k)
+        fx.zPosition = 14
+        addChild(fx)
+        witchMarker.removeAllActions()
+        witchMarker.alpha = 0                                   // the animation replaces her at once
+        fx.run(.sequence([.animate(with: Self.witchBanishFrames, timePerFrame: 0.09), .removeFromParent()]))
+    }
+
     private func placeWitchMarker() {
         witchMarker.position = Self.lanternSpots[witch.lantern]
         Effects.burst(in: self, at: witchMarker.position, color: Self.witchColor, count: 10, speed: 120,
@@ -836,6 +943,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
             return
         }
         witch.hp = max(0, witch.hp - damage)
+        flash(witchSprite)
+        shake(witchSprite, by: 3)
         game.add(QfPoints.target * 2)
         hitHaptic.impactOccurred(intensity: 1)
         Effects.burst(in: self, at: witchMarker.position, color: Self.witchColor, count: 16, speed: 220,
@@ -871,6 +980,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         }
         guard witch.active else { return }
         if witch.banishPending {
+            witchDissolve()
             endWitch()
             showBanner("LANTERN WITCH BANISHED · +\(QfGold.witch) GOLD")
             game.add(QfPoints.treantFelled * 2)
@@ -896,7 +1006,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
         node.zPosition = 12                                   // over the floor ball: it passes through
         node.alpha = 0
         Self.hideShape(node)
-        addSprite("qf_ghost", to: node, height: 54).alpha = 0.65
+        let ds = addSprite("qf_ghost", to: node, height: 54)
+        ds.alpha = 0.65
+        drifterSprite = ds
+        addFloat(to: node, sprite: ds, shadowAlpha: 0.3)
         addChild(node)
         drifter = node
         drifterStart = gameTime + QfTableLayout.drifterPause / 2
@@ -933,7 +1046,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
         node.alpha = 0
         node.position = QfForestLayout.ghostHaunts[1]
         Self.hideShape(node)
-        addSprite("qf_ghost", to: node, height: 54)
+        let gsp = addSprite("qf_ghost", to: node, height: 54)
+        ghostSprite = gsp
+        addFloat(to: node, sprite: gsp)
         let body = SKPhysicsBody(circleOfRadius: r)
         body.isDynamic = false
         body.restitution = 0.4
@@ -1434,6 +1549,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             guard hypot(q.x - c.x, q.y - c.y) < scoops[i].radius || inWell else { continue }
             scoops[i].held = ball
             scoops[i].releaseAt = gameTime + QfTableLayout.scoopHold
+            ball.insideTarget = 1                                // M2 v11: it goes into the hollow / the well
             ball.setLayer(.ride)
             ball.position = c
             ball.physicsBody?.velocity = .zero
@@ -1460,6 +1576,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             ball.physicsBody?.velocity = .zero
             guard now >= scoops[i].releaseAt else { continue }
             scoops[i].held = nil
+            ball.insideTarget = 0                                // and comes back out
             scoops[i].ignored = ball
             scoops[i].ignoreUntil = now + QfTableLayout.scoopRecapture
             sfx(.scoopOut)
@@ -1607,7 +1724,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
             Effects.burst(in: self, at: node.position, color: Self.ghostColor, count: 16, speed: 180,
                           lifetime: 0.5, size: 0.3)
             node.removeAllActions()
-            node.run(.fadeOut(withDuration: 0.25))
+            flash(ghostSprite)
+            node.run(.sequence([.wait(forDuration: 0.1), Self.stepFade(node, to: 0, duration: 0.3, steps: 3)]))
             game.run.gold += QfGold.ghost
             showBanner("GHOST BANISHED · +\(QfGold.ghost) GOLD")
             monsterDefeated()
@@ -1628,26 +1746,26 @@ final class QfTableScene: SKScene, RendererHostedScene {
             ghost.banished = false
             node.position = p
             node.removeAllActions()
-            node.run(.fadeAlpha(to: 0.4, duration: QfTableLayout.ghostFade))
+            node.run(Self.stepFade(node, to: 0.4, duration: QfTableLayout.ghostFade))
             ghost.phase = .fadingIn
             ghost.phaseEnds = now + QfTableLayout.ghostFade
             if light { setGhostSolid(true) }
         case .fadingIn:
             if ballNear(node.position, clear: QfForestLayout.ghostRadius + QfTableLayout.ballRadius + 1) { return }
             node.removeAllActions()
-            node.run(.fadeAlpha(to: 1, duration: 0.12))
+            node.run(Self.stepFade(node, to: 1, duration: 0.15, steps: 3))
             setGhostSolid(true)
             ghost.phase = .visible
             ghost.phaseEnds = now + QfTableLayout.ghostVisible
         case .visible:
             node.removeAllActions()
-            node.run(.fadeAlpha(to: 0.4, duration: 0.12))
+            node.run(Self.stepFade(node, to: 0.4, duration: 0.15, steps: 3))
             setGhostSolid(light)
             ghost.phase = .fadingOut
             ghost.phaseEnds = now + QfTableLayout.ghostFade
         case .fadingOut:
             node.removeAllActions()
-            node.run(.fadeOut(withDuration: 0.2))
+            node.run(Self.stepFade(node, to: 0, duration: 0.3, steps: 3))
             setGhostSolid(false)
             ghost.phase = .gone
             ghost.phaseEnds = now + QfTableLayout.ghostGone
@@ -1722,6 +1840,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 monsterDefeated()
             } else {
                 showBanner("DRIFTING GHOST −\(damage) · \(drifterHP) HP LEFT")
+                flash(drifterSprite)
             }
             return
         }
@@ -2057,7 +2176,37 @@ final class QfTableScene: SKScene, RendererHostedScene {
     override func didFinishUpdate() {
         guard isBuilt, !isPaused else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: lastStep)
+        updateStacks()
         placeBuildTag()
+    }
+
+    /// M2 v8: the stacked props carved from SpriteCook model sheets (tools/qf_stack_carve.py): the Old Well's stone ring
+    /// (ad93fe30), the hollow log over its scoop (c874086e) and rune-stone posts (031583d9) on the table's small posts.
+    private func addStackedProps() {
+        let F = QfForestLayout.self
+        func add(_ sheet: String, _ count: Int, _ nx: Int, _ ny: Int, at p: CGPoint, z: CGFloat) {
+            let st = QfStack(sheet: sheet, count: count, voxelsX: nx, voxelsY: ny, voxel: 1, at: p)
+            st.node.zPosition = z
+            addChild(st.node)
+            stacks.append(st)
+        }
+        add("qf_stack_well", 12, 44, 44, at: F.wellHole, z: -17.5)
+        // the hollow log doesn't stack well (Aaron: "I can't tell what this is"): a single SpriteCook drawing
+        // (bdef681a) at the table's angle, its dark open end over the scoop
+        let log = SKNode()
+        log.position = CGPoint(x: F.logHole.x + 6.9, y: F.logHole.y + 6.4)
+        log.zPosition = -17.5
+        addSprite("qf_log", to: log, height: 60)          // v10: brightened, with a moonlit rim (Aaron: too dark)
+        addChild(log)
+        for p in [F.laneGuidePostLeft, F.laneGuidePostRight, F.orbitPost] + F.wellPosts + F.laneMouthPosts {
+            add("qf_stack_post", 11, 14, 14, at: p, z: -17.4)
+        }
+    }
+
+    /// M2 v7: lean every stacked prop with the camera (the top tilts away from the middle of the view).
+    private func updateStacks() {
+        let half = size.height * cameraRig.node.yScale / 2
+        for st in stacks { st.update(camera: cameraRig.node.position, viewHalfHeight: half) }
     }
 
     // MARK: - Contacts
@@ -2101,6 +2250,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 guard ghost.solid, !ghost.banished, gameTime - ghost.lastHit > 0.15 else { break }
                 ghost.lastHit = gameTime
                 ghost.hp = max(0, ghost.hp - damage)
+                flash(ghostSprite)
+                shake(ghostSprite, by: 2)
                 sfx(.standup)
                 hitHaptic.impactOccurred(intensity: 0.8)
                 game.add(QfPoints.target)
@@ -2115,6 +2266,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 guard graveUp, !graveSinkPending, gameTime - graveLastHit > 0.15 else { break }
                 graveLastHit = gameTime
                 graveHits += 1
+                graveStack?.slices.forEach { flash($0) }
+                shake(graveStack?.node, by: 2)
                 sfx(.standup)
                 hitHaptic.impactOccurred(intensity: 0.7)
                 game.add(QfPoints.target)
@@ -2166,6 +2319,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
                     witchStartAt = gameTime + QfTableLayout.witchStartDelay
                 } else {
                     showBanner("TRUNK −\(damage) · \(treantHP) HP LEFT")
+                    flash(treantFace)
+                    shake(treantFace, by: 3)
+                    Effects.burst(in: self, at: CGPoint(x: QfForestLayout.centerX, y: 1030), color: Self.barkColor,
+                                  count: 10, speed: 160, lifetime: 0.4, size: 0.25)
                 }
                 updateStatus()
             } else {

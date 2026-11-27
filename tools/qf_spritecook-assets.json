@@ -65,6 +65,46 @@
       "asset_id": "9004ee48-a34f-47d8-8c73-702262159d44",
       "sha12": "b74bdb5dcbd6",
       "label": "forest-floor texture (seamless, tiled at 1 texel per pt by qf_art_playfield.py)"
+    },
+    {
+      "asset_id": "e78d6d1c-5d51-4fa1-906d-989b1f2c89a8",
+      "sha12": "0ccbf945c257",
+      "label": "qf_wisp_sheet: wisp flicker, 8 frames 46px (animation of the wisp; sha12 of the locked sheet)"
+    },
+    {
+      "asset_id": "f1ce6874-8962-4012-967a-dae9f9628b36",
+      "sha12": "0c4439268049",
+      "label": "qf_witch_banish: the Witch's banishing, 12 frames 112px (animation of witch 2; sha12 of the locked sheet)"
+    },
+    {
+      "asset_id": "4c36ef76-f3a3-4de0-9a3b-7bd9379b15c4",
+      "sha12": "d56a9944185e",
+      "label": "grave model sheet (orthographic 2x2) -> qf_stack_gravestone via qf_stack_carve.py"
+    },
+    {
+      "asset_id": "b2238221-5ea4-49ff-a829-069f7658ae51",
+      "sha12": "6c43afc5f798",
+      "label": "lantern model sheet -> qf_stack_lantern"
+    },
+    {
+      "asset_id": "ad93fe30-9b94-4a9b-9782-18a7d2b0ab02",
+      "sha12": "9cdcef767989",
+      "label": "well model sheet -> qf_stack_well"
+    },
+    {
+      "asset_id": "c874086e-7a7d-4857-85c8-4538d7dfe818",
+      "sha12": "2a4e8cf19782",
+      "label": "log model sheet (stack unused: logs don't stack well)"
+    },
+    {
+      "asset_id": "031583d9-98be-4005-bfef-2cbbb65c7a44",
+      "sha12": "905c4485fb1c",
+      "label": "rune post model sheet -> qf_stack_post"
+    },
+    {
+      "asset_id": "bdef681a-d28d-4196-936d-5d0a87510a28",
+      "sha12": "ea3d80c40bb2",
+      "label": "hollow log drawing -> qf_log (brightened + moonlit rim)"
     }
   ],
   "note": "Picks are palette-locked to qf_render_m1.PAL by build/qf_art scripts; sha12 of game assets is of the locked PNG in Assets.xcassets/QfArt."

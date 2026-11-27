@@ -132,33 +132,33 @@ enum QfForestLayout {
     static let wellHole = CGPoint(x: 52.00, y: 632.00)
     static let wellCaptureRadius: CGFloat = 18.00
     static let wellLowerRim: [CGPoint] = [
-        CGPoint(x: 20.00, y: 572.00), CGPoint(x: 44.27, y: 591.70),
+        CGPoint(x: 20.00, y: 572.00), CGPoint(x: 41.04, y: 589.34),
     ]
     static let wellRoof: [CGPoint] = [
-        CGPoint(x: 92.74, y: 627.06), CGPoint(x: 20.00, y: 722.00),
+        CGPoint(x: 95.97, y: 629.42), CGPoint(x: 20.00, y: 722.00),
     ]
-    static let wellPosts: [CGPoint] = [CGPoint(x: 44.27, y: 591.70), CGPoint(x: 92.74, y: 627.06)]
+    static let wellPosts: [CGPoint] = [CGPoint(x: 41.04, y: 589.34), CGPoint(x: 95.97, y: 629.42)]
     static let wellPostRadius: CGFloat = 5.00
     /// The well's catch zone (the cavity behind the mouth): wall, lower rim, mouth, upper rim, roof.
     static let wellCavity: [CGPoint] = [
-        CGPoint(x: 20.00, y: 572.00), CGPoint(x: 44.27, y: 591.70), CGPoint(x: 92.74, y: 627.06),
+        CGPoint(x: 20.00, y: 572.00), CGPoint(x: 41.04, y: 589.34), CGPoint(x: 95.97, y: 629.42),
         CGPoint(x: 20.00, y: 722.00), CGPoint(x: 20.00, y: 572.00),
     ]
 
     // MARK: the forest island (one solid block with the lanes cut in; closed outline)
     static let island: [CGPoint] = [
-        CGPoint(x: 72.00, y: 790.00), CGPoint(x: 160.00, y: 805.00), CGPoint(x: 160.00, y: 935.00),
+        CGPoint(x: 72.00, y: 940.00), CGPoint(x: 160.00, y: 805.00), CGPoint(x: 160.00, y: 935.00),
         CGPoint(x: 191.00, y: 949.00), CGPoint(x: 222.00, y: 935.00), CGPoint(x: 222.00, y: 805.00),
         CGPoint(x: 250.00, y: 880.00), CGPoint(x: 250.00, y: 1030.00), CGPoint(x: 350.00, y: 1030.00),
         CGPoint(x: 350.00, y: 880.00), CGPoint(x: 399.00, y: 805.00), CGPoint(x: 409.00, y: 885.00),
         CGPoint(x: 432.00, y: 901.00), CGPoint(x: 455.00, y: 885.00), CGPoint(x: 465.00, y: 805.00),
         CGPoint(x: 482.00, y: 835.00), CGPoint(x: 482.00, y: 1106.00), CGPoint(x: 408.19, y: 1117.26),
         CGPoint(x: 406.00, y: 1114.61), CGPoint(x: 350.57, y: 1082.61), CGPoint(x: 72.00, y: 1040.00),
-        CGPoint(x: 72.00, y: 790.00),
+        CGPoint(x: 72.00, y: 940.00),
     ]
     static let roofLeft = CGPoint(x: 72.00, y: 1040.00)
     static let roofRight = CGPoint(x: 482.00, y: 1106.00)
-    static let orbitPost = CGPoint(x: 72.00, y: 790.00)
+    static let orbitPost = CGPoint(x: 72.00, y: 940.00)
     static let laneMouthPosts: [CGPoint] = [
         CGPoint(x: 160.00, y: 805.00), CGPoint(x: 222.00, y: 805.00),
         CGPoint(x: 250.00, y: 880.00), CGPoint(x: 350.00, y: 880.00),
@@ -168,7 +168,7 @@ enum QfForestLayout {
 
     // MARK: the Graveyard orbit
     /// The spinner across the orbit lane (digging).
-    static let spinnerLine: (CGPoint, CGPoint) = (CGPoint(x: 20.00, y: 900.00), CGPoint(x: 72.00, y: 900.00))
+    static let spinnerLine: (CGPoint, CGPoint) = (CGPoint(x: 20.00, y: 1000.00), CGPoint(x: 72.00, y: 1000.00))
     /// Crossed going right along the top of the arch: an orbit made.
     static let orbitMadeLine: (CGPoint, CGPoint) = (CGPoint(x: 472.50, y: 1180.00), CGPoint(x: 472.50, y: 1335.00))
 

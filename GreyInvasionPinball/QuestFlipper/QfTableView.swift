@@ -71,6 +71,16 @@ struct QfTableView: View {
                     scene.debugStartShotLab()
                 }
             }
+            // T9 M3 v4: `-playlab quest` (tools/playlab_run.sh quest) starts the Play Lab; the app quits when done.
+            if PlayLab.launchTable == "quest" && !ProcessInfo.processInfo.arguments.contains("-questRampProbe") {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartPlayLab()
+                }
+            }
             if ProcessInfo.processInfo.arguments.contains("-questRampProbe") {
                 Task { @MainActor in
                     while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }

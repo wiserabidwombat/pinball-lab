@@ -113,6 +113,15 @@ final class QfTableScene: SKScene, RendererHostedScene {
     /// T9 M3 v1: the Shot Lab robot (shared ShotLab) and its own clock.
     fileprivate var shotLab: ShotLab?
     fileprivate var shotLabTime: TimeInterval = 0
+    /// T9 M3 v4: the Play Lab (shared PlayLab): robot players at four skills play whole games.
+    fileprivate var playLab: PlayLab?
+    fileprivate var playLabNextAt: TimeInterval?
+    fileprivate var playLabStarting = false
+    fileprivate var robotLeft = false
+    fileprivate var robotRight = false
+    fileprivate var watchSpots: [ObjectIdentifier: (CGPoint, TimeInterval)] = [:]
+    fileprivate var labDrains = 0
+    fileprivate var robotCradles: [CGPoint] = []          // worked out once (the watchdog asks every frame)
     #endif
     private var rides: [Ride] = []
     private var slingshots: [QfSlingshot] = []
@@ -225,6 +234,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 shotLab = nil
                 game.isRobot = false
             }
+            if isAttractMode { stopPlayLab(saving: true) }      // and the Play Lab (saving the games so far)
             #endif
             if isAttractMode { releaseAllControls() }
             refreshCamera()
@@ -256,7 +266,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M3 v2"
+    static let buildTagText = "T9 M3 v4"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -1260,6 +1270,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
         shotLab = nil                                          // a new game stops the Shot Lab
+        if !playLabStarting { stopPlayLab(saving: true) }      // and the Play Lab, unless it's starting its next game
+        labDrains = 0
         #endif
         fpsLow = 0
         isAttractMode = false
@@ -1295,6 +1307,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private func showBanner(_ text: String) {
         game.banner = text
         bannerClearAt = gameTime + QfTableLayout.bannerSeconds
+        #if DEBUG
+        labObjective(forBanner: text)
+        #endif
     }
 
     private func updateStatus() {
@@ -1309,6 +1324,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     private func sfx(_ s: MonSound) {
+        #if DEBUG
+        if playLab != nil { return }                           // the robot plays silently
+        #endif
         sound.play(s, volume: Float(settings.soundVolume))
     }
 
@@ -1376,6 +1394,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
         #endif
         var left = activeTouches.values.contains(.left) || padLeft
         var right = activeTouches.values.contains(.right) || padRight
+        #if DEBUG
+        left = left || robotLeft
+        right = right || robotRight
+        #endif
         if nudge.tilted { left = false; right = false }      // tilted: dead flippers until the next ball
         if left && !leftFlipper.isPressed { sfx(.flipper) }
         if right && !rightFlipper.isPressed { sfx(.flipper) }
@@ -1467,7 +1489,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
     // MARK: - Game loop
 
     override func update(_ realTime: TimeInterval) {
-        let step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        var step = lastRealTime.map { min(max(realTime - $0, 1.0 / 240), 1.0 / 30) } ?? 1.0 / 120
+        #if DEBUG
+        if let lab = playLab { step *= Double(lab.physicsSpeed) }   // the Play Lab's pass (120 Hz steps)
+        #endif
         lastRealTime = realTime
         gameTime += step
         let now = gameTime
@@ -1483,6 +1508,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
         updateRampProbe(now)
         #endif
         updateGamepad()
+        #if DEBUG
+        updatePlayLab(now)
+        #endif
         leftFlipper.step(dt: dt)
         rightFlipper.step(dt: dt)
         upperFlipper.step(dt: dt)
@@ -1522,6 +1550,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
             cameraRig.shake(strength: 3, duration: 0.25)
             sfx(.drain)
             if balls.isEmpty, nextBallAt == nil, !game.isGameOver {
+                #if DEBUG
+                labDrains += 1
+                #endif
                 let lost = game.ballDrained()
                 showBanner(game.isGameOver ? "THE FOREST TAKES YOU" : "−\(lost) HP · \(game.hp) LEFT")
                 if !game.isGameOver { nextBallAt = now + 0.8 }
@@ -1532,6 +1563,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
             nextBallAt = nil
             placeBallOnPlunger()
         }
+        #if DEBUG
+        checkPlayLabGame(now)
+        #endif
     }
 
     /// A floor ball within reach of a flipper swinging up this frame belongs to the flipper model for the physics step.
@@ -1988,6 +2022,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             startRide(ball, path: [ball.position, QfForestLayout.forestGate], speed: QfTableLayout.gateRideSpeed,
                       release: .zero, hidden: false, exits: true)
             showBanner("THE FOREST GATE")
+            labEvent("oldRoad")                                // the exit shot counts as an Old Road shot (labs)
             sfx(.scoopIn)
             hitHaptic.impactOccurred()
             return
@@ -2004,6 +2039,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
         defeats += 1
         if !exitLit, defeats >= QfTableLayout.exitAfterDefeats {
             setExitLit(true)
+            #if DEBUG
+            playLab?.objective("exitLit", now: gameTime)        // now, not with the delayed banner
+            #endif
             // after the defeat's own banner (review: TREANT FELLED was overwritten at once)
             run(.sequence([.wait(forDuration: 1.2), .run { [weak self] in self?.showBanner("THE FOREST GATE OPENS") }]),
                 withKey: "gateBanner")
@@ -2030,6 +2068,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
     /// The ball reached the Forest Gate: it leaves the table and the visit ends with the HP the player still has.
     private func leaveForest(_ ball: QfBall) {
         probeLog("GATE", ball.position)
+        #if DEBUG
+        playLab?.objective("escaped", now: gameTime)
+        #endif
         removeBall(ball)
         nextBallAt = nil
         game.leaveForest()
@@ -2376,6 +2417,8 @@ extension QfTableScene {
     func labEvent(_ name: String) {
         #if DEBUG
         shotLab?.event(name, at: shotLabTime)
+        playLab?.shot(name, now: gameTime)
+        if Self.playLabShotObjectives.contains(name) { playLab?.objective(name, now: gameTime) }
         #endif
     }
 }
@@ -2453,6 +2496,7 @@ extension QfTableScene: ShotLabHost {
     }
 
     func debugStartShotLab() {
+        stopPlayLab(saving: true)                              // a Shot Lab started mid Play Lab ends that run first
         isAttractMode = false
         game.isRobot = true
         shotLabResetTable()
@@ -2494,6 +2538,237 @@ extension QfTableScene: ShotLabHost {
             game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
             ShotLab.quitIfLaunchedForLab()          // launched by tools/shotlab_run.sh quest → quit
         }
+    }
+}
+// MARK: - T9 M3 v4: the Play Lab host (Neon's and CHOMP!'s pattern). Robot players at four skills play whole visits to
+// the Haunted Forest: they plunge, catch, aim at what the table wants (the exit, the Witch's lantern, the bark or the
+// trunk) and the report shows drains, stuck balls, which shots get made and how far each skill gets. Run it with
+// tools/playlab_run.sh quest.
+extension QfTableScene: PlayLabHost {
+    var playLabTableName: String { "Quest & Flipper" }
+    var playLabBallRadius: CGFloat { QfTableLayout.ballRadius }
+    var playLabVariantCount: Int { 1 }
+
+    /// Shot events that count as objectives the first time each game (labEvent reports them).
+    static let playLabShotObjectives: Set<String> = ["well", "log", "orbit", "oldRoad", "eastLantern"]
+
+    var playLabObjectives: [PlayObjective] {
+        [PlayObjective(name: "wisp", text: "Burst a wisp in the glade"),
+         PlayObjective(name: "log", text: "Search the Hollow Log"),
+         PlayObjective(name: "orbit", text: "Dig the Graveyard (make the orbit)"),
+         PlayObjective(name: "well", text: "Search the Old Well"),
+         PlayObjective(name: "eastLantern", text: "Hit the East lantern"),
+         PlayObjective(name: "oldRoad", text: "Make the Old Road ramp"),
+         PlayObjective(name: "ghost", text: "Banish a ghost at its haunt"),
+         PlayObjective(name: "drifter", text: "Banish the drifting ghost"),
+         PlayObjective(name: "barkBroken", text: "Break the Treant's bark"),
+         PlayObjective(name: "rootsGrab", text: "The roots grab the ball"),
+         PlayObjective(name: "treantFelled", text: "Fell the Treant"),
+         PlayObjective(name: "exitLit", text: "Light the exit (3 monsters)"),
+         PlayObjective(name: "witchRises", text: "The Lantern Witch rises"),
+         PlayObjective(name: "gravestoneSunk", text: "Sink the gravestone"),
+         PlayObjective(name: "witchBanished", text: "Banish the Lantern Witch"),
+         PlayObjective(name: "escaped", text: "Leave the forest by the Old Road"),
+         PlayObjective(name: "tilt", text: "Tilt")]
+    }
+
+    /// The Shot Lab's cradles and the middle of each shot's 120 Hz window (T9 M3 v2 sweep, 15-52-28Z, for the left flipper;
+    /// M3 v3, 17-29-04Z, for the right). "trunk" uses the bark's timing: it's the same lane, once the bark is down.
+    /// Bands of 1–3 trials aren't windows, so they're left out.
+    var playLabFlippers: [PlayRobotFlipper] {
+        let specs = shotLabFlippers
+        let rest = QfTableLayout.flipperRestAngle
+        return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: QfTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
+                                 shots: Self.robotLeftShots, feedCatchSpeed: 300, tipLead: 0.05),
+                PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: QfTableLayout.flipperLength, restAngle: rest,
+                                 pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
+                                 shots: Self.robotRightShots, feedCatchSpeed: 300, tipLead: 0.05)]
+    }
+    static let robotLeftShots: [(name: String, delay: Double)] =
+        [("log", 0.612), ("bark", 0.746), ("trunk", 0.746), ("oldRoad", 0.817), ("eastLantern", 0.878)]
+    static let robotRightShots: [(name: String, delay: Double)] =
+        [("oldRoad", 0.526), ("bark", 0.748), ("trunk", 0.748), ("log", 0.803), ("orbit", 0.847), ("well", 0.885)]
+
+    func playLabStartGame(variant: Int) -> String {
+        game.isRobot = true
+        watchSpots.removeAll()
+        if robotCradles.isEmpty { robotCradles = shotLabFlippers.map(\.cradle) }
+        playLabStarting = true
+        newGame()
+        playLabStarting = false
+        physicsWorld.speed = playLab?.physicsSpeed ?? 1
+        return ""
+    }
+
+    func playLabEndGame() -> [String: Int] {
+        if !game.isGameOver {
+            removeAllBalls()
+            nextBallAt = nil
+        }
+        return ["drains": labDrains, "defeats": defeats, "gold": game.run.gold, "hp": game.hp,
+                "escaped": game.leftForest ? 1 : 0, "treantHP": treantHP, "witchHP": witch.active ? witch.hp : -1]
+    }
+
+    func playLabStop() {
+        game.isRobot = false
+    }
+
+    /// Starts the Play Lab (robot players at four skills, 120 Hz, or as the launch arguments say). The menu or a new
+    /// game stops it, saving the games played so far.
+    func debugStartPlayLab() {
+        shotLab = nil
+        stopPlayLab(saving: true)
+        isAttractMode = false
+        let lab = PlayLab(host: self)
+        playLab = lab
+        lab.beginGame(now: gameTime)
+    }
+
+    /// Everything the robot needs to know this frame, and its buttons and plunger applied.
+    fileprivate func updatePlayLab(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if game.isGameOver || playLabNextAt != nil {
+            if robotLeft || robotRight { robotLeft = false; robotRight = false; updateFlippers() }
+            return
+        }
+        let view = PlayRobotView(now: now, balls: balls.map { b in
+            PlayRobotView.Ball(position: b.position, velocity: b.physicsBody?.velocity ?? .zero,
+                               isUpper: b.layer == .rampUp || b.layer == .rampDown, isHeld: b.layer == .ride,
+                               onPlunger: isOnPlunger(b), id: ObjectIdentifier(b).hashValue)
+        }, wanted: robotWanted())
+        runWatchdog(now, lab)
+        guard let cmd = lab.frame(view) else { return }
+        if let direction = cmd.nudge { applyNudge(direction) }
+        if cmd.left != robotLeft || cmd.right != robotRight {
+            robotLeft = cmd.left
+            robotRight = cmd.right
+            updateFlippers()
+        }
+        if let power = cmd.plunge, isBallOnPlunger {
+            plungerPull = power * QfTableLayout.plungerMaxPull
+            releasePlunger()
+        }
+    }
+
+    /// The shots the table wants, most wanted first: the exit when it's lit, the Witch's lantern in her fight, else
+    /// the Treant (bark, then the trunk), then the searches.
+    private func robotWanted() -> [String] {
+        var want: [String] = []
+        if exitLit { want.append("oldRoad") }
+        if witch.active {
+            want.append(["well", "trunk", "eastLantern"][witch.lantern])
+        } else if bark.allSatisfy({ $0.isDown }) {
+            want.append("trunk")
+        } else {
+            want.append("bark")
+        }
+        for s in ["log", "orbit", "well", "eastLantern", "oldRoad"] where !want.contains(s) { want.append(s) }
+        return want
+    }
+
+    /// A ball off the table, or one that hasn't moved 4 pt in 5 s while not on the plunger, riding, cradled or
+    /// draining, is recorded as an incident and served again (no HP lost).
+    private func runWatchdog(_ now: TimeInterval, _ lab: PlayLab) {
+        let w = QfTableLayout.worldSize
+        for ball in balls {
+            let id = ObjectIdentifier(ball)
+            let p = ball.position
+            if !p.x.isFinite || !p.y.isFinite || p.x < -30 || p.x > w.width + 30 || p.y > w.height + 30 {
+                watchdogRescue("offTable", ball, now, lab)
+                continue
+            }
+            if ball.layer == .ride || isOnPlunger(ball) || isCradled(ball) || p.y < QfForestLayout.drainLineY {
+                watchSpots[id] = (p, now)
+                continue
+            }
+            if let spot = watchSpots[id], hypot(p.x - spot.0.x, p.y - spot.0.y) < 4 {
+                if now - spot.1 > 5 { watchdogRescue("stuck", ball, now, lab) }
+            } else {
+                watchSpots[id] = (p, now)
+            }
+        }
+        if watchSpots.count > balls.count {                    // drop drained balls (their ids can be reused)
+            let live = Set(balls.map { ObjectIdentifier($0) })
+            watchSpots = watchSpots.filter { live.contains($0.key) }
+        }
+    }
+
+    /// A ball resting on a raised flipper is being held on purpose.
+    private func isCradled(_ ball: QfBall) -> Bool {
+        for (i, pressed) in [leftFlipper.isPressed, rightFlipper.isPressed].enumerated() where pressed && i < robotCradles.count {
+            let c = robotCradles[i]
+            if hypot(ball.position.x - c.x, ball.position.y - c.y) < 30 { return true }
+        }
+        return false
+    }
+
+    private func watchdogRescue(_ kind: String, _ ball: QfBall, _ now: TimeInterval, _ lab: PlayLab) {
+        let p = ball.position
+        let x = p.x.isFinite ? Double(p.x) : -1, y = p.y.isFinite ? Double(p.y) : -1
+        lab.incident(PlayIncident(kind: kind, x: x.rounded(), y: y.rounded(), upper: !ball.isOnFloor,
+                                  time: lab.elapsed(now: now).rounded()))
+        watchSpots[ObjectIdentifier(ball)] = nil
+        removeBall(ball)
+        if balls.isEmpty, nextBallAt == nil { nextBallAt = now + 0.5 }      // served again, no HP lost
+        showBanner("WATCHDOG · \(kind == "stuck" ? "STUCK BALL" : "BALL OFF THE TABLE") AT \(Int(x)), \(Int(y))")
+    }
+
+    /// Banners that double as objectives.
+    fileprivate func labObjective(forBanner text: String) {
+        guard let lab = playLab else { return }
+        lab.banner(text)
+        let map: [(String, String)] = [("WISP ·", "wisp"), ("DRIFTING GHOST BANISHED", "drifter"),
+                                       ("GHOST BANISHED", "ghost"), ("BARK BROKEN", "barkBroken"),
+                                       ("TREANT FELLED", "treantFelled"), ("THE ROOTS GRAB YOU", "rootsGrab"),
+                                       ("THE LANTERN WITCH RISES", "witchRises"),
+                                       ("THE GRAVESTONE SINKS", "gravestoneSunk"),
+                                       ("LANTERN WITCH BANISHED", "witchBanished")]
+        if text == "TILT" { lab.objective("tilt", now: gameTime); return }
+        if let hit = map.first(where: { text.hasPrefix($0.0) }) { lab.objective(hit.1, now: gameTime) }
+    }
+
+    /// At game over (out of HP, or out of the forest) or after the cap the game is recorded; the next starts 2 s later.
+    fileprivate func checkPlayLabGame(_ now: TimeInterval) {
+        guard let lab = playLab else { return }
+        if let due = playLabNextAt {
+            if now >= due {
+                playLabNextAt = nil
+                if lab.isDone { finishPlayLab() } else { lab.beginGame(now: now) }
+            }
+            return
+        }
+        guard lab.current != nil, game.isGameOver || lab.isTimeUp(now: now) else { return }
+        let over = game.isGameOver
+        let lastBallLost = over && !game.leftForest
+        lab.endGame(score: game.score, ballsPlayed: labDrains + (lastBallLost || balls.isEmpty ? 0 : 1),
+                    endedBy: game.leftForest ? "escaped" : (over ? "gameOver" : "time"), now: now)
+        physicsWorld.speed = lab.physicsSpeed
+        playLabNextAt = now + 2
+    }
+
+    private func finishPlayLab() {
+        guard let lab = playLab else { return }
+        let saved = lab.save()
+        let count = lab.games.count
+        stopPlayLab(saving: false)
+        newGame()
+        game.banner = "PLAY LAB DONE · \(count) GAMES · \(saved)"
+        bannerClearAt = nil
+        PlayLab.quitIfLaunchedForLab()
+    }
+
+    fileprivate func stopPlayLab(saving: Bool) {
+        guard let lab = playLab else { return }
+        playLab = nil
+        _ = lab.stop(saving: saving)
+        playLabNextAt = nil
+        watchSpots.removeAll()
+        robotLeft = false
+        robotRight = false
+        game.isRobot = false
+        if leftFlipper != nil { updateFlippers() }
+        physicsWorld.speed = isAttractMode ? 0 : 1
     }
 }
 #endif

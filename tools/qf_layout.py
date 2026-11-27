@@ -150,8 +150,9 @@ _wu = unit(WELL_HOLE, SWEET_R)
 _wt = (-_wu[1], _wu[0])
 WELL_MOUTH_C = add(WELL_HOLE, _wu, 28.0)
 WELL_POST_R = 5.0
-WELL_POST_HI = add(WELL_MOUTH_C, _wt, -30.0)           # upper rim post
-WELL_POST_LO = add(WELL_MOUTH_C, _wt, 30.0)            # lower rim post
+WELL_MOUTH_HALF = 34.0           # T9 M3 v3: was 30 (the Shot Lab found a one-frame window from the right flipper)
+WELL_POST_HI = add(WELL_MOUTH_C, _wt, -WELL_MOUTH_HALF)   # upper rim post
+WELL_POST_LO = add(WELL_MOUTH_C, _wt, WELL_MOUTH_HALF)    # lower rim post
 if WELL_POST_HI[1] < WELL_POST_LO[1]:
     WELL_POST_HI, WELL_POST_LO = WELL_POST_LO, WELL_POST_HI
 WELL_WALL_LO = (WALL_L, 572.0)
@@ -171,9 +172,12 @@ def roof_y(x):
 
 # --- the Graveyard orbit: a lane up the left wall (spinner = "digging"), round the arch, down the right lane
 ORBIT_INNER_X = 72.0
-ORBIT_BOTTOM_Y = 790.0
+# T9 M3 v3: the orbit post moved up from y 790 to 940, so the island's face from the log's left post up to it slants
+# at ~123 deg. Right-flipper shots at 105-117 deg (which hit the old flat face and fell back) now glance off it into
+# the Graveyard lane: the orbit went from a 1-frame window to ~6 frames in the replay of the M3 v2 sweep.
+ORBIT_BOTTOM_Y = 940.0
 ORBIT_POST_R = 5.0
-SPINNER_Y = 900.0                # the graveyard spinner across the orbit lane
+SPINNER_Y = 1000.0               # the graveyard spinner across the orbit lane
 
 # --- the Hollow Log (scoop at the back of a short lane, kicks out down the lane onto the left flipper)
 LOG_L_X, LOG_R_X = 160.0, 222.0

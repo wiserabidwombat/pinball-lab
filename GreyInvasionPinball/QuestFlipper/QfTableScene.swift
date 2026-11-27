@@ -266,7 +266,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M3 v4"
+    static let buildTagText = "T9 M3 v4 · stacks"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -807,8 +807,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
             lamp.fillColor = .clear
             lamp.strokeColor = Self.lampColor.withAlphaComponent(0.35)
             lamp.glowWidth = 6
-            // M2 v8: a stacked lantern (SpriteCook model sheet b2238221, carved: 38 slices of 20x20)
-            let ls = QfStack(sheet: "qf_stack_lantern", count: 38, voxelsX: 20, voxelsY: 20, voxel: 1, at: .zero)
+            // Branch quest-sprite-stacking: the lantern carved by the sprite-stacking skill (.claude/skills) from
+            // SpriteCook sheet b2238221 (--round, 48 slices of 19x27), palette-locked; 1.05 pt voxels = 20 pt wide
+            let ls = QfStack(sheet: "qf_stack_lantern", count: 48, voxelsX: 19, voxelsY: 27, voxel: 1.05, at: .zero)
             lamp.addChild(ls.node)
             stacks.append(ls)
             lamp.zPosition = -16
@@ -2252,8 +2253,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
     /// (ad93fe30), the hollow log over its scoop (c874086e) and rune-stone posts (031583d9) on the table's small posts.
     private func addStackedProps() {
         let F = QfForestLayout.self
-        func add(_ sheet: String, _ count: Int, _ nx: Int, _ ny: Int, at p: CGPoint, z: CGFloat) {
-            let st = QfStack(sheet: sheet, count: count, voxelsX: nx, voxelsY: ny, voxel: 1, at: p)
+        func add(_ sheet: String, _ count: Int, _ nx: Int, _ ny: Int, voxel: CGFloat = 1, at p: CGPoint, z: CGFloat) {
+            let st = QfStack(sheet: sheet, count: count, voxelsX: nx, voxelsY: ny, voxel: voxel, at: p)
             st.node.zPosition = z
             addChild(st.node)
             stacks.append(st)
@@ -2267,7 +2268,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
         addSprite("qf_log", to: log, height: 60)          // v10: brightened, with a moonlit rim (Aaron: too dark)
         addChild(log)
         for p in [F.laneGuidePostLeft, F.laneGuidePostRight, F.orbitPost] + F.wellPosts + F.laneMouthPosts {
-            add("qf_stack_post", 11, 14, 14, at: p, z: -17.4)
+            // branch quest-sprite-stacking: carved by the sprite-stacking skill (--round, 22 slices of 34x28),
+            // palette-locked; 0.41 pt voxels = 14 pt wide
+            add("qf_stack_post", 22, 34, 28, voxel: 0.41, at: p, z: -17.4)
         }
     }
 

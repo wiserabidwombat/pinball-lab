@@ -31,6 +31,11 @@ final class NlCellFloor: SKNode {
     /// T8 M4 v1: the room's exits a maze wall closes (set by the scene before build). A walled exit is a solid orange
     /// wall that never opens, and its side has no entry portal or stub (nothing can come in that way).
     var walled: Set<NlExit> = []
+    /// T8 M5 v1: this cell is the Core (the maze's finish): its grid glows magenta and reads CORE. Set before build.
+    var isCore = false
+    /// T8 M5 v3: the Play Lab robot's way on from this cell (the first move of the shortest climb/side route to the
+    /// Core), or nil (the Core itself, or no route without draining).
+    var robotGoal: NlExit?
     private var exitsLit: Set<NlExit> = []
     /// T8 M3 v1: the neon look (the table's column opts in). `halos` collects the fixed parts' halos while the floor
     /// builds (the kit's and the room's); they're baked into one sprite at the end of build().
@@ -168,7 +173,8 @@ final class NlCellFloor: SKNode {
         guard on != inOverview, overviewSprite != nil else { return }
         inOverview = on
         if on {
-            overviewHidden = children.filter { !$0.isHidden && $0 !== floorFill && $0.name != "neonHalos" && $0 !== overviewSprite }
+            overviewHidden = children.filter { !$0.isHidden && $0 !== floorFill && $0.name != "neonHalos"
+                && $0.name != "coreLabel" && $0 !== overviewSprite }
             overviewHidden.forEach { $0.isHidden = true }
             overviewSprite?.isHidden = false
         } else {
@@ -229,7 +235,7 @@ final class NlCellFloor: SKNode {
         crop.maskNode = SKShapeNode(path: path).then { $0.fillColor = .white; $0.strokeColor = .clear }
         crop.addChild(lines)
         if neon {                                  // neon: faint cyan every 50, brighter every 200
-            lines.strokeColor = NlNeon.cyan.withAlphaComponent(0.11)
+            lines.strokeColor = (isCore ? NlNeon.magenta : NlNeon.cyan).withAlphaComponent(0.11)
             lines.blendMode = .add
             let major = CGMutablePath()
             for x in stride(from: CGFloat(100), through: w, by: 200) {
@@ -239,7 +245,19 @@ final class NlCellFloor: SKNode {
                 major.move(to: CGPoint(x: 0, y: y)); major.addLine(to: CGPoint(x: w, y: y))
             }
             let majorLines = SKShapeNode(path: major)
-            majorLines.strokeColor = NlNeon.cyan.withAlphaComponent(0.26)
+            majorLines.strokeColor = (isCore ? NlNeon.magenta : NlNeon.cyan).withAlphaComponent(0.26)
+            if isCore {                            // T8 M5 v1: the Core's name on its floor, in the open lower table
+                let label = SKLabelNode(text: "CORE")
+                label.fontName = "Menlo-Bold"
+                label.fontSize = 34
+                label.fontColor = NlNeon.magenta.withAlphaComponent(0.4)
+                label.verticalAlignmentMode = .center
+                label.position = CGPoint(x: NlCellLayout.centerX, y: 450)
+                label.zPosition = -19.7
+                label.blendMode = .add
+                label.name = "coreLabel"               // kept in the grid overview (setOverview)
+                addChild(label)
+            }
             majorLines.lineWidth = 1.3
             majorLines.blendMode = .add
             crop.addChild(majorLines)

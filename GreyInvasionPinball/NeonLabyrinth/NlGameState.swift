@@ -11,6 +11,8 @@ enum NlPoints {
     /// T8 M2 v1: a ball made up the ramp onto the turntable, and a ball out through an exit portal.
     static let ramp = 1000
     static let exit = 5000
+    /// T8 M5 v1: reaching the Core (the maze's finish).
+    static let core = 250_000
 }
 
 /// Shared between the SpriteKit scene and the SwiftUI HUD.

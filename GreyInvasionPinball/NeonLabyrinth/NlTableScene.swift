@@ -65,6 +65,10 @@ struct NlColumn {
     /// T8 M4 v3: moving between cells pulls the camera back to the whole grid, then dives into the next cell
     /// (Neon's; off = the plain pan, as 9 to Alive has).
     var cellTransition = false
+    /// T8 M5 v1: the Core, the maze's finish (nil = none, as 9 to Alive has). Reaching it scores the jackpot once a game.
+    var finishCell: Int? = nil
+    /// T8 M5 v2: the fog-of-war minimap (Neon's): visited cells only, dead ends orange, the Core magenta.
+    var minimap = false
 
     /// T8 M4 v1: a cell's name on the grid (column letter, row number from the bottom: A1 is the bottom-left).
     func cellName(_ i: Int) -> String {
@@ -90,6 +94,8 @@ struct NlColumn {
                               drainCostsBall: { $0 == 0 })
         column.neon = true
         column.cellTransition = true
+        column.finishCell = 8                              // C3
+        column.minimap = true
         column.width = w
         column.isWalled = { cell, exit in
             switch exit {
@@ -169,6 +175,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
     /// T8 M4 v5: the sling sparks, made once and reused round-robin (a new emitter per hit was the likely cause of
     /// Aaron's 33-34 ms frames "after s…" in A1).
     private var sparkPool: [SKEmitterNode] = []
+    // T8 M5: the maze run. Cells visited this game, whether the Core's been reached, the cells on the shortest
+    // climb/side route from the start to the Core (the others are dead ends), and the minimap.
+    private var visited: Set<Int> = []
+    private var coreReached = false
+    private var solutionPath: Set<Int> = []
+    private var minimapNode: SKNode?
+    private var minimapKey = ""
     private var nextSpark = 0
     /// T8 M4 v3: the transition's marks on the grid: where the ball was (white) and where it's going (magenta).
     private var moveMarks: [SKShapeNode] = []
@@ -222,6 +235,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         room.playLabShotObjectives.union(["fromBelow", "fromAbove", "fromLeft", "fromRight",
                                           "kickback", "saveLit", "outlaneSave", "floorDown", "floorUp"])
             .union(column.width > 1 ? ["cellLeft", "cellRight"] : [])
+            .union(column.finishCell != nil ? ["core", "deadEnd"] : [])
     #endif
     /// The next ball in: how it arrives and on which floor (set by a drain or an exit; a new ball is FROM BELOW on the
     /// bottom floor).
@@ -293,7 +307,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M4 v7"
+    static let buildTagText = "T8 M5 v1"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -334,6 +348,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
         endCellTransition()                        // a snap ends any transition (even while paused)
         cullFloors()
+        refreshMinimap()
         placeBuildTag()
     }
 
@@ -356,6 +371,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         moveMarks.forEach { $0.removeFromParent() }
         moveMarks = []
         floors.forEach { $0.setOverview(false) }
+        if column.minimap { floors.forEach { if $0.alpha != 1 { $0.alpha = 1 } } }
     }
 
     // MARK: - Table
@@ -386,9 +402,11 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 case .top: return false
                 }
             })
+            f.isCore = f.index == column.finishCell
             addChild(f)
             f.build()
         }
+        computeRoutes()
         refreshKickLamps()
         // T8 M4 v2: every cell's baked glow goes to the GPU now, not the first time its cell comes on screen
         // (Aaron's 9-cell test: worst frame 34 ms, low 101 fps).
@@ -506,6 +524,9 @@ final class NlTableScene: SKScene, RendererHostedScene {
         guard cameraRig.isFlying else { return Self.floorMoveDelay }    // Reduce Motion: the plain pan
         // Every cell but the two the move is between draws as its baked stand-in while the camera is out.
         for f in floors { f.setOverview(f.index != cell && f.index != from) }
+        if column.minimap {                                // T8 M5 v2: the fog: cells not visited yet stay dim
+            for f in floors { f.alpha = !visited.contains(f.index) && f.index != cell ? 0.18 : 1 }
+        }
         moveMarks.forEach { $0.removeFromParent() }
         moveMarks = []
         let px = cameraRig.overviewScale                    // world points per screen point at the grid framing
@@ -669,6 +690,124 @@ final class NlTableScene: SKScene, RendererHostedScene {
         showBanner(column.width > 1 ? "\(arrival.banner) · SECTOR \(column.cellName(floorIndex))"
                    : floors.count > 1 ? "\(arrival.banner) · FLOOR \(floorIndex + 1)" : arrival.banner)
         sfx(arrival == .fromBelow ? .upKick : .launch)
+        markVisited(floorIndex)
+    }
+
+    // MARK: - The maze run (T8 M5)
+
+    /// A cell the ball has come into: the Core scores the jackpot (once a game); a dead end says so the first time.
+    private func markVisited(_ i: Int) {
+        let first = visited.insert(i).inserted
+        if i == column.finishCell, !coreReached {
+            coreReached = true
+            floors.forEach { $0.robotGoal = nil }          // the robot's run is done: it plays the rest freely
+            score(NlPoints.core)
+            showBanner("CORE LOCATED · JACKPOT \(NlPoints.core.formatted())")
+            sfx(.jackpot)
+            haptic(1)
+            cameraRig.shake(strength: 5, duration: 0.4)
+            labEvent("core")
+        } else if first, column.finishCell != nil, !solutionPath.contains(i) {
+            showBanner("ACCESS DENIED · DEAD END")
+            labEvent("deadEnd")
+        }
+        refreshMinimap()
+    }
+
+    /// The moves out of cell `i` that lead somewhere (open exit, a cell there): (exit, cell).
+    private func moves(from i: Int) -> [(exit: NlExit, cell: Int)] {
+        let w = column.width, col = i % w
+        return NlExit.allCases.compactMap { e in
+            guard floors[i].room.exits.contains(e), !floors[i].walled.contains(e) else { return nil }
+            switch e {
+            case .top: return i + w < floors.count ? (e, i + w) : nil
+            case .left: return col > 0 ? (e, i - 1) : nil
+            case .right: return col + 1 < w && i + 1 < floors.count ? (e, i + 1) : nil
+            }
+        }
+    }
+
+    /// The shortest climb/side routes to the Core (drains are setbacks, not moves): each cell's robot goal, and the
+    /// cells on the start's route (the rest are dead ends).
+    private func computeRoutes() {
+        guard let finish = column.finishCell, floors.indices.contains(finish) else { return }
+        var into: [Int: [Int]] = [:]
+        for i in floors.indices { for m in moves(from: i) { into[m.cell, default: []].append(i) } }
+        var dist = [finish: 0]
+        var queue = [finish]
+        while !queue.isEmpty {
+            let j = queue.removeFirst()
+            for i in into[j] ?? [] where dist[i] == nil {
+                dist[i] = dist[j]! + 1
+                queue.append(i)
+            }
+        }
+        for f in floors {
+            guard let d = dist[f.index], d > 0 else { f.robotGoal = nil; continue }
+            f.robotGoal = moves(from: f.index).first(where: { dist[$0.cell] == d - 1 })?.exit
+        }
+        solutionPath = [finish]
+        var c = 0
+        while let d = dist[c], d > 0, let next = moves(from: c).first(where: { dist[$0.cell] == d - 1 }) {
+            solutionPath.insert(c)
+            c = next.cell
+        }
+    }
+
+    /// The minimap, top right under the HUD (camera space, screen points): the cells visited this game (the ball's
+    /// white, the Core magenta, dead ends orange, the rest cyan) with the walls found on their sides; unvisited cells
+    /// are a faint dot. Rebuilt only when it changes (an arrival, a new game, a size change).
+    private func refreshMinimap() {
+        guard column.minimap, column.width > 1, !floors.isEmpty else { return }
+        let top = ((view ?? hostView)?.safeAreaInsets.top ?? 47) + CameraTuning.hudHeight + 12
+        let key = "\(activeFloor)|\(visited.sorted())|\(coreReached)|\(Int(size.width))x\(Int(size.height))|\(Int(top))"
+        guard key != minimapKey else { return }
+        minimapKey = key
+        minimapNode?.removeFromParent()
+        let w = column.width, rows = floors.count / w
+        let cw: CGFloat = 14, ch: CGFloat = 23, gap: CGFloat = 5
+        let mapW = CGFloat(w) * cw + CGFloat(w - 1) * gap, mapH = CGFloat(rows) * ch + CGFloat(rows - 1) * gap
+        let root = SKNode()
+        root.zPosition = 48
+        root.position = CGPoint(x: size.width / 2 - 14 - mapW, y: size.height / 2 - top - mapH)
+        let back = SKShapeNode(rect: CGRect(x: -6, y: -6, width: mapW + 12, height: mapH + 12), cornerRadius: 5)
+        back.fillColor = SKColor(white: 0, alpha: 0.6)
+        back.strokeColor = NlNeon.cyan.withAlphaComponent(0.35)
+        back.lineWidth = 1
+        root.addChild(back)
+        for i in floors.indices {
+            let r = CGRect(x: CGFloat(i % w) * (cw + gap), y: CGFloat(i / w) * (ch + gap), width: cw, height: ch)
+            guard visited.contains(i) else {
+                let dot = SKShapeNode(circleOfRadius: 1.5)
+                dot.position = CGPoint(x: r.midX, y: r.midY)
+                dot.fillColor = NlNeon.cyan.withAlphaComponent(0.3)
+                dot.strokeColor = .clear
+                root.addChild(dot)
+                continue
+            }
+            let dead = column.finishCell != nil && !solutionPath.contains(i)
+            let color = i == activeFloor ? NlNeon.white
+                : i == column.finishCell ? NlNeon.magenta : dead ? NlNeon.orange : NlNeon.cyan
+            let cell = SKShapeNode(rect: r, cornerRadius: 2)
+            cell.strokeColor = color
+            cell.fillColor = color.withAlphaComponent(i == activeFloor ? 0.4 : 0.14)
+            cell.lineWidth = 1.5
+            root.addChild(cell)
+            let walls = CGMutablePath()
+            for e in floors[i].walled {
+                switch e {
+                case .left: walls.move(to: CGPoint(x: r.minX, y: r.minY)); walls.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+                case .right: walls.move(to: CGPoint(x: r.maxX, y: r.minY)); walls.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+                case .top: walls.move(to: CGPoint(x: r.minX, y: r.maxY)); walls.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+                }
+            }
+            let wallNode = SKShapeNode(path: walls)
+            wallNode.strokeColor = NlNeon.orange
+            wallNode.lineWidth = 2.5
+            root.addChild(wallNode)
+        }
+        cameraRig.node.addChild(root)
+        minimapNode = root
     }
 
     /// Makes floor `i` the ball's floor: its flippers take the input (the old floor's drop), the camera pans to it.
@@ -769,6 +908,10 @@ final class NlTableScene: SKScene, RendererHostedScene {
         newBallCell = 0
         floors.forEach { $0.room.newGame() }
         drains = 0
+        visited = []
+        coreReached = false
+        minimapKey = ""
+        computeRoutes()                                    // the robot's goals again (cleared at the Core)
         floorDrops = 0
         nextBelowLeft = true
         nextAboveLeft = true
@@ -1358,6 +1501,8 @@ extension NlTableScene: PlayLabHost {
          PlayObjective(name: "floorDown", text: "A drain drops the ball to the floor below"),
          PlayObjective(name: "floorUp", text: "Out the top exit to the floor above"),
          PlayObjective(name: "tilt", text: "Tilt")] +
+        (column.finishCell != nil ? [PlayObjective(name: "core", text: "Reach the Core (the maze's finish)"),
+                                     PlayObjective(name: "deadEnd", text: "Find a dead end")] : []) +
         (column.width > 1 ? [PlayObjective(name: "cellLeft", text: "Out the left exit to the cell beside"),
                              PlayObjective(name: "cellRight", text: "Out the right exit to the cell beside")] : [])
     }

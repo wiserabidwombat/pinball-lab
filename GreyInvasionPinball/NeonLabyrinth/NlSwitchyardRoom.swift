@@ -431,7 +431,10 @@ final class NlSwitchyardRoom: NlRoom {
         // T8 M4 v1: aim for the open heading (not walled by the maze) that takes the fewest target hits to line up.
         // With every heading walled, the ramp (a derail) is all there is.
         let headings = (0...2).filter { h in !(NlExit(rawValue: h).map { cell?.walled.contains($0) ?? false } ?? false) }
-        if !routeOpen, let aim = headings.min(by: { cost($0) < cost($1) }) {
+        // T8 M5 v3: in a maze, aim at the cell's way on to the Core when it has one (else the cheapest open heading).
+        let goal = cell?.robotGoal.map(\.rawValue).flatMap { headings.contains($0) ? $0 : nil }
+        if let aim = goal ?? (routeOpen ? nil : headings.min(by: { cost($0) < cost($1) })),
+           !(routeOpen && turntable == aim) {
             route = turntable != aim ? [turntable > aim ? "switchLeft" : "switchRight"] : ["rails"]
         }
         var out: [String] = []

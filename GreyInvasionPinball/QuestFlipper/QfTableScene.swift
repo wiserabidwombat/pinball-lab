@@ -109,6 +109,11 @@ final class QfTableScene: SKScene, RendererHostedScene {
     private var lastStep: CGFloat = 0
 
     private var balls: [QfBall] = []
+    #if DEBUG
+    /// T9 M3 v1: the Shot Lab robot (shared ShotLab) and its own clock.
+    fileprivate var shotLab: ShotLab?
+    fileprivate var shotLabTime: TimeInterval = 0
+    #endif
     private var rides: [Ride] = []
     private var slingshots: [QfSlingshot] = []
     private var leftFlipper: QfFlipper!
@@ -215,6 +220,12 @@ final class QfTableScene: SKScene, RendererHostedScene {
         didSet {
             guard isAttractMode != oldValue else { return }
             physicsWorld.speed = isAttractMode ? 0 : 1
+            #if DEBUG
+            if isAttractMode, shotLab != nil {                  // Menu stops the Shot Lab (before the controls let go)
+                shotLab = nil
+                game.isRobot = false
+            }
+            #endif
             if isAttractMode { releaseAllControls() }
             refreshCamera()
         }
@@ -245,7 +256,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M2 v11"
+    static let buildTagText = "T9 M3 v2"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -318,7 +329,8 @@ final class QfTableScene: SKScene, RendererHostedScene {
         leftFlipper.attach(to: self)
         rightFlipper.attach(to: self)
         upperFlipper = QfFlipper(side: .right, pivot: F.upperFlipperPivot, length: F.upperFlipperLength,
-                                 pivotRadius: F.upperFlipperPivotRadius, tipRadius: F.upperFlipperTipRadius)
+                                 pivotRadius: F.upperFlipperPivotRadius, tipRadius: F.upperFlipperTipRadius,
+                                 restAngle: F.upperFlipperRestAngle, travel: F.upperFlipperTravel)   // T9 M3 v2: keeps 30° / 51°
         upperFlipper.attach(to: self)
 
         addPlunger()
@@ -1245,6 +1257,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     func newGame() {
+        #if DEBUG
+        if shotLab != nil { physicsWorld.speed = 1 }
+        shotLab = nil                                          // a new game stops the Shot Lab
+        #endif
         fpsLow = 0
         isAttractMode = false
         removeAllBalls()
@@ -1355,6 +1371,9 @@ final class QfTableScene: SKScene, RendererHostedScene {
     }
 
     private func updateFlippers() {
+        #if DEBUG
+        if shotLab != nil { return }                           // the robot has the flippers
+        #endif
         var left = activeTouches.values.contains(.left) || padLeft
         var right = activeTouches.values.contains(.right) || padRight
         if nudge.tilted { left = false; right = false }      // tilted: dead flippers until the next ball
@@ -1457,6 +1476,10 @@ final class QfTableScene: SKScene, RendererHostedScene {
         let dt = CGFloat(step)
         lastStep = dt
         #if DEBUG
+        if shotLab != nil {                                    // Shot Lab: the robot's frame instead of a game frame
+            updateShotLab(dt)
+            return
+        }
         updateRampProbe(now)
         #endif
         updateGamepad()
@@ -1565,6 +1588,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
                 }
             case .log: showBanner("HOLLOW LOG · SEARCHED")
             }
+            labEvent(scoops[i].kind == .well ? "well" : "log")
             return
         }
     }
@@ -1970,6 +1994,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
         }
         game.add(QfPoints.ramp)
         showBanner("OLD ROAD")
+        labEvent("oldRoad")
         sfx(.ramp)
         hitHaptic.impactOccurred()
     }
@@ -2157,6 +2182,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
                     game.add(QfPoints.spin * Int(spins.rounded()))
                     sfx(.spinner)
                     showBanner("GRAVEYARD · DIG \(Int(digSpins))")
+                    labEvent("spinner")
                 }
                 // The Graveyard orbit made: crossing the line along the top of the arch going right.
                 let (oa, ob) = F.orbitMadeLine
@@ -2164,6 +2190,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
                     game.add(QfPoints.orbit)
                     sfx(.orbit)
                     showBanner("GRAVEYARD ORBIT")
+                    labEvent("orbit")
                 }
                 catchInScoops(ball, from: p0, to: p)
             }
@@ -2244,6 +2271,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             if let i = wisps.firstIndex(where: { $0.node === node }) {
                 guard wisps[i].alive, !wisps[i].hitPending else { break }
                 wisps[i].hitPending = true                    // beaten in update()
+                labEvent("wisp")
                 break
             }
             if node === ghost.node {
@@ -2281,6 +2309,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             if let i = bark.firstIndex(where: { $0.node === node }) {
                 guard !bark[i].isDown, !bark[i].hitPending else { break }
                 bark[i].hitPending = true                     // drops in update()
+                labEvent("bark")
                 game.add(QfPoints.target)
                 sfx(.standup)
                 hitHaptic.impactOccurred(intensity: 0.7)
@@ -2293,6 +2322,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
             hitHaptic.impactOccurred(intensity: 0.7)
             t.node.strokeColor = .white                     // back to its colour in update()
             targetFlashUntil[t.name] = gameTime + 0.12
+            labEvent(t.name == "TRUNK" ? "trunk" : (t.name == "EAST LANTERN" ? "eastLantern" : t.name.lowercased()))
             if t.name == "TRUNK", witch.active || witchStartAt != nil {
                 witchLanternHit(1, damage: damage)
                 break
@@ -2340,3 +2370,130 @@ extension QfTableScene: SKPhysicsContactDelegate {
         MainActor.assumeIsolated { handleContact(contact) }
     }
 }
+
+extension QfTableScene {
+    /// A shot event for the labs (a no-op in play and in Release builds).
+    func labEvent(_ name: String) {
+        #if DEBUG
+        shotLab?.event(name, at: shotLabTime)
+        #endif
+    }
+}
+
+#if DEBUG
+// MARK: - T9 M3 v1: the Shot Lab host (Neon's pattern, the same flipper kit and angled feeds). The robot sweeps flip
+// timings from both main flippers and records the first shot each flip makes. Run: tools/shotlab_run.sh quest
+extension QfTableScene: ShotLabHost {
+    var shotLabTableName: String { "Quest & Flipper" }
+
+    /// The shots that end a trial (wisps, slings and the spinner are noted only).
+    var shotLabMajorEvents: Set<String> { ["well", "log", "bark", "trunk", "eastLantern", "oldRoad", "orbit"] }
+
+    /// Neon's kit and gravity (−6.0): the same sweeps as Neon (the angled feeds bring an inlane ball in ~0.9 s).
+    var shotLabCradleDelays: ClosedRange<Double> { 0.20...1.00 }
+    var shotLabInlaneDelays: ClosedRange<Double>? { 0.30...1.30 }
+
+    /// Cradled as on Neon (the same flipper, the same angled feeds): the ball rests in the V between the guide's slant
+    /// and the raised flipper, 12 along and r + 11 above. The inlane start is the inlane's centre under the guide post.
+    var shotLabFlippers: [ShotLab.FlipperSpec] {
+        let up = QfTableLayout.flipperTravel - QfTableLayout.flipperRestAngle
+        let along: CGFloat = 12, above: CGFloat = QfTableLayout.ballRadius + 11
+        let l = QfForestLayout.pivotLeft
+        let left = CGPoint(x: l.x + along * cos(up) - above * sin(up), y: l.y + along * sin(up) + above * cos(up))
+        let right = CGPoint(x: QfTableLayout.mirrorSum - left.x, y: left.y)
+        let ix = (QfForestLayout.laneGuidePostLeft.x + QfForestLayout.slingLeft[0].x) / 2
+        let iy = QfForestLayout.laneGuidePostLeft.y + 10
+        let r = QfForestLayout.pivotRight
+        return [ShotLab.FlipperSpec(name: "left", pivot: l, cradle: left,
+                                    starts: ShotLab.lowerStarts(pivot: l, pointsLeft: false, inlaneX: ix, inlaneTopY: iy)),
+                ShotLab.FlipperSpec(name: "right", pivot: r, cradle: right,
+                                    starts: ShotLab.lowerStarts(pivot: r, pointsLeft: true,
+                                                                inlaneX: QfTableLayout.mirrorSum - ix, inlaneTopY: iy))]
+    }
+
+    /// The shot line (the lane mouths) and the ghosts' height, to see where near misses cross.
+    var shotLabProbes: [ShotLab.Probe] { [ShotLab.Probe(name: "ghosts", y: 738), ShotLab.Probe(name: "mouths", y: 805)] }
+
+    func shotLabSetFlipper(_ index: Int, pressed: Bool) {
+        if index == 0 { leftFlipper.isPressed = pressed } else { rightFlipper.isPressed = pressed; upperFlipper.isPressed = pressed }
+    }
+
+    func shotLabPlaceBall(at point: CGPoint) {
+        let ball = QfBall(at: point)
+        addChild(ball)
+        balls.append(ball)
+    }
+
+    func shotLabPlaceBall(at point: CGPoint, velocity: CGVector) {
+        shotLabPlaceBall(at: point)
+        balls.last?.physicsBody?.velocity = velocity
+    }
+
+    /// The bare table a new game has: no balls, no ghost, roots or Witch, the bark up, the exit unlit.
+    func shotLabResetTable() {
+        removeAllBalls()
+        nextBallAt = nil
+        treantHP = QfMonsterHP.treant
+        setExitLit(false)
+        resetMonsters()
+        resetDrifterAndRoots()
+        endWitch()
+        graveDownUntil = 0
+        raiseBark()
+        defeats = 0                                        // wisps can't build toward EXIT LIT between trials
+        removeAction(forKey: "gateBanner")                 // nor an Old Road shot leave the forest mid-run
+        bannerClearAt = nil
+        targetLastHit = [:]
+        digSpins = 0
+    }
+
+    var shotLabBall: (position: CGPoint, velocity: CGVector)? {
+        guard let ball = balls.first else { return nil }
+        return (ball.position, ball.physicsBody?.velocity ?? .zero)
+    }
+
+    func debugStartShotLab() {
+        isAttractMode = false
+        game.isRobot = true
+        shotLabResetTable()
+        shotLabTime = 0
+        shotLab = ShotLab(host: self)
+        refreshCamera()
+    }
+
+    /// The robot's frame: only what the physics and shot detection need (no drains, serving, monsters' turns or banners).
+    fileprivate func updateShotLab(_ realDt: CGFloat) {
+        guard let lab = shotLab else { return }
+        let speed = CGFloat(lab.physicsSpeed)
+        physicsWorld.speed = speed
+        let dt = realDt * speed
+        shotLabTime += TimeInterval(dt)
+        gameTime += TimeInterval(dt - realDt)              // update() added the real step; timers run at lab speed
+        let now = shotLabTime
+        lastStep = dt
+        leftFlipper.step(dt: dt)
+        rightFlipper.step(dt: dt)
+        upperFlipper.step(dt: dt)
+        updateRides(dt)
+        handBallsToSwingingFlippers()
+        slingshots.forEach { $0.settle() }
+        governInlanes()
+        updateScoops(gameTime)
+        updateBark(gameTime)
+        updateWisps(gameTime, dt: TimeInterval(dt))
+        setDiverterUp(wisps.contains { $0.alive })
+        if lab.update(now: now) {
+            game.banner = lab.progressText
+        } else {
+            let saved = lab.save(now: now)
+            shotLab = nil
+            physicsWorld.speed = 1
+            shotLabResetTable()
+            game.isRobot = false
+            bannerClearAt = nil
+            game.banner = "SHOT LAB DONE · \(lab.trials.count) TRIALS · \(saved)"
+            ShotLab.quitIfLaunchedForLab()          // launched by tools/shotlab_run.sh quest → quit
+        }
+    }
+}
+#endif

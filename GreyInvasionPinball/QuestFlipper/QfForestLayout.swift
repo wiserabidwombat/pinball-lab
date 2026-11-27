@@ -26,10 +26,12 @@ enum QfForestLayout {
     static let flipperLength: CGFloat = 80.00
     static let flipperPivotRadius: CGFloat = 12.00
     static let flipperTipRadius: CGFloat = 6.00
-    static let flipperRestAngle: CGFloat = 0.523599
-    static let flipperTravel: CGFloat = 0.890118
-    static let pivotLeft = CGPoint(x: 201.00, y: 200.00)
-    static let pivotRight = CGPoint(x: 399.00, y: 200.00)
+    static let flipperRestAngle: CGFloat = 0.349066
+    static let flipperTravel: CGFloat = 0.907571
+    static let upperFlipperRestAngle: CGFloat = 0.523599
+    static let upperFlipperTravel: CGFloat = 0.890118
+    static let pivotLeft = CGPoint(x: 195.00, y: 200.00)
+    static let pivotRight = CGPoint(x: 405.00, y: 200.00)
     /// Where a cradled ball leaves each flipper (the shot fan's origin, until the Shot Lab measures it).
     static let sweetLeft = CGPoint(x: 243.00, y: 214.00)
     static let sweetRight = CGPoint(x: 357.00, y: 214.00)
@@ -82,12 +84,12 @@ enum QfForestLayout {
 
     // MARK: lower table (Neon's kit)
     static let laneGuideLeft: [CGPoint] = [
-        CGPoint(x: 75.00, y: 470.00), CGPoint(x: 75.00, y: 259.48), CGPoint(x: 207.50, y: 211.26),
+        CGPoint(x: 75.00, y: 470.00), CGPoint(x: 75.00, y: 257.51), CGPoint(x: 199.45, y: 212.22),
     ]
     static let laneGuideRight: [CGPoint] = [
-        CGPoint(x: 525.00, y: 470.00), CGPoint(x: 525.00, y: 259.48), CGPoint(x: 392.50, y: 211.26),
+        CGPoint(x: 525.00, y: 470.00), CGPoint(x: 525.00, y: 257.51), CGPoint(x: 400.55, y: 212.22),
     ]
-    static let guideBendLeft = CGPoint(x: 75.00, y: 259.48)
+    static let guideBendLeft = CGPoint(x: 75.00, y: 257.51)
     static let laneGuidePostLeft = CGPoint(x: 75.00, y: 470.00)
     static let laneGuidePostRight = CGPoint(x: 525.00, y: 470.00)
     static let laneGuidePostRadius: CGFloat = 5.00
@@ -100,10 +102,10 @@ enum QfForestLayout {
         CGPoint(x: 525.00, y: 470.00), CGPoint(x: 528.00, y: 482.00),
     ]
     static let outlaneWallLeft: [CGPoint] = [
-        CGPoint(x: 75.00, y: 259.48), CGPoint(x: 75.00, y: 256.00),
+        CGPoint(x: 75.00, y: 257.51), CGPoint(x: 75.00, y: 256.00),
     ]
     static let outlaneWallRight: [CGPoint] = [
-        CGPoint(x: 525.00, y: 259.48), CGPoint(x: 525.00, y: 256.00),
+        CGPoint(x: 525.00, y: 257.51), CGPoint(x: 525.00, y: 256.00),
     ]
     /// [top, corner, tip] of each sling.
     static let slingLeft: [CGPoint] = [

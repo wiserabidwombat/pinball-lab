@@ -50,9 +50,13 @@ def circle_pts(c, r, a0=0, a1=360, n=24):
 
 # ================================================================ LOWER TABLE: Neon Labyrinth's cell kit, unchanged
 FLIP_LEN, FLIP_RP, FLIP_RT = 80.0, 12.0, 6.0
-FLIP_REST = math.radians(30)
-FLIP_TRAVEL = math.radians(51)
-PIVOT_L = (201.0, 200.0)
+# T9 M3 v2 (Aaron 2026-11-27): the main flippers rest parallel to the 20 deg inlane slant and rise higher
+# (32 deg above level, was 21). The upper flipper keeps its own 30 / 51 (UF_REST / UF_TRAVEL).
+FLIP_REST = math.radians(20)
+FLIP_TRAVEL = math.radians(52)
+UF_REST = math.radians(30)
+UF_TRAVEL = math.radians(51)
+PIVOT_L = (195.0, 200.0)   # T9 M3 v2: was 201; the flatter flippers reach 6 pt further, this keeps the drain at 47.6
 PIVOT_R = M(PIVOT_L)
 
 def flipper_tip(pivot, side, raised=0.0):
@@ -228,14 +232,14 @@ def island_top():
     pivot slopes down to the right lane; under the flipper it runs 2-8 pt below its underside (closed); from under the
     tip it slopes down-left to the Graveyard lane, so a ball rolling off the tip rolls on left."""
     p = UF_PIVOT
-    tip = flipper_tip_len(p, UF_LEN)
-    a = FLIP_REST
+    tip = flipper_tip_len(p, UF_LEN, rest=UF_REST)
+    a = UF_REST
     under = lambda q, off: (q[0] + math.sin(a) * off, q[1] - math.cos(a) * off)   # below the centreline (right-hand normal)
     return [(p[0] + UF_RP * math.cos(math.radians(-35)), p[1] + UF_RP * math.sin(math.radians(-35)) - 2),
             under(p, UF_RP + 2), under(tip, UF_RT + 7)]
 
-def flipper_tip_len(pivot, length, raised=0.0):
-    a = FLIP_REST - raised
+def flipper_tip_len(pivot, length, raised=0.0, rest=None):
+    a = (FLIP_REST if rest is None else rest) - raised
     return (pivot[0] - length * math.cos(a), pivot[1] - length * math.sin(a))
 
 def ramp_half_at(y):
@@ -332,11 +336,11 @@ def right_arch_y(x):
     t = 1 - one_minus_t
     return TOP_Y - (TOP_Y - ARCH_START) * t * t
 DIVERTER_A = (606.0, right_arch_y(606.0))
-DIVERTER_B = (UF_PIVOT[0] - (UF_RP + 1) * math.sin(FLIP_REST), UF_PIVOT[1] + (UF_RP + 1) * math.cos(FLIP_REST))
+DIVERTER_B = (UF_PIVOT[0] - (UF_RP + 1) * math.sin(UF_REST), UF_PIVOT[1] + (UF_RP + 1) * math.cos(UF_REST))
 def uf_poly(raised=0.0):
-    return flipper_poly_len(UF_PIVOT, "R", UF_LEN, UF_RP, UF_RT, raised)
-def flipper_poly_len(pivot, side, length, rp, rt, raised=0.0):
-    a = FLIP_REST - raised
+    return flipper_poly_len(UF_PIVOT, "R", UF_LEN, UF_RP, UF_RT, raised, rest=UF_REST)
+def flipper_poly_len(pivot, side, length, rp, rt, raised=0.0, rest=None):
+    a = (FLIP_REST if rest is None else rest) - raised
     sx = 1 if side == "L" else -1
     dx, dy = sx * math.cos(a), -math.sin(a)
     tip = (pivot[0] + dx * length, pivot[1] + dy * length)

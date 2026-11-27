@@ -61,6 +61,16 @@ struct QfTableView: View {
             LabGamepad.shared.claim("quest", onA: { gamepadA() }, onMenu: { gamepadMenu() })
             #if DEBUG
             // DEBUG `-playlab quest -questRampProbe`: fires balls up the Old Road at rising speeds (prints RAMPPROBE).
+            // T9 M3 v1: `-shotlab quest` (tools/shotlab_run.sh quest) starts the Shot Lab at once; the app quits when done.
+            if PlayLab.launchTable == nil && ShotLab.launchTable == "quest" {
+                Task { @MainActor in
+                    while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    screen = .playing
+                    setPaused(false)
+                    scene.debugStartShotLab()
+                }
+            }
             if ProcessInfo.processInfo.arguments.contains("-questRampProbe") {
                 Task { @MainActor in
                     while scene.view == nil && scene.hostView == nil { try? await Task.sleep(for: .milliseconds(100)) }

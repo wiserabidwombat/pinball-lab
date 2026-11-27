@@ -134,7 +134,7 @@ def named_passages():
         ("poly", L.flipper_poly(L.PIVOT_L, "L", L.FLIP_TRAVEL)[1] + [L.flipper_poly(L.PIVOT_L, "L", L.FLIP_TRAVEL)[1][0]]))
     # M1 round 2: the upper flipper
     uf_rest = ("poly", L.uf_poly()[1] + [L.uf_poly()[1][0]])
-    uf_up = ("poly", L.uf_poly(L.FLIP_TRAVEL)[1] + [L.uf_poly(L.FLIP_TRAVEL)[1][0]])
+    uf_up = ("poly", L.uf_poly(L.UF_TRAVEL)[1] + [L.uf_poly(L.UF_TRAVEL)[1][0]])
     add("UF: pivot to the arch (orbits ride past)", "upper flipper pivot", "outer wall")
     add("UF: resting tip to the island roof", ("circle", L.uf_poly()[0], L.UF_RT), P["island"])
     add("UF: resting flipper to the island roof", uf_rest, P["island"])

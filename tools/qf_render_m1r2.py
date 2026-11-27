@@ -41,7 +41,7 @@ def draw_uf(ax, lw=1.0):
     tip, poly = L.uf_poly()
     ax.add_patch(Polygon(poly, closed=True, color="#e8efe9", zorder=8))
     ax.add_patch(Circle(L.UF_PIVOT, L.UF_RP, color="#e8efe9", zorder=8)); ax.add_patch(Circle(tip, L.UF_RT, color="#e8efe9", zorder=8))
-    tip2, poly2 = L.uf_poly(L.FLIP_TRAVEL)
+    tip2, poly2 = L.uf_poly(L.UF_TRAVEL)
     ax.add_patch(Polygon(poly2, closed=True, color="#e8efe9", alpha=0.3, zorder=8))
     ax.plot([L.DIVERTER_A[0], L.DIVERTER_B[0]], [L.DIVERTER_A[1], L.DIVERTER_B[1]], color=R.KICK, lw=3 * lw, zorder=9)
 

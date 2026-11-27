@@ -65,6 +65,8 @@ enum QfForestLayout {{
     static let flipperTipRadius: CGFloat = {f(L.FLIP_RT)}
     static let flipperRestAngle: CGFloat = {L.FLIP_REST:.6f}
     static let flipperTravel: CGFloat = {L.FLIP_TRAVEL:.6f}
+    static let upperFlipperRestAngle: CGFloat = {L.UF_REST:.6f}
+    static let upperFlipperTravel: CGFloat = {L.UF_TRAVEL:.6f}
     static let pivotLeft = {pt(L.PIVOT_L)}
     static let pivotRight = {pt(L.PIVOT_R)}
     /// Where a cradled ball leaves each flipper (the shot fan's origin, until the Shot Lab measures it).

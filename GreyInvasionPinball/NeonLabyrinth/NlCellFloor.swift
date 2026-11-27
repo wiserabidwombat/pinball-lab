@@ -36,6 +36,8 @@ final class NlCellFloor: SKNode {
     /// T8 M5 v3: the Play Lab robot's way on from this cell (the first move of the shortest climb/side route to the
     /// Core), or nil (the Core itself, or no route without draining).
     var robotGoal: NlExit?
+    /// T8 M6 v1: the side the ball last came in by (nil = from below), for rooms that send it on "the way on".
+    var cameFrom: NlExit?
     private var exitsLit: Set<NlExit> = []
     /// T8 M3 v1: the neon look (the table's column opts in). `halos` collects the fixed parts' halos while the floor
     /// builds (the kit's and the room's); they're baked into one sprite at the end of build().
@@ -193,6 +195,9 @@ final class NlCellFloor: SKNode {
     func showBanner(_ text: String) { column?.showBanner(text) }
     func sfx(_ s: MonSound) { column?.sfx(s) }
     func labEvent(_ name: String) { column?.labEvent(name) }
+    /// T8 M6 v1: the balls in play (all cells), and a second ball for this cell (up from below, as a new ball).
+    var ballsInPlay: Int { column?.ballsInPlayCount ?? 0 }
+    func extraBall() { column?.extraBall(on: self) }
 
     /// Puts a ball on this floor on a ride along `path` (this floor's coordinates).
     func ride(_ ball: NlBall, path: [CGPoint], speed: CGFloat, height: CGFloat, heightEnd: CGFloat? = nil,

@@ -90,7 +90,11 @@ struct NlColumn {
                                 [3, NlExit.top.rawValue],          // A2 ↑ A3
                                 [6, NlExit.right.rawValue],        // A3 → B3
                                 [7, NlExit.right.rawValue]]        // B3 → C3
-        var column = NlColumn(makeRooms: { (0..<9).map { _ in NlSwitchyardRoom() } },
+        // T8 M6 v1: Data Vaults on the corridors (A1, A2, A3, B3), Switchyards at the junctions and dead ends, the
+        // Core at C3.
+        var column = NlColumn(makeRooms: { [NlVaultRoom(), NlSwitchyardRoom(), NlSwitchyardRoom(),
+                                            NlVaultRoom(), NlSwitchyardRoom(), NlSwitchyardRoom(),
+                                            NlVaultRoom(), NlVaultRoom(), NlCoreRoom()] },
                               drainCostsBall: { $0 == 0 })
         column.neon = true
         column.cellTransition = true
@@ -307,7 +311,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M5 v1"
+    static let buildTagText = "T8 M6 v1"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -656,6 +660,12 @@ final class NlTableScene: SKScene, RendererHostedScene {
     private func arrive(_ arrival: Arrival, on floorIndex: Int, newBall: Bool = false) {
         typealias C = NlCellLayout
         setActiveFloor(floorIndex)
+        switch arrival {                           // T8 M6 v1: where it came in (the Data Vault's way on)
+        case .fromBelow: floors[floorIndex].cameFrom = nil
+        case .fromAbove: floors[floorIndex].cameFrom = nil   // a drain from above, not an entry by the top exit
+        case .fromLeft: floors[floorIndex].cameFrom = .left
+        case .fromRight: floors[floorIndex].cameFrom = .right
+        }
         if newBall {                                // every ball starts with every floor's kickback lit
             floors.forEach { $0.kickbackLit = true }
             refreshKickLamps()
@@ -691,6 +701,21 @@ final class NlTableScene: SKScene, RendererHostedScene {
                    : floors.count > 1 ? "\(arrival.banner) · FLOOR \(floorIndex + 1)" : arrival.banner)
         sfx(arrival == .fromBelow ? .upKick : .launch)
         markVisited(floorIndex)
+    }
+
+    /// T8 M6 v1: the balls in play (for a room's multiball).
+    var ballsInPlayCount: Int { balls.count }
+
+    /// T8 M6 v1: a second ball on the ball's cell (the Core's multiball): up from below, as a new ball comes in.
+    func extraBall(on f: NlCellFloor) {
+        guard f.index == activeFloor else { return }
+        typealias C = NlCellLayout
+        let left = nextBelowLeft
+        nextBelowLeft.toggle()
+        let start = CGPoint(x: C.centerX, y: C.upRiseStartY)
+        startRide(from: start, path: [start, C.upRelease], speed: NlTableLayout.riseSpeed, height: 0,
+                  release: left ? C.upPopLeft : C.upPopRight, event: "multiball")
+        sfx(.upKick)
     }
 
     // MARK: - The maze run (T8 M5)
@@ -1314,7 +1339,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
                   let t = tf.targets.first(where: { $0.body === node }) else { break }
             if let last = targetLastHit[t.name], gameTime - last < 0.15 { break }
             targetLastHit[t.name] = gameTime
-            if !tf.saveLit {
+            if !tf.saveLit, !tf.isCore {                    // T8 M6 v1: the Core's one target doesn't light a save
                 tf.targetsHitForSave.insert(t.name)
                 if tf.targetsHitForSave.count == tf.targets.count {   // all this floor's targets: light its outlane save
                     tf.saveLit = true

@@ -435,7 +435,16 @@ final class NlSwitchyardRoom: NlRoom {
         let goal = cell?.robotGoal.map(\.rawValue).flatMap { headings.contains($0) ? $0 : nil }
         if let aim = goal ?? (routeOpen ? nil : headings.min(by: { cost($0) < cost($1) })),
            !(routeOpen && turntable == aim) {
-            route = turntable != aim ? [turntable > aim ? "switchLeft" : "switchRight"] : ["rails"]
+            // T8 M5 v2 (Play Lab 11-27: 109 of 123 ramp shots derailed): while the route isn't lined up on the aim,
+            // the robot wants only targets, best first by how close each leaves the route to the aim. No ramp (it
+            // derails) and no save targets (any hit moves the turntable or the bridge). A flipper without the best
+            // target plays the next one, so the misses don't undo the alignment as often.
+            func hits(_ t: String) -> Int {
+                let tt = t == "switchLeft" ? max(0, turntable - 1) : t == "switchRight" ? min(2, turntable + 1) : turntable
+                let br = t == "rails" ? (bridge + 1) % 3 : bridge
+                return abs(tt - aim) + (aim - br + 3) % 3
+            }
+            return ["switchLeft", "switchRight", "rails"].sorted { hits($0) < hits($1) }
         }
         var out: [String] = []
         for s in route + saveNeeds + ["ramp", "switchLeft", "switchRight", "rails"] where !out.contains(s) {

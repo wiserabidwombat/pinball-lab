@@ -33,6 +33,7 @@ final class ChompBeaches {
         case meltdownStarted(ChompShot)
         case extraBall
         case beachJunk
+        case allClosed                    // M5 v10: the 5th closure ended — the scene starts TOURIST TAXI
     }
 
     static let touristsPerBeach = 3
@@ -155,8 +156,8 @@ final class ChompBeaches {
         closed.insert(s)
         meltdownShot = nil
         if meltdownIsFifth {
-            resetBeaches()                               // Rescue / Search multiball comes in a later round
-            return [.score(0, "ALL BEACHES CLOSED")]
+            resetBeaches()                               // M5 v10: TOURIST TAXI (Rescue); Search and the choice next
+            return [.score(0, "ALL BEACHES CLOSED"), .allClosed]
         }
         // A beach that filled up during this hurry-up starts its own now.
         if let next = ChompShot.beach.first(where: { !closed.contains($0) && (rescued[$0] ?? 0) >= Self.touristsPerBeach }) {

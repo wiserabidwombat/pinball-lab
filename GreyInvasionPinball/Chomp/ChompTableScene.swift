@@ -138,6 +138,11 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     let beaches = ChompBeaches()
     /// M5 v4: the Stink Line, the flamingos and Kevin Multiball.
     let kevin = ChompKevin()
+    /// M5 v10: TOURIST TAXI (the real Rescue Multiball), started when all five beaches have closed and no other
+    /// multiball runs (pending until then).
+    let rescue = ChompRescue()
+    private var rescuePending = false
+    private var anyMultiball: Bool { kevin.multiballActive || rescue.active }
     private var mbLaunchesPending = 0
     private var mbNextLaunchAt: TimeInterval = 0
     private var mbSaveUntil: TimeInterval = -1
@@ -217,7 +222,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M5 v9"
+    static let buildTagText = "T7 M5 v10c"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -715,6 +720,16 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private func updateTouristDots(_ now: TimeInterval) {
         let slow = Int(now * 4) % 2 == 0, fast = Int(now * 10) % 2 == 0
         for (shot, dots) in touristDots {
+            if rescue.active {                                       // M5 v10: saved green, waiting yellow, eaten red
+                let s = rescue.saved[shot] ?? 0, w = rescue.waiting[shot] ?? 0
+                for (k, dot) in dots.enumerated() {
+                    let c: SKColor = k < s ? Self.touristSaved
+                        : k < s + w ? (shot == rescue.sharkShot ? (fast ? Self.shotLampBlue : .white) : (slow ? Self.touristLit : Self.shotLampOff))
+                        : Self.meltdownRed
+                    if dot.fillColor != c { dot.fillColor = c }
+                }
+                continue
+            }
             let saved = beaches.rescued[shot] ?? 0, lit = beaches.lit[shot] ?? 0
             for (k, dot) in dots.enumerated() {
                 let c: SKColor
@@ -747,9 +762,49 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 bigHaptic.impactOccurred()
             case .beachJunk:
                 game.beachJunkLit += 1
+            case .allClosed:
+                rescuePending = true                   // M5 v10: starts once no other multiball runs
             }
         }
     }
+
+    /// M5 v10: TOURIST TAXI's effects (its multiball uses the same serve / save / end machinery as Kevin's).
+    private func applyRescue(_ effects: [ChompRescue.Effect]) {
+        for e in effects {
+            switch e {
+            case .score(let points, let banner):
+                if points > 0 { game.add(points) }
+                if let banner { showBanner(banner, hold: true) }
+            case .note(let text):
+                showBanner(text)
+            case .startMultiball(let n):
+                mbLaunchesPending += max(0, n - balls.count)
+                mbNextLaunchAt = gameTime + 0.5
+                mbSaveUntil = gameTime + ChompRescue.saveSeconds
+                sfx(.skillShot)
+                bigHaptic.impactOccurred()
+            case .addBall:
+                if balls.count + mbLaunchesPending < ChompKevin.maxBalls {
+                    mbLaunchesPending += 1
+                    mbNextLaunchAt = max(mbNextLaunchAt, gameTime + 0.5)
+                    sfx(.skillShot)
+                }
+            case .multiballOver:
+                mbLaunchesPending = 0
+                mbSaveUntil = -1
+            }
+        }
+    }
+
+    #if DEBUG
+    /// M5 v10: the pause card's TAXI button (or `defaults write … chomp-rescue -bool YES` for every game) — start
+    /// TOURIST TAXI as soon as a ball is in play and no other multiball runs.
+    func debugStartRescue() {
+        guard !game.isGameOver, !rescue.active else { return }
+        rescuePending = true
+        showBanner("DEBUG · \(ChompRescue.title)", hold: true)
+    }
+    #endif
 
     static let shotLampOff = SKColor(white: 0.35, alpha: 0.35)
     static let shotLampBlue = SKColor(red: 0.25, green: 0.55, blue: 1.0, alpha: 1)
@@ -774,9 +829,15 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         if !isBallOnPlunger, !balls.isEmpty {
             applyCameo(cameos.tick(dt: TimeInterval(dt), now: now))
             applyBeaches(beaches.tick(dt: TimeInterval(dt)))        // M5 v3
+            applyRescue(rescue.tick(dt: TimeInterval(dt)))          // M5 v10
+            if rescuePending, !anyMultiball, !skillShotLive, !nudge.tilted,      // v10b: after the plunge settles
+               let t = launchedAt, now - t > 1.5 {
+                rescuePending = false
+                applyRescue(rescue.start())
+            }
         }
         // M5 v4: the red arrows move (v6: the KMB clocks; v6b: the line waits while the ball sits on the plunger)
-        if !balls.isEmpty, !isBallOnPlunger || kevin.multiballActive { applyKevin(kevin.tick(now: now)) }
+        if !balls.isEmpty, !rescue.active, !isBallOnPlunger || kevin.multiballActive { applyKevin(kevin.tick(now: now)) }   // v10b: paused in the taxi
         let meltdownFlash = Int(now * 10) % 2 == 0
         if cameos.jackpotUntil != nil, fin?.isUp == true { cameos.startJackpotWindow(now: now) }
         for (shot, node) in shotLamps {
@@ -784,18 +845,20 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             let cameoLamp = lampColor(cameos.lamp(shot), now)
             let kevinLamp = kevinColor(kevin.lamp(shot), now)
             var c = (kevin.multiballActive ? kevinLamp ?? cameoLamp : cameoLamp ?? kevinLamp) ?? Self.shotLampOff
+            if rescue.active { c = lampColor(rescue.lamp(shot), now) ?? cameoLamp ?? Self.shotLampOff }   // M5 v10 (v10b: no Kevin lamps)
             if shot == beaches.meltdownShot { c = meltdownFlash ? Self.meltdownRed : .white }     // M5 v3
             if node.fillColor != c { node.fillColor = c }
         }
-        let flamingoGlow: SKColor? = kevin.stage == .finUp ? (Int(now * 4) % 2 == 0 ? Self.flamingoPink : .white) : nil
+        let flamingoGlow: SKColor? = kevin.stage == .finUp && !rescue.active ? (Int(now * 4) % 2 == 0 ? Self.flamingoPink : .white) : nil
         let finSuper = kevin.lamp(.fin) == .jackpot ? kevinColor(.jackpot, now) : nil   // M5 v6: KMB 3's fin supers
-        fin?.setGlow(lampColor(cameos.lamp(.fin), now) ?? finSuper ?? flamingoGlow)
+        let taxiSuper = lampColor(rescue.lamp(.fin), now)                                // M5 v10
+        fin?.setGlow(taxiSuper ?? lampColor(cameos.lamp(.fin), now) ?? finSuper ?? flamingoGlow)
         updateTouristDots(now)
         if flipLockUntil > 0, now >= flipLockUntil { endFlipLock() }        // M5 v5
         if !skillShotLive {
             let kmb = flipLocked ? "FLIP-LOCK · \(Int((flipLockUntil - now).rounded(.up)))s · ACTION TO LET GO"
                 : kevin.multiballActive ? kevin.statusText() : nil
-            game.status = beaches.statusText() ?? kmb ?? cameos.statusText(now: now) ?? kevin.statusText()
+            game.status = (flipLocked ? kmb : nil) ?? rescue.statusText() ?? beaches.statusText() ?? kmb ?? cameos.statusText(now: now) ?? kevin.statusText()
         }
     }
 
@@ -853,15 +916,19 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private func cameoEvent(_ name: String) {
         applyKevin(kevin.switchHit())                                                       // M5 v6: The Chase counts switches
         if name == "sharkTower" { cameos.sharkTowerHit(); return }
-        if name == "chumBucket" { applyKevin(kevin.bucketHit(now: gameTime)); return }      // M5 v4
+        if name == "chumBucket" {                                                           // M5 v4
+            if rescue.active { applyRescue(rescue.bucketHit()) } else { applyKevin(kevin.bucketHit(now: gameTime)) }   // v10
+            return
+        }
         guard let shot = ChompShot(rawValue: name) else { return }
         let fx = cameos.shot(shot, now: gameTime)
         // M5 v3: a closed beach's boost (20 % of its Mayor Meltdown) on each later lit shot there.
         if let b = beaches.boost[shot], b > 0,
            fx.contains(where: { if case .score(let p, _) = $0 { return p > 0 }; return false }) { game.add(b) }
         applyCameo(fx)
-        if !kevin.multiballActive { applyBeaches(beaches.shot(shot)) }   // tourists wait out a multiball
-        applyKevin(kevin.shot(shot, now: gameTime))          // M5 v4 (v6d: a fin hit pays the cameo and Kevin both)
+        if !anyMultiball { applyBeaches(beaches.shot(shot)) }   // tourists wait out a multiball
+        // M5 v4 (v6d: a fin hit pays the cameo and Kevin both); v10: during TOURIST TAXI the shots are its own
+        if rescue.active { applyRescue(rescue.shot(shot)) } else { applyKevin(kevin.shot(shot, now: gameTime)) }
     }
 
     private func applyCameo(_ effects: [ChompCameos.Effect]) {
@@ -988,7 +1055,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         let floorBalls = balls.filter { $0.isOnFloor }.map { $0.position }
         // M5 v6d (Aaron: "Let's do that"): the fin comes up when anything wants it up — a cameo, a waiting flamingo or
         // KMB 3's supers; it's held down only when a cameo wants it down and nothing wants it up.
-        let wantUp = cameos.finWanted == true || kevin.finWanted == true
+        let wantUp = cameos.finWanted == true || (kevin.finWanted == true && !rescue.active) || rescue.finWanted == true   // v10 / v10b
         let combined: Bool? = wantUp ? true : cameos.finWanted
         if let want = combined {   // M5 v2: a cameo raises / holds the fin down (v4: or a flamingo)
             if want, !f.isUp { f.raise(clearOf: floorBalls, ballRadius: ChompTableLayout.ballRadius) }
@@ -1264,13 +1331,24 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// M5 v5d (Play Lab 13-58-20Z: a ~3,000 pt/s left-flipper shot straight up at x 321 went through the boat's
     /// channel and stuck inside the housing at (321, 1058)): the same guard for the boat — its housing, the captive
     /// ball's channel (sides and end cap) and the v4d funnel.
-    private lazy var outerWallSegments: [(CGPoint, CGPoint)] = {
+    private lazy var outerWallSegments: [(CGPoint, CGPoint, Int)] = {      // v10c: + the shark target's index (−1: a wall)
         let m = ChompTableLayout.boatMouth, hw = ChompTableLayout.boatHalfWidth, l = ChompTableLayout.boatChannelLength
         let channel = [CGPoint(x: m.x - hw, y: m.y), CGPoint(x: m.x - hw, y: m.y + l),
                        CGPoint(x: m.x + hw, y: m.y + l), CGPoint(x: m.x + hw, y: m.y)]
+        // M5 v10c (Play Lab 12-36-16Z: a ball stopped at (500, 933) inside Tgt3; drop probe: a 3,000 pt/s shot from
+        // (297, 362) at 71.5° put its centre on Tgt3's centre for a step): the shark tower targets (each rect, turned)
+        // and their backings too.
+        let targets: [[CGPoint]] = ChompTableLayout.sharkTargetCentres.indices.map { i in
+            let c = ChompTableLayout.sharkTargetCentres[i], a = ChompTableLayout.sharkTargetAngles[i]
+            let w = ChompTableLayout.sharkTargetSize.width / 2, h = ChompTableLayout.sharkTargetSize.height / 2
+            let corners = [CGPoint(x: -w, y: -h), CGPoint(x: w, y: -h), CGPoint(x: w, y: h), CGPoint(x: -w, y: h), CGPoint(x: -w, y: -h)]
+            return corners.map { CGPoint(x: c.x + $0.x * cos(a) - $0.y * sin(a), y: c.y + $0.x * sin(a) + $0.y * cos(a)) }
+        }
         let chains = [ChompTableLayout.outerWall, ChompTableLayout.boatHousing, channel,
                       ChompTableLayout.boatFunnelLeft, ChompTableLayout.boatFunnelRight]
-        return chains.flatMap { w in zip(w, w.dropFirst()).map { ($0, $1) } }
+            + ChompTableLayout.sharkBacks
+        return chains.flatMap { w in zip(w, w.dropFirst()).map { ($0, $1, -1) } }
+            + targets.enumerated().flatMap { i, w in zip(w, w.dropFirst()).map { ($0, $1, i) } }
     }()
 
     private func keepInsideOuterWall(_ ball: ChompBall, _ body: SKPhysicsBody) {
@@ -1278,7 +1356,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         guard p0 != p else { return }
         let d = CGVector(dx: p.x - p0.x, dy: p.y - p0.y)
         guard hypot(d.dx, d.dy) < 80 else { return }              // a ball placed by a lab, not a physics step
-        for (a, b) in outerWallSegments {
+        for (a, b, owner) in outerWallSegments {
             let e = CGVector(dx: b.x - a.x, dy: b.y - a.y)
             let den = d.dx * e.dy - d.dy * e.dx
             guard abs(den) > 1e-6 else { continue }
@@ -1298,9 +1376,34 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 let k = (1 + ChompTableLayout.wallRestitution) * vn
                 body.velocity = CGVector(dx: v.dx - n.dx * k, dy: v.dy - n.dy * k)
             }
+            if owner >= 0 { sharkTargetHit(owner) }                  // v10c: the hit still counts
             return
         }
     }
+
+    /// M3 v17: a shark tower standup hit (M5 v10c: also from keepInsideOuterWall, when a fast ball that would have
+    /// sunk into it is put back in front of it before SpriteKit reports the contact).
+    private func sharkTargetHit(_ i: Int) {
+        guard gameTime - sharkLabAt[i] > 0.05 else { return }          // v10c: the guard and the contact, same hit
+        sharkLabAt[i] = gameTime
+        labEvent("sharkTower")
+        if gameTime - sharkHitAt[i] > 0.3 {                // M5 v3: a tourist at a beach beside it
+            sharkHitAt[i] = gameTime
+            if !anyMultiball { applyBeaches(beaches.towerHit(i, modeRunning: cameos.isRunning)) }
+        }
+        if !sharkDown[i] {
+            sharkDown[i] = true
+            sharkTargets[i].fillColor = Self.bankDarkColor
+            game.add(ChompPoints.sharkTarget)
+            sfx(.standup)
+            if !sharkDown.contains(false) {
+                game.add(ChompPoints.sharkTowerComplete)
+                showBanner("SHARK TOWER")
+                sharkRelightPending = true             // relit in update(), not in the contact callback
+            }
+        }
+    }
+    private var sharkLabAt: [TimeInterval] = [-1, -1, -1]
 
     private func updateSaveGate() {
         for ball in balls {
@@ -1372,7 +1475,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             endFlipLock()
             return true
         }
-        guard kevin.multiballActive, !flipLockUsed, !nudge.tilted, miniFlipper?.isPressed == true else { return false }
+        guard anyMultiball, !flipLockUsed, !nudge.tilted, miniFlipper?.isPressed == true else { return false }
         let held = balls.contains { $0.isOnFloor && hypot($0.position.x - Self.flipLockSpot.x, $0.position.y - Self.flipLockSpot.y) < 24 }
         guard held else { return false }
         flipLockUsed = true
@@ -1585,6 +1688,11 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         cameos.newGame()                           // M5 v2
         beaches.newGame()                          // M5 v3
         kevin.newGame()                            // M5 v4
+        rescue.newGame()                           // M5 v10
+        rescuePending = false
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "chomp-rescue") { rescuePending = true }
+        #endif
         bonusSteps = []; bonusTallyEnd = 0         // M5 v9 (game.reset clears the counts and the text)
         #if DEBUG
         // M5 v6c: `-chomp-kmb 2` / `3` (launch argument or `defaults write … chomp-kmb`) starts every game with that KMB lit.
@@ -1912,7 +2020,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         if !drained.isEmpty {
             drained.forEach { removeBall($0) }
             // M5 v4: Kevin Multiball's ball save serves drained balls again (launched by themselves).
-            let mbSaved = kevin.multiballActive && now < mbSaveUntil && !nudge.tilted
+            let mbSaved = anyMultiball && now < mbSaveUntil && !nudge.tilted
             if mbSaved {
                 mbLaunchesPending += drained.count
                 mbNextLaunchAt = max(mbNextLaunchAt, now + 0.5)
@@ -1949,7 +2057,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         }
 
         // M5 v4: Kevin Multiball — serve its balls one at a time, and end it when one (or none) is left.
-        if kevin.multiballActive {
+        if anyMultiball {                                    // M5 v10: Kevin's or TOURIST TAXI
             if mbLaunchesPending > 0, now >= mbNextLaunchAt, !isBallOnPlunger, !game.isGameOver {
                 mbLaunchesPending -= 1
                 mbNextLaunchAt = now + 1.0
@@ -1957,7 +2065,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             }
             // v4b: an owed (saved) ball with none in play is served first; the end comes once it's out.
             if balls.count + mbLaunchesPending <= 1, !(balls.isEmpty && mbLaunchesPending > 0) {
-                applyKevin(kevin.multiballEnded())
+                if rescue.active { applyRescue(rescue.multiballEnded()) } else { applyKevin(kevin.multiballEnded()) }
             }
         }
 
@@ -2147,7 +2255,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                     if !bankDown.contains(false) {
                         game.add(ChompPoints.bankComplete)
                         showBanner("FISH PHONE")
-                        applyKevin(kevin.bankComplete())       // M5 v6: a ready flamingo
+                        if rescue.active { applyRescue(rescue.bankComplete()) }   // M5 v10: spots the shark
+                        else { applyKevin(kevin.bankComplete()) }                // M5 v6: a ready flamingo
                         bankRelightPending = true             // relit in update(), not in the contact callback
                     }
                 }
@@ -2155,22 +2264,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             }
             // M3 v17: the shark tower standups.
             if let i = sharkTargets.firstIndex(where: { $0 === node }) {
-                labEvent("sharkTower")
-                if gameTime - sharkHitAt[i] > 0.3 {                // M5 v3: a tourist at a beach beside it
-                    sharkHitAt[i] = gameTime
-                    if !kevin.multiballActive { applyBeaches(beaches.towerHit(i, modeRunning: cameos.isRunning)) }
-                }
-                if !sharkDown[i] {
-                    sharkDown[i] = true
-                    sharkTargets[i].fillColor = Self.bankDarkColor
-                    game.add(ChompPoints.sharkTarget)
-                    sfx(.standup)
-                    if !sharkDown.contains(false) {
-                        game.add(ChompPoints.sharkTowerComplete)
-                        showBanner("SHARK TOWER")
-                        sharkRelightPending = true             // relit in update(), not in the contact callback
-                    }
-                }
+                sharkTargetHit(i)
                 break
             }
             // M3 v16: the chum bucket (placeholder scoring until the rules).
@@ -2522,6 +2616,11 @@ extension ChompTableScene {
         // M5 v5d: straight-up shots at the boat's left post / funnel (Play Lab 13-58-20Z stuck at (321, 1058)).
         + stride(from: 316, through: 330, by: 2).flatMap { (x: Int) in
             [2500, 3200].map { (v: CGFloat) in (CGPoint(x: CGFloat(x), y: 900), CGVector(dx: -20, dy: v)) } }
+        // M5 v10c: fast shots into Tgt3's face (Play Lab 12-36-16Z: a ball stopped at (500, 933) after (297, 362) → Tgt3).
+        + stride(from: 69.5, through: 71.5, by: 0.5).flatMap { (deg: Double) in
+            [3000, 3300, 3500].map { (v: CGFloat) in
+                let a = CGFloat(deg) * CGFloat.pi / 180
+                return (CGPoint(x: 297, y: 362), CGVector(dx: v * cos(a), dy: v * sin(a))) } }
 
     func debugDropProbe() {
         isAttractMode = false
@@ -2641,7 +2740,10 @@ extension ChompTableScene: PlayLabHost {
          PlayObjective(name: "flipLock", text: "Flip-lock a ball on the pier flipper"),
          PlayObjective(name: "addABall", text: "Refill the Stink Line in a multiball: add-a-ball"),
          PlayObjective(name: "readyFlamingo", text: "Complete the bank for a ready flamingo (2nd+)"),
-         PlayObjective(name: "kmbSuper", text: "Collect a KMB 2 / 3 super jackpot")]
+         PlayObjective(name: "kmbSuper", text: "Collect a KMB 2 / 3 super jackpot"),
+         PlayObjective(name: "taxiStarted", text: "Start Tourist Taxi (all five beaches closed)"),
+         PlayObjective(name: "taxiJackpot", text: "Collect a Tourist Taxi jackpot"),
+         PlayObjective(name: "taxiSuper", text: "Collect a Tourist Taxi super jackpot")]
     }
 
     /// Flip delays = the middle of each Shot Lab window, 120 Hz (the default pass; the 60 Hz pass now only models the
@@ -2693,7 +2795,7 @@ extension ChompTableScene: PlayLabHost {
     /// stops it, saving the games played so far.
     /// M5 v6c: the pause card's KMB 2 / KMB 3 buttons — light that Kevin Multiball now (a start shot begins it).
     func debugReadyKMB(_ level: Int) {
-        guard !game.isGameOver, !kevin.multiballActive else { return }
+        guard !game.isGameOver, !anyMultiball else { return }
         kevin.debugReady(level: level)
         showBanner("DEBUG · \(kevin.title) LIT", hold: true)
     }
@@ -2730,7 +2832,7 @@ extension ChompTableScene: PlayLabHost {
                 }
             }
         }
-        guard skill == .advanced || skill == .expert, kevin.multiballActive, !flipLockUsed, !flipLocked else {
+        guard skill == .advanced || skill == .expert, anyMultiball, !flipLockUsed, !flipLocked else {
             pierCatchUntil = -1
             return
         }
@@ -2834,6 +2936,10 @@ extension ChompTableScene: PlayLabHost {
     /// targets, then the shots in the order a player learns them.
     private func robotWanted() -> [String] {
         var w: [String] = []
+        // M5 v10: TOURIST TAXI's boat / fin, the shark, then the tourists.
+        for lamp in [ChompCameos.Lamp.jackpot, .blueFast, .white] {
+            for s in ChompShot.allCases where rescue.lamp(s) == lamp && !w.contains(s.rawValue) { w.append(s.rawValue) }
+        }
         // M5 v2: the cameos first — lit shots, then the boat (lights / boosts them).
         for lamp in [ChompCameos.Lamp.jackpot, .final, .blueFast, .blue, .white] {
             for s in ChompShot.allCases where cameos.lamp(s) == lamp && !w.contains(s.rawValue) { w.append(s.rawValue) }
@@ -2886,6 +2992,9 @@ extension ChompTableScene: PlayLabHost {
         case _ where text.hasPrefix("KEVIN JACKPOT") || text.contains(" COMPLETE · ") || text.hasPrefix("CHASE JACKPOT")
             || (text.hasPrefix("BOAT JACKPOT ") && text.dropFirst(13).first?.isNumber == true): name = "kmbJackpot"
         case _ where text.hasPrefix("FLAMINGO READY"): name = "readyFlamingo"
+        case _ where text.hasPrefix("TOURIST TAXI · SAVE"): name = "taxiStarted"
+        case _ where text.hasPrefix("TAXI JACKPOT") || text.hasPrefix("SHARK CHASED OFF"): name = "taxiJackpot"
+        case _ where text.hasPrefix("TAXI SUPER JACKPOT"): name = "taxiSuper"
         default: name = nil
         }
         if let name { lab.objective(name, now: gameTime) }

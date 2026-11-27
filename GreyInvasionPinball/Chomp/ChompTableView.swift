@@ -322,6 +322,7 @@ struct ChompTableView: View {
                 overlayButton("KMB 2") { scene.debugReadyKMB(2); setPaused(false) }
                 overlayButton("KMB 3") { scene.debugReadyKMB(3); setPaused(false) }
             }
+            overlayButton("TAXI") { scene.debugStartRescue(); setPaused(false) }   // M5 v10 (v10b: own row)
             #endif
         }
     }

@@ -179,11 +179,12 @@ struct NlTableView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                 } else if let banner = game.banner {
+                    // T8 M4 v6: no shrink-to-fit (it measured the text again on every new banner; standup hits, which
+                    // always show one, were Aaron's slow frames). Banners fit at 13 pt; a long one truncates.
                     Text(banner)
-                        .font(.orbitron(14, .bold))
+                        .font(.orbitron(13, .bold))
                         .foregroundStyle(Self.accent)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.5)
                 } else if let status = game.status {
                     Text(status)
                         .font(.orbitron(12, .bold))

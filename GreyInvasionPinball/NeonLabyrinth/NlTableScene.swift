@@ -164,6 +164,12 @@ final class NlTableScene: SKScene, RendererHostedScene {
     /// T8 M4 v4: the last thing that happened (its sound, flippers aside) and when, so the worst frame can name it.
     private var lastHappening = ""
     private var lastHappeningAt: TimeInterval = -10
+    /// T8 M4 v5: every frame slower than 25 ms (after the first 2 s), counted by what happened just before it.
+    private var slowFrames: [String: Int] = [:]
+    /// T8 M4 v5: the sling sparks, made once and reused round-robin (a new emitter per hit was the likely cause of
+    /// Aaron's 33-34 ms frames "after s…" in A1).
+    private var sparkPool: [SKEmitterNode] = []
+    private var nextSpark = 0
     /// T8 M4 v3: the transition's marks on the grid: where the ball was (white) and where it's going (magenta).
     private var moveMarks: [SKShapeNode] = []
     #if DEBUG
@@ -287,7 +293,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M4 v4"
+    static let buildTagText = "T8 M4 v6"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -374,6 +380,55 @@ final class NlTableScene: SKScene, RendererHostedScene {
         // (Aaron's 9-cell test: worst frame 34 ms, low 101 fps).
         let halos = floors.flatMap { f in ["neonHalos", "neonCores"].compactMap { (f.childNode(withName: $0) as? SKSpriteNode)?.texture } }
         if !halos.isEmpty { SKTexture.preload(halos) {} }
+        makeSparkPool()
+    }
+
+    // MARK: - Sling sparks (T8 M4 v5)
+
+    /// Four emitters set up like Effects.burst(count 8, speed 160, lifetime 0.25, size 0.22), idle until a hit. One
+    /// fires now, under the first cell's floor (hidden, inside the ignored first 2 s), so the first real hit draws warm.
+    private func makeSparkPool() {
+        let spark = SKTexture(imageNamed: "orbit_star")
+        let lifetime: CGFloat = 0.25, size: CGFloat = 0.22, speed: CGFloat = 160
+        for _ in 0..<4 {
+            let e = SKEmitterNode()
+            e.particleTexture = spark
+            e.zPosition = 20
+            e.particleBirthRate = 0
+            e.particleLifetime = lifetime
+            e.particleLifetimeRange = lifetime * 0.4
+            e.particleSpeed = speed
+            e.particleSpeedRange = speed * 0.6
+            e.emissionAngleRange = .pi * 2
+            e.particleScale = size
+            e.particleScaleRange = size * 0.5
+            e.particleScaleSpeed = -size / lifetime
+            e.particleAlpha = 1
+            e.particleAlphaSpeed = -1 / lifetime
+            e.particleColorBlendFactor = 1
+            e.particleBlendMode = .add
+            sparkPool.append(e)
+        }
+        guard let first = floors.first else { return }
+        sparkBurst(in: first, at: CGPoint(x: NlCellLayout.centerX, y: 500), color: NlNeon.cyan)
+        sparkPool[0].zPosition = -25                       // under the floor's fill
+    }
+
+    /// Fires the next pooled emitter: 8 sparks at `point` in `parent` (moved there if it was elsewhere).
+    private func sparkBurst(in parent: SKNode, at point: CGPoint, color: SKColor) {
+        guard !sparkPool.isEmpty else { return }
+        let e = sparkPool[nextSpark]
+        nextSpark = (nextSpark + 1) % sparkPool.count
+        if e.parent !== parent {
+            e.removeFromParent()
+            parent.addChild(e)
+        }
+        e.zPosition = 20
+        e.position = point
+        e.particleColor = color
+        e.numParticlesToEmit = 8
+        e.particleBirthRate = 8 * 40                       // all out in ~1/40 s
+        e.resetSimulation()
     }
 
     // MARK: - Services for the room (M2 round A)
@@ -489,6 +544,13 @@ final class NlTableScene: SKScene, RendererHostedScene {
         #endif
     }
 
+    /// T8 M4 v5: "\nslow: sling 3 · standup 1 · - 2" (frames over 25 ms by the event before them), or "".
+    private var slowText: String {
+        guard !slowFrames.isEmpty else { return "" }
+        let parts = slowFrames.sorted { $0.value > $1.value }.prefix(4).map { "\($0.key) \($0.value)" }
+        return "\nslow: " + parts.joined(separator: " · ")
+    }
+
     /// Camera children use screen points, centred on the screen. Text changes at most 4 times a second.
     private func placeBuildTag() {
         guard let buildTag else { return }
@@ -501,6 +563,10 @@ final class NlTableScene: SKScene, RendererHostedScene {
         } else {
             fpsFrames += 1
             fpsWorstGap = max(fpsWorstGap, gap)
+            if gap > 0.025, gameTime >= tracerFrom {
+                let key = gameTime - lastHappeningAt < 0.7 ? lastHappening : "-"
+                slowFrames[key, default: 0] += 1
+            }
             let window = t - fpsWindowStart
             if window >= 0.5 {
                 fpsShown = Int((Double(fpsFrames) / window).rounded())
@@ -522,7 +588,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         if let v = focusBall?.physicsBody?.velocity {
             speed = Int(hypot(v.dx, v.dy) / 10) * 10
         }
-        let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms · max \(fpsWorstEver) ms \(fpsWorstWhere)\n" : ""
+        let fps = fpsShown > 0 ? "\(fpsShown) fps · low \(fpsLow) · worst \(fpsWorstShown) ms\nmax \(fpsWorstEver) ms \(fpsWorstWhere)\(slowText)\n" : ""
         let text = "\(fps)\(Self.buildTagText) · \(speed) · \(room.tagText) · \(column.width > 1 ? "cell \(column.cellName(activeFloor))" : "floor \(activeFloor + 1)/\(floors.count)") · drains \(drains)"
         if buildTag.text != text {
             buildTag.text = text
@@ -668,6 +734,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
         fpsWorstEver = 0
         fpsWorstWhere = ""
         tracerFrom = gameTime + 2
+        slowFrames = [:]
         isAttractMode = false
         #if DEBUG
         if shotLab != nil { physicsWorld.speed = 1 }
@@ -1078,8 +1145,8 @@ final class NlTableScene: SKScene, RendererHostedScene {
                 labEvent("sling")
                 game.add(NlPoints.slingshot)
                 hitHaptic.impactOccurred(intensity: 0.6)
-                Effects.burst(in: ballNode.parent ?? self, at: ballNode.position, color: column.neon ? NlNeon.cyan : Self.wallColor, count: 8,
-                              speed: 160, lifetime: 0.25, size: 0.22)
+                sparkBurst(in: ballNode.parent ?? self, at: ballNode.position,
+                           color: column.neon ? NlNeon.cyan : Self.wallColor)
                 sfx(.sling)
             }
         case NlPhysicsCategory.target:

@@ -411,15 +411,18 @@ final class NlSwitchyardRoom: NlRoom {
         ["ramp", "switchLeft", "switchRight", "rails", "exitLeft", "exitTop", "exitRight", "derail"]
     }
 
-    // Shot delays: the middle of each 120 Hz cradle window, shotlab-neon-2026-11-22T19-47-37Z (FAST=8). Inlane bands:
-    // shotlab-neon-inlane-2026-11-22T19-50-16Z, 4 pt bins of the ball's distance from the pivot at the flip, 3+ trials.
-    let leftShots: [(name: String, delay: Double)] = [("switchLeft", 0.244), ("ramp", 0.471),
-                                                       ("switchRight", 0.557), ("rails", 0.621)]
-    let rightShots: [(name: String, delay: Double)] = [("switchRight", 0.252), ("ramp", 0.471),
-                                                        ("switchLeft", 0.558)]
-    let leftInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("ramp", 28, 31), ("switchRight", 36, 39),
-                                                                   ("rails", 40, 47)]
-    let rightInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("ramp", 28, 31), ("switchLeft", 36, 39)]
+    // T8 M4 v5: re-measured on the angled feeds (T11's kit port; Aaron 2026-11-25: they stay). Shot delays: the middle
+    // of each 120 Hz cradle window, shotlab-neon-2026-11-25T21-20-37Z (FAST=8, the V cradle). Inlane bands:
+    // shotlab-neon-inlane-2026-11-25T21-25-03Z, 4 pt bins of the ball's distance from the pivot at the flip, the bins
+    // where that shot wins (the feed reaches the flipper ~0.9-1.3 s after the release now).
+    let leftShots: [(name: String, delay: Double)] = [("switchLeft", 0.384), ("ramp", 0.621),
+                                                       ("switchRight", 0.728), ("rails", 0.789)]
+    let rightShots: [(name: String, delay: Double)] = [("switchRight", 0.386), ("ramp", 0.621),
+                                                        ("switchLeft", 0.730)]
+    let leftInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("switchLeft", 32, 35), ("ramp", 40, 43),
+                                                                   ("switchRight", 52, 59), ("rails", 64, 67)]
+    let rightInlane: [(name: String, lo: CGFloat, hi: CGFloat)] = [("switchRight", 32, 35), ("ramp", 40, 43),
+                                                                    ("switchLeft", 52, 59)]
 
     /// The route first: the ramp when it's open, else the target that lines it up soonest; then the targets the cell
     /// still needs for the outlane save; then the ramp and the rest.

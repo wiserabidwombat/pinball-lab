@@ -322,6 +322,17 @@ final class NlCellFloor: SKNode {
         if neon {                                  // white (active), with a live halo for the hit flash
             NlNeon.core(node, targetRestColor, width: 4.5)
             NlNeon.addHalo(to: node, targetRestColor, width: 14, alpha: 0.3)
+            // T8 M4 v6: the hit's bloom is its own node, shown and hidden (widening the halos re-built their strokes
+            // on every hit and again when the flash ended).
+            let bloom = SKShapeNode(path: path)
+            bloom.strokeColor = NlNeon.magenta.withAlphaComponent(0.45)
+            bloom.lineWidth = 30
+            bloom.lineCap = .round
+            bloom.blendMode = .add
+            bloom.zPosition = -0.1
+            bloom.name = "flashBloom"
+            bloom.isHidden = true
+            node.addChild(bloom)
         }
         let mid = CGPoint(x: (face.0.x + face.1.x) / 2 - normal.dx * 24, y: (face.0.y + face.1.y) / 2 - normal.dy * 24)
         let label = SKLabelNode(text: name)
@@ -340,7 +351,7 @@ final class NlCellFloor: SKNode {
     func setTargetFlash(_ face: SKShapeNode, _ on: Bool) {
         if neon {
             NlNeon.setColor(face, on ? NlNeon.magenta : targetRestColor)
-            NlNeon.setBloom(face, on, base: 14)
+            face.childNode(withName: "flashBloom")?.isHidden = !on
         } else {
             face.strokeColor = on ? .white : S.targetColor
         }

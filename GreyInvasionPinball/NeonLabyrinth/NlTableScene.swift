@@ -293,7 +293,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
     static let entryColor = SKColor(red: 0.25, green: 0.80, blue: 1.0, alpha: 1)
     static let exitColor = SKColor(red: 1.0, green: 0.30, blue: 0.85, alpha: 1)
     static let targetColor = SKColor(red: 1.0, green: 0.90, blue: 0.50, alpha: 1)
-    static let buildTagText = "T8 M4 v6"
+    static let buildTagText = "T8 M4 v7"
 
     /// `column`: the table's column of cells (nil = Neon's test column).
     init(game: NlGameState, settings: GameSettings, column: NlColumn? = nil) {
@@ -333,7 +333,21 @@ final class NlTableScene: SKScene, RendererHostedScene {
         guard isBuilt else { return }
         cameraRig.update(viewSize: size, ball: focusBall, mode: effectiveCameraMode, dt: 0, snap: true)
         endCellTransition()                        // a snap ends any transition (even while paused)
+        cullFloors()
         placeBuildTag()
+    }
+
+    /// T8 M4 v7: only the cells the camera can see are in the draw (Aaron's v6 reading: slow frames spread over drain,
+    /// sling and upKick, i.e. the frame budget itself, not one event). Hidden cells keep their physics; SpriteKit
+    /// otherwise walked all 9 cells' hundreds of nodes every frame to cull them.
+    private func cullFloors() {
+        let cam = cameraRig.node
+        let w = size.width * cam.xScale, h = size.height * cam.yScale
+        let view = CGRect(x: cam.position.x - w / 2, y: cam.position.y - h / 2, width: w, height: h).insetBy(dx: -40, dy: -40)
+        for f in floors {
+            let hide = !view.intersects(CGRect(origin: f.position, size: NlCellLayout.cellSize))
+            if f.isHidden != hide { f.isHidden = hide }
+        }
     }
 
     /// T8 M4 v3: the transition's marks go and every cell draws in full again.
@@ -1075,6 +1089,7 @@ final class NlTableScene: SKScene, RendererHostedScene {
             panUntil = gameTime + 1
         }
         if cameraRig.isFlying { panUntil = max(panUntil, gameTime + 0.3) }
+        cullFloors()
         if !moveMarks.isEmpty {                            // T8 M4 v3: the marks show while the camera is pulled back
             let a = cameraRig.overviewAmount
             moveMarks.forEach { $0.alpha = a }

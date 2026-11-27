@@ -44,6 +44,8 @@ struct ChompTableView: View {
             switch screen {
             case .menu:
                 menuOverlay
+            case .playing where game.multiballChoice:        // M5 v11: Rescue or Search
+                choiceOverlay
             case .playing where isPaused:
                 pauseOverlay
             case .playing where game.isGameOver:
@@ -112,12 +114,13 @@ struct ChompTableView: View {
         case .menu:
             startGame()
         case .playing:
+            guard !game.multiballChoice else { return }          // v11b: the choice card answers with its buttons
             if isPaused { setPaused(false) } else if game.isGameOver { startGame() }
         }
     }
 
     private func gamepadMenu() {
-        guard screen == .playing, !game.isGameOver else { return }
+        guard screen == .playing, !game.isGameOver, !game.multiballChoice else { return }   // v11: not over the choice
         setPaused(!isPaused)
     }
 
@@ -322,8 +325,33 @@ struct ChompTableView: View {
                 overlayButton("KMB 2") { scene.debugReadyKMB(2); setPaused(false) }
                 overlayButton("KMB 3") { scene.debugReadyKMB(3); setPaused(false) }
             }
-            overlayButton("TAXI") { scene.debugStartRescue(); setPaused(false) }   // M5 v10 (v10b: own row)
+            HStack(spacing: 10) {                                                 // M5 v10 / v11
+                overlayButton("TAXI") { scene.debugStartRescue(); setPaused(false) }
+                overlayButton("SEARCH") { scene.debugStartSearch(); setPaused(false) }
+            }
+            overlayButton("ALL BEACHES") { setPaused(false); scene.debugAllBeachesClosed() }   // v11b: unpause first
             #endif
+        }
+    }
+
+    /// M5 v11: all five beaches closed — pick the multiball (the real table's Rescue / Search choice).
+    private var choiceOverlay: some View {
+        overlayCard {
+            Text("Beaches Closed")
+                .font(.orbitron(26, .black))
+            Text("Choose your multiball")
+                .font(.orbitron(15))
+                .foregroundStyle(.white.opacity(0.75))
+            overlayButton("Tourist Taxi", prominent: true) { scene.chooseMultiball(search: false); setPaused(false) }
+                .padding(.top, 8)
+            Text("Save 15 tourists before the shark eats them")
+                .font(.orbitron(12))
+                .foregroundStyle(.white.opacity(0.6))
+            overlayButton("Missing Sunscreen", prominent: true) { scene.chooseMultiball(search: true); setPaused(false) }
+                .padding(.top, 8)
+            Text("Fin jackpots, then chase the shark at the boat")
+                .font(.orbitron(12))
+                .foregroundStyle(.white.opacity(0.6))
         }
     }
 

@@ -58,6 +58,8 @@ final class ChompGameState {
     var banner: String?
     /// The end-of-ball bonus count while it runs (shown in the LED strip instead of the banner).
     var bonusText: String?
+    /// M5 v11: all five beaches closed on an odd wave — the view asks TOURIST TAXI or MISSING SUNSCREEN (scene paused).
+    var multiballChoice = false
     /// The mission and goal (from the rules milestone); shown dim when there's no banner.
     var status: String?
     /// M5 v1: Beach Junk (the real table's gear) lit and not yet collected. Skill shots 2 and 3 light one; collecting
@@ -109,6 +111,7 @@ final class ChompGameState {
         multiplier = 1
         banner = nil
         bonusText = nil
+        multiballChoice = false
         status = nil
         beachJunkLit = 0
         smackBonus = 0

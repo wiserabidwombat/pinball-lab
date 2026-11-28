@@ -266,7 +266,7 @@ final class QfTableScene: SKScene, RendererHostedScene {
     static let barkColor = SKColor(red: 0.79, green: 0.54, blue: 0.29, alpha: 1)
     static let wispColor = SKColor(red: 0.50, green: 0.89, blue: 1.0, alpha: 1)
     static let labelColor = SKColor(white: 1, alpha: 0.35)
-    static let buildTagText = "T9 M3 v4 · stacks"
+    static let buildTagText = "T9 M3 v5"
 
     init(game: QfGameState, settings: GameSettings) {
         self.game = game
@@ -2583,11 +2583,17 @@ extension QfTableScene: PlayLabHost {
         let rest = QfTableLayout.flipperRestAngle
         return [PlayRobotFlipper(name: "left", pivot: specs[0].pivot, length: QfTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: false, cradle: specs[0].cradle, rightButton: false, upper: false,
-                                 shots: Self.robotLeftShots, feedCatchSpeed: 300, tipLead: 0.05),
+                                 shots: Self.robotLeftShots, inlane: Self.robotLeftInlane, feedCatchSpeed: 300, tipLead: 0.05),
                 PlayRobotFlipper(name: "right", pivot: specs[1].pivot, length: QfTableLayout.flipperLength, restAngle: rest,
                                  pointsLeft: true, cradle: specs[1].cradle, rightButton: true, upper: false,
-                                 shots: Self.robotRightShots, feedCatchSpeed: 300, tipLead: 0.05)]
+                                 shots: Self.robotRightShots, inlane: Self.robotRightInlane, feedCatchSpeed: 300, tipLead: 0.05)]
     }
+    /// T9 M3 v5: inlane feeds (ShotLab/shotlab-quest---flipper-inlane-2026-11-27T20-50-18Z, 120 Hz): the shot a flip makes
+    /// with the ball this far (pt) from the pivot, rolling down from the inlane. Bands of 4+ trials only.
+    static let robotLeftInlane: [(name: String, lo: CGFloat, hi: CGFloat)] =
+        [("log", 31.5, 33.0), ("bark", 42.6, 50.0), ("trunk", 42.6, 50.0), ("eastLantern", 71.3, 73.8)]
+    static let robotRightInlane: [(name: String, lo: CGFloat, hi: CGFloat)] =
+        [("oldRoad", 31.0, 32.3), ("bark", 41.3, 53.2), ("trunk", 41.3, 53.2), ("orbit", 61.9, 66.6)]
     static let robotLeftShots: [(name: String, delay: Double)] =
         [("log", 0.612), ("bark", 0.746), ("trunk", 0.746), ("oldRoad", 0.817), ("eastLantern", 0.878)]
     static let robotRightShots: [(name: String, delay: Double)] =

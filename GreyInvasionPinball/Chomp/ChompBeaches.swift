@@ -54,7 +54,9 @@ final class ChompBeaches {
     private(set) var boost: [ChompShot: Int] = [:]
     private(set) var savedTotal = 0
     private var extraBallGiven = false
-    private var collectedSum = 0                     // the hurry-ups collected since the last reset (for the 5th)
+    private var collectedSum = 0
+    /// M5 v12: the boosts of the last full set of five hurry-ups, kept for the victory combos after the reset.
+    private(set) var lastBoosts: [ChompShot: Int] = [:]                     // the hurry-ups collected since the last reset (for the 5th)
 
     // The running hurry-up
     private(set) var meltdownShot: ChompShot?
@@ -76,6 +78,7 @@ final class ChompBeaches {
     func newGame() {
         resetBeaches()
         savedTotal = 0; extraBallGiven = false
+        lastBoosts = [:]
     }
 
     private func resetBeaches() {
@@ -156,7 +159,8 @@ final class ChompBeaches {
         closed.insert(s)
         meltdownShot = nil
         if meltdownIsFifth {
-            resetBeaches()                               // M5 v10: TOURIST TAXI (Rescue); Search and the choice next
+            lastBoosts = boost                           // M5 v12: for the victory combos
+            resetBeaches()                               // M5 v10: TOURIST TAXI (Rescue); v11: or MISSING SUNSCREEN
             return [.score(0, "ALL BEACHES CLOSED"), .allClosed]
         }
         // A beach that filled up during this hurry-up starts its own now.

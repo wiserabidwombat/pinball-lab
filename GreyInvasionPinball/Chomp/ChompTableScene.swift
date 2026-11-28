@@ -150,6 +150,11 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     private var lastChoseSearch = false
     /// v11b: the choice waits for a ball in play, no multiball, after the skill shot (not at a drain / game over).
     private var choicePending = false
+    /// M5 v12: victory combos, the reward for finishing a multiball.
+    let victory = ChompVictory()
+    #if DEBUG
+    private var debugVictoryEveryBall = false       // `defaults write … chomp-victory -bool YES` (labs)
+    #endif
     private var modeMB: Bool { rescue.active || search.active }
     private var anyMultiball: Bool { kevin.multiballActive || rescue.active || search.active }
     private var mbLaunchesPending = 0
@@ -231,7 +236,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
     /// Orange = anything one-way (the skill's grey-box colours).
     static let oneWayColor = SKColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 1)
     /// The build tag shown on screen (one place: the live readout used to carry its own stale copy, "T7 M2 v15").
-    static let buildTagText = "T7 M5 v11b"
+    static let buildTagText = "T7 M5 v12b"
     static let bankLitColor = SKColor(red: 1.0, green: 0.84, blue: 0.36, alpha: 1)
     static let bankDarkColor = SKColor(red: 0.35, green: 0.30, blue: 0.16, alpha: 1)
     static let lampOnColor = SKColor(red: 0.45, green: 1.0, blue: 0.55, alpha: 1)
@@ -792,6 +797,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 mbSaveUntil = gameTime + ChompRescue.saveSeconds
                 sfx(.skillShot)
                 bigHaptic.impactOccurred()
+            case .victoryCombos(let u):                          // M5 v12
+                applyVictory(victory.start(untilBallEnd: u))
             case .addBall:
                 if balls.count + mbLaunchesPending < ChompKevin.maxBalls {
                     mbLaunchesPending += 1
@@ -801,6 +808,19 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             case .multiballOver:
                 mbLaunchesPending = 0
                 mbSaveUntil = -1
+            }
+        }
+    }
+
+    /// M5 v12: the victory combos' effects.
+    private func applyVictory(_ effects: [ChompVictory.Effect]) {
+        for e in effects {
+            switch e {
+            case .score(let points, let banner):
+                if points > 0 { game.add(points) }
+                if let banner { showBanner(banner, hold: true) }
+            case .note(let text):
+                showBanner(text)
             }
         }
     }
@@ -847,6 +867,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 mbSaveUntil = gameTime + ChompSearch.saveSeconds
                 sfx(.skillShot)
                 bigHaptic.impactOccurred()
+            case .victoryCombos(let u):                          // M5 v12
+                if !(u && balls.isEmpty) { applyVictory(victory.start(untilBallEnd: u)) }   // v12b: not after the ball's lost
             case .addBall:
                 if balls.count + mbLaunchesPending < ChompKevin.maxBalls {
                     mbLaunchesPending += 1
@@ -866,6 +888,12 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         guard !game.isGameOver, !search.active else { return }
         searchPending = true
         showBanner("DEBUG · \(ChompSearch.title)", hold: true)
+    }
+
+    /// M5 v12: the pause card's VICTORY button — victory combos now, for the rest of this ball.
+    func debugStartVictory() {
+        guard !game.isGameOver else { return }
+        applyVictory(victory.start(untilBallEnd: true))
     }
 
     /// M5 v11: the pause card's ALL BEACHES button — as if the fifth beach had just closed (the choice / the force).
@@ -908,6 +936,11 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             applyBeaches(beaches.tick(dt: TimeInterval(dt)))        // M5 v3
             applyRescue(rescue.tick(dt: TimeInterval(dt)))          // M5 v10
             applySearch(search.tick(dt: TimeInterval(dt)))          // M5 v11
+            #if DEBUG
+            if debugVictoryEveryBall, !victory.active, !skillShotLive, let t = launchedAt, now - t > 1.5 {
+                applyVictory(victory.start(untilBallEnd: true))     // M5 v12: lab testing, every ball
+            }
+            #endif
             if choicePending, !anyMultiball, !skillShotLive, !nudge.tilted, !game.isGameOver,   // v11b
                let t = launchedAt, now - t > 1.5 {
                 choicePending = false
@@ -937,6 +970,9 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             if modeMB {                                          // M5 v10 / v11 (v10b: no Kevin lamps)
                 c = lampColor(rescue.active ? rescue.lamp(shot) : search.lamp(shot), now) ?? cameoLamp ?? Self.shotLampOff
             }
+            let modeLit = modeMB && (rescue.active ? rescue.lamp(shot) : search.lamp(shot)) != .off
+            if victory.active, kevin.lamp(shot) == .off, cameos.lamp(shot) == .off, !modeLit,
+               let v = lampColor(victory.lamp(shot, now: now), now) { c = v }   // M5 v12 (v12b: lit-state test)
             if shot == beaches.meltdownShot { c = meltdownFlash ? Self.meltdownRed : .white }     // M5 v3
             if node.fillColor != c { node.fillColor = c }
         }
@@ -949,7 +985,8 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         if !skillShotLive {
             let kmb = flipLocked ? "FLIP-LOCK · \(Int((flipLockUntil - now).rounded(.up)))s · ACTION TO LET GO"
                 : kevin.multiballActive ? kevin.statusText() : nil
-            game.status = (flipLocked ? kmb : nil) ?? rescue.statusText() ?? search.statusText() ?? beaches.statusText() ?? kmb ?? cameos.statusText(now: now) ?? kevin.statusText()
+            game.status = (flipLocked ? kmb : nil) ?? beaches.statusText() ?? kmb ?? victory.statusText(now: now)   // v12b
+                ?? rescue.statusText() ?? search.statusText() ?? cameos.statusText(now: now) ?? kevin.statusText()
         }
     }
 
@@ -974,6 +1011,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
             case .score(let points, let banner):
                 if points > 0 { game.add(points) }
                 if let banner { showBanner(banner, hold: true) }
+                // M5 v12: a Kevin Multiball completed → victory combos for the rest of it.
+                if let banner, banner.contains(" COMPLETE"), kevin.multiballActive {
+                    applyVictory(victory.start(untilBallEnd: false))
+                }
             case .startMultiball(let n):
                 mbLaunchesPending += max(0, n - balls.count)
                 mbNextLaunchAt = gameTime + 0.5
@@ -1021,6 +1062,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         applyCameo(fx)
         if !anyMultiball { applyBeaches(beaches.shot(shot)) }   // tourists wait out a multiball
         // M5 v4 (v6d: a fin hit pays the cameo and Kevin both); v10: during TOURIST TAXI the shots are its own
+        applyVictory(victory.shot(shot, now: gameTime, boost: beaches.lastBoosts[shot] ?? 0))   // M5 v12 (v12b: first)
         if rescue.active { applyRescue(rescue.shot(shot)) }
         else if search.active { applySearch(search.shot(shot, ballsInPlay: balls.count)) }   // M5 v11
         else { applyKevin(kevin.shot(shot, now: gameTime)) }
@@ -1788,6 +1830,10 @@ final class ChompTableScene: SKScene, RendererHostedScene {
         rescue.newGame()                           // M5 v10
         rescuePending = false
         search.newGame()                           // M5 v11
+        victory.newGame()                          // M5 v12
+        #if DEBUG
+        debugVictoryEveryBall = UserDefaults.standard.bool(forKey: "chomp-victory")
+        #endif
         searchPending = false
         closureWaves = 0
         lastChoseSearch = false
@@ -2144,6 +2190,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                     sfx(.drain)
                     applyCameo(cameos.ballLost())    // M5 v2: a cameo ends with the ball
                     applyBeaches(beaches.ballLost()) // M5 v3: so does a Mayor Meltdown
+                    applyVictory(victory.ballLost()) // M5 v12: and the victory combos
                     awardEndOfBallBonus(now)         // M5 v9: before ballDrained, so the high score includes it
                     game.ballDrained()
                     if !game.isGameOver {
@@ -2171,6 +2218,7 @@ final class ChompTableScene: SKScene, RendererHostedScene {
                 if rescue.active { applyRescue(rescue.multiballEnded()) }
                 else if search.active { applySearch(search.multiballEnded()) }       // M5 v11
                 else { applyKevin(kevin.multiballEnded()) }
+                applyVictory(victory.multiballEnded())                                // M5 v12
             }
         }
 
@@ -2852,7 +2900,9 @@ extension ChompTableScene: PlayLabHost {
          PlayObjective(name: "searchStarted", text: "Start Missing Sunscreen"),
          PlayObjective(name: "searchFinJackpot", text: "Collect a Missing Sunscreen fin jackpot"),
          PlayObjective(name: "searchSharkJackpot", text: "Collect a shark jackpot at the boat"),
-         PlayObjective(name: "searchComplete", text: "Finish Missing Sunscreen (five shark jackpots)")]
+         PlayObjective(name: "searchComplete", text: "Finish Missing Sunscreen (five shark jackpots)"),
+         PlayObjective(name: "victoryStarted", text: "Earn victory combos (finish a multiball)"),
+         PlayObjective(name: "victoryJackpot", text: "Collect a victory combo")]
     }
 
     /// Flip delays = the middle of each Shot Lab window, 120 Hz (the default pass; the 60 Hz pass now only models the
@@ -3052,6 +3102,7 @@ extension ChompTableScene: PlayLabHost {
             }
         }
         if search.active, search.phase == .fin, !search.finLit { w.insert("chumBucket", at: 0) }   // v11: light the fin
+        if victory.active { for s in ChompShot.beach where !w.contains(s.rawValue) { w.append(s.rawValue) } }   // v12
         // M5 v2: the cameos first — lit shots, then the boat (lights / boosts them).
         for lamp in [ChompCameos.Lamp.jackpot, .final, .blueFast, .blue, .white] {
             for s in ChompShot.allCases where cameos.lamp(s) == lamp && !w.contains(s.rawValue) { w.append(s.rawValue) }
@@ -3113,6 +3164,8 @@ extension ChompTableScene: PlayLabHost {
         case _ where text.hasPrefix("FIN JACKPOT "): name = "searchFinJackpot"
         case _ where text.hasPrefix("SHARK JACKPOT "): name = "searchSharkJackpot"
         case _ where text.hasPrefix("SHARK ESCAPED"): name = "searchComplete"
+        case _ where text.hasPrefix("VICTORY COMBOS · SHOOT"): name = "victoryStarted"
+        case _ where text.hasPrefix("VICTORY JACKPOT") || text.hasPrefix("VICTORY COMBO "): name = "victoryJackpot"
         default: name = nil
         }
         if let name { lab.objective(name, now: gameTime) }

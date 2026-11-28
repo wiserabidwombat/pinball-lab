@@ -17,6 +17,7 @@ final class ChompSearch {
         case startMultiball(Int)
         case addBall
         case multiballOver
+        case victoryCombos(untilBallEnd: Bool)   // M5 v12: completed, or drained out after the fin jackpots
     }
 
     enum Phase { case fin, shark, done }
@@ -40,6 +41,7 @@ final class ChompSearch {
     private(set) var total = 0
     /// Phase 1 done (the rulesheet: victory combos also start on a drain after it) — kept for the victory combos.
     private(set) var reachedSharkPhase = false
+    private(set) var completed = false
 
     /// Up while the fin is lit for a jackpot; held down in phase 1 until the bucket / shark tower lights it.
     var finWanted: Bool? {
@@ -55,7 +57,7 @@ final class ChompSearch {
         active = true
         phase = .fin
         finLit = false
-        finJackpots = 0; sharkJackpots = 0; multiplier = 1; total = 0; reachedSharkPhase = false
+        finJackpots = 0; sharkJackpots = 0; multiplier = 1; total = 0; reachedSharkPhase = false; completed = false
         orange = Set(ChompShot.beach)
         return [.startMultiball(Self.balls), .score(0, "\(Self.title) · SHOOT THE BUCKET")]
     }
@@ -102,7 +104,9 @@ final class ChompSearch {
             fx.append(.score(pay, "SHARK JACKPOT \(sharkJackpots) · \(ChompCameos.millions(pay))"))
             if sharkJackpots >= Self.sharkJackpotsNeeded {
                 phase = .done
+                completed = true
                 fx.append(.score(0, "SHARK ESCAPED · \(Self.title) COMPLETE"))
+                fx.append(.victoryCombos(untilBallEnd: false))
             }
         default:
             break
@@ -124,7 +128,9 @@ final class ChompSearch {
         phase = .done
         finLit = false
         orange = []
-        return [.multiballOver, .score(0, "\(Self.title) OVER · \(ChompCameos.millions(total))")]
+        var fx: [Effect] = [.multiballOver, .score(0, "\(Self.title) OVER · \(ChompCameos.millions(total))")]
+        if reachedSharkPhase, !completed { fx.append(.victoryCombos(untilBallEnd: true)) }   // v12: a drain-out after phase 1
+        return fx
     }
 
     /// Orange arrows (orange / blue flashing), the boat gold in phase 2.

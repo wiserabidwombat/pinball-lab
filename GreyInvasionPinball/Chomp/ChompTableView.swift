@@ -330,6 +330,7 @@ struct ChompTableView: View {
                 overlayButton("SEARCH") { scene.debugStartSearch(); setPaused(false) }
             }
             overlayButton("ALL BEACHES") { setPaused(false); scene.debugAllBeachesClosed() }   // v11b: unpause first
+            overlayButton("VICTORY") { scene.debugStartVictory(); setPaused(false) }          // M5 v12
             #endif
         }
     }

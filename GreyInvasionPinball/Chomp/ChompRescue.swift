@@ -17,6 +17,7 @@ final class ChompRescue {
         case startMultiball(Int)          // balls wanted in play
         case addBall
         case multiballOver
+        case victoryCombos(untilBallEnd: Bool)   // M5 v12: the super round timed out
     }
 
     enum Phase { case rescue, boat, supers, done }
@@ -149,7 +150,7 @@ final class ChompRescue {
             superLeft -= dt
             guard superLeft <= 0 else { return [] }
             phase = .done
-            return [.note("SUPER JACKPOTS OVER")]
+            return [.note("SUPER JACKPOTS OVER"), .victoryCombos(untilBallEnd: false)]
         case .boat, .done:
             return []
         }
